@@ -6,9 +6,10 @@ import io.github.neronguyen.chat.core.database.entity.ChatRoomEntity
 import io.github.neronguyen.chat.core.database.model.ChatRoomWithDetails
 import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
-import io.github.neronguyen.chat.core.network.model.ChatMessageDto
-import io.github.neronguyen.chat.core.network.model.ChatParticipantDto
-import io.github.neronguyen.chat.core.network.model.ChatRoomDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomType as ContractChatRoomType
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -50,8 +51,7 @@ class ChatMapperTest {
             roomId = "room1",
             senderId = "sender1",
             content = "Entity test",
-            createdAt = expectedInstant,
-            tempId = "temp-3"
+            createdAt = expectedInstant
         )
 
         val entity = dto.toEntity(status = MessageDeliveryStatus.SENDING)
@@ -135,7 +135,7 @@ class ChatMapperTest {
         )
         val chatRoomDto = ChatRoomDto(
             id = "room10",
-            rawType = "GROUP",
+            type = ContractChatRoomType.GROUP,
             name = "Group Chat",
             creator = participantDto,
             participants = listOf(participantDto),
@@ -162,7 +162,7 @@ class ChatMapperTest {
     }
 
     @Test
-    fun `ChatRoomDto toDomain and toEntity handle unrecognized room type gracefully`() {
+    fun `ChatRoomDto toDomain and toEntity handle DIRECT and GROUP room types`() {
         val activityTime = Instant.fromEpochMilliseconds(123456789L)
         val participantDto = ChatParticipantDto(
             userId = "creator1",
@@ -171,9 +171,9 @@ class ChatMapperTest {
             profilePictureUrl = null
         )
         val chatRoomDto = ChatRoomDto(
-            id = "room_unknown",
-            rawType = "UNKNOWN_SERVER_TYPE",
-            name = "Channel",
+            id = "room_direct",
+            type = ContractChatRoomType.DIRECT,
+            name = "Direct Chat",
             creator = participantDto,
             participants = listOf(participantDto),
             lastMessage = null,
@@ -181,12 +181,12 @@ class ChatMapperTest {
         )
 
         val domainRoom = chatRoomDto.toDomain()
-        assertEquals("room_unknown", domainRoom.id)
-        assertEquals(ChatRoomType.UNKNOWN, domainRoom.type)
+        assertEquals("room_direct", domainRoom.id)
+        assertEquals(ChatRoomType.DIRECT, domainRoom.type)
 
         val entityRoom = chatRoomDto.toEntity()
-        assertEquals("room_unknown", entityRoom.id)
-        assertEquals(ChatRoomType.UNKNOWN, entityRoom.type)
+        assertEquals("room_direct", entityRoom.id)
+        assertEquals(ChatRoomType.DIRECT, entityRoom.type)
     }
 
     @Test
@@ -267,24 +267,15 @@ class ChatMapperTest {
     }
 
     @Test
-    fun `ChatRoomDto toEntity and ChatRoomWithDetails toDomain map null lastActivityAt correctly`() {
-        val participantDto = ChatParticipantDto(
-            userId = "creator1",
-            email = "creator@example.com",
-            displayName = "Creator"
-        )
-        val chatRoomDto = ChatRoomDto(
+    fun `ChatRoomWithDetails toDomain maps null lastActivityAt correctly`() {
+        val entity = ChatRoomEntity(
             id = "roomNullTime",
-            rawType = "DIRECT",
+            type = ChatRoomType.DIRECT,
             name = null,
-            creator = participantDto,
-            participants = listOf(participantDto),
-            lastMessage = null,
+            creatorId = "creator1",
+            lastMessageId = null,
             lastActivityAt = null
         )
-
-        val entity = chatRoomDto.toEntity()
-        assertNull(entity.lastActivityAt)
 
         val roomWithDetails = ChatRoomWithDetails(
             room = entity,

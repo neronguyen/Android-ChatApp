@@ -1,16 +1,25 @@
 package io.github.neronguyen.chat.core.data.repository
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.database.dao.ChatDao
+import io.github.neronguyen.chat.core.database.entity.ChatMessageEntity
+import io.github.neronguyen.chat.core.database.entity.ChatParticipantEntity
+import io.github.neronguyen.chat.core.database.entity.ChatRoomEntity
+import io.github.neronguyen.chat.core.database.entity.ChatRoomParticipantCrossRef
+import io.github.neronguyen.chat.core.database.model.ChatRoomWithDetails
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
+import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.AuthNetworkDataSource
-import io.github.neronguyen.chat.core.network.model.AuthenticatedUserDto
-import io.github.neronguyen.chat.core.network.model.LoginRequest
-import io.github.neronguyen.chat.core.network.model.RefreshTokenRequest
-import io.github.neronguyen.chat.core.network.model.RegisterRequest
-import io.github.neronguyen.chat.core.network.model.UserDto
+import io.github.neronguyen.chat.core.network.util.NetworkError
+import io.github.neronguyenvn.nerochat.contract.auth.error.AuthServerError
+import io.github.neronguyenvn.nerochat.contract.auth.AuthenticatedUserDto
+import io.github.neronguyenvn.nerochat.contract.auth.LoginRequest
+import io.github.neronguyenvn.nerochat.contract.auth.RefreshTokenRequest
+import io.github.neronguyenvn.nerochat.contract.auth.RegisterRequest
+import io.github.neronguyenvn.nerochat.contract.auth.UserDto
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
@@ -24,6 +33,72 @@ import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 
 class AuthRepositoryImplTest {
+
+    private class FakeChatDao : ChatDao {
+        var clearAllChatDataCalled = false
+
+        override fun getChatsWithDetails(): Flow<List<ChatRoomWithDetails>> = emptyFlow()
+        override fun getChatWithDetails(roomId: String): Flow<ChatRoomWithDetails?> = emptyFlow()
+        override fun getRecentMessages(roomId: String, limit: Int): Flow<List<ChatMessageEntity>> =
+            emptyFlow()
+
+        override suspend fun getMessageById(id: String): ChatMessageEntity? = null
+        override suspend fun getOldestSentMessageTimestamp(roomId: String): Long? = null
+        override suspend fun getNewestSentMessageTimestamp(roomId: String): Long? = null
+        override suspend fun getNewestMessageForRoom(roomId: String): ChatMessageEntity? = null
+        override suspend fun getCrossRefsForRooms(roomIds: List<String>): List<ChatRoomParticipantCrossRef> =
+            emptyList()
+
+        override suspend fun upsertRoom(room: ChatRoomEntity) {}
+        override suspend fun upsertRooms(rooms: List<ChatRoomEntity>) {}
+        override suspend fun upsertParticipant(participant: ChatParticipantEntity) {}
+        override suspend fun upsertParticipants(participants: List<ChatParticipantEntity>) {}
+        override suspend fun upsertCrossRefs(crossRefs: List<ChatRoomParticipantCrossRef>) {}
+        override suspend fun upsertMessage(message: ChatMessageEntity) {}
+        override suspend fun upsertMessages(messages: List<ChatMessageEntity>) {}
+        override suspend fun updateDeliveryStatus(
+            messageId: String,
+            status: MessageDeliveryStatus
+        ) {
+        }
+
+        override suspend fun markSendingMessagesAsFailed(
+            sendingStatus: MessageDeliveryStatus,
+            failedStatus: MessageDeliveryStatus
+        ) {
+        }
+
+        override suspend fun deleteMessage(messageId: String) {}
+        override suspend fun clearSentMessagesForRoom(roomId: String) {}
+        override suspend fun deleteParticipantCrossRef(roomId: String, userId: String) {}
+        override suspend fun updateRoomLastActivity(
+            roomId: String,
+            messageId: String?,
+            timestamp: Long?
+        ) {
+        }
+
+        override suspend fun deleteCrossRefs(crossRefs: List<ChatRoomParticipantCrossRef>) {}
+        override suspend fun deleteRoom(roomId: String) {}
+        override suspend fun deleteCrossRefsForRoom(roomId: String) {}
+        override suspend fun deleteMessagesForRoom(roomId: String) {}
+        override suspend fun clearRooms() {}
+        override suspend fun clearMessages() {}
+        override suspend fun clearParticipants() {}
+        override suspend fun clearCrossRefs() {}
+
+        override suspend fun clearAllChatData() {
+            clearAllChatDataCalled = true
+        }
+    }
+
+    private fun createRepository(
+        networkDataSource: AuthNetworkDataSource,
+        tokenDataSource: TokenDataSource,
+        chatDao: ChatDao = FakeChatDao()
+    ): AuthRepositoryImpl = AuthRepositoryImpl(networkDataSource, tokenDataSource, chatDao)
+
+
 
     private class FakeTokenDataSource : TokenDataSource {
         var savedRefreshToken: String? = null
@@ -58,22 +133,22 @@ class AuthRepositoryImplTest {
     private class FakeAuthNetworkDataSource : AuthNetworkDataSource {
         val refreshRequests = mutableListOf<RefreshTokenRequest>()
         val logoutRequests = mutableListOf<RefreshTokenRequest>()
-        var refreshResult: (RefreshTokenRequest) -> Either<DataError.Network, AuthenticatedUserDto> =
+        var refreshResult: (RefreshTokenRequest) -> Either<NetworkError<AuthServerError.RefreshToken>, AuthenticatedUserDto> =
             { (reqToken) ->
-                Either.Left(DataError.Network.Unknown)
+                Either.Left(NetworkError.Transport.NoInternet)
             }
         var refreshDelayMs: Long = 0
         var logoutDelayMs: Long = 0
 
-        override suspend fun login(request: LoginRequest): Either<DataError.Network, AuthenticatedUserDto> {
-            return Either.Left(DataError.Network.Unknown)
+        override suspend fun login(request: LoginRequest): Either<NetworkError<AuthServerError.Login>, AuthenticatedUserDto> {
+            return Either.Left(NetworkError.Transport.NoInternet)
         }
 
-        override suspend fun register(request: RegisterRequest): Either<DataError.Network, UserDto> {
-            return Either.Left(DataError.Network.Unknown)
+        override suspend fun register(request: RegisterRequest): Either<NetworkError<AuthServerError.Register>, UserDto> {
+            return Either.Left(NetworkError.Transport.NoInternet)
         }
 
-        override suspend fun refreshToken(request: RefreshTokenRequest): Either<DataError.Network, AuthenticatedUserDto> {
+        override suspend fun refreshToken(request: RefreshTokenRequest): Either<NetworkError<AuthServerError.RefreshToken>, AuthenticatedUserDto> {
             synchronized(refreshRequests) {
                 refreshRequests.add(request)
             }
@@ -83,7 +158,7 @@ class AuthRepositoryImplTest {
             return refreshResult(request)
         }
 
-        override suspend fun logout(request: RefreshTokenRequest): Either<DataError.Network, Unit> {
+        override suspend fun logout(request: RefreshTokenRequest): Either<NetworkError<AuthServerError.Logout>, Unit> {
             synchronized(logoutRequests) {
                 logoutRequests.add(request)
             }
@@ -98,12 +173,11 @@ class AuthRepositoryImplTest {
     fun refreshToken_noRefreshTokenStored_returnsError() = runTest {
         val tokenDataSource = FakeTokenDataSource()
         val networkDataSource = FakeAuthNetworkDataSource()
-        val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+        val repository = createRepository(networkDataSource, tokenDataSource)
 
         val result = repository.refresh("stale_access_token")
 
-        assertTrue(result.isLeft())
-        assertEquals(DataError.Local.Unauthorized, (result as Either.Left).value)
+        assertNull(result)
     }
 
     @Test
@@ -128,12 +202,11 @@ class AuthRepositoryImplTest {
                 )
             }
         }
-        val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+        val repository = createRepository(networkDataSource, tokenDataSource)
 
         val result = repository.refresh("old_access_token")
 
-        assertTrue(result.isRight())
-        assertEquals("new_access_token", (result as Either.Right).value)
+        assertEquals("new_access_token", result)
         assertEquals("new_refresh_token", tokenDataSource.savedRefreshToken)
         assertEquals("new_access_token", tokenDataSource.savedAccessToken)
         assertEquals(1, networkDataSource.refreshRequests.size)
@@ -147,12 +220,11 @@ class AuthRepositoryImplTest {
                 savedRefreshToken = "current_refresh_token"
             }
             val networkDataSource = FakeAuthNetworkDataSource()
-            val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+            val repository = createRepository(networkDataSource, tokenDataSource)
 
             val result = repository.refresh("stale_access_token")
 
-            assertTrue(result.isRight())
-            assertEquals("already_refreshed_access_token", (result as Either.Right).value)
+            assertEquals("already_refreshed_access_token", result)
             assertEquals(0, networkDataSource.refreshRequests.size)
         }
 
@@ -182,37 +254,62 @@ class AuthRepositoryImplTest {
                 }
             }
 
-            val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+            val repository = createRepository(networkDataSource, tokenDataSource)
 
             val call1 = async { repository.refresh("stale_token") }
             val call2 = async { repository.refresh("stale_token") }
 
             val results = awaitAll(call1, call2)
 
-            assertTrue(results[0].isRight())
-            assertTrue(results[1].isRight())
-            assertEquals("new_access_token", (results[0] as Either.Right).value)
-            assertEquals("new_access_token", (results[1] as Either.Right).value)
+            assertEquals("new_access_token", results[0])
+            assertEquals("new_access_token", results[1])
 
             assertEquals(1, networkDataSource.refreshRequests.size)
             assertEquals("refresh_token_2", tokenDataSource.savedRefreshToken)
         }
 
     @Test
-    fun refreshToken_failure_returnsNetworkError() = runTest {
+    fun refreshToken_failure_returnsNull() = runTest {
         val tokenDataSource = FakeTokenDataSource().apply {
             savedAccessToken = "stale_token"
             savedRefreshToken = "invalid_refresh_token"
         }
         val networkDataSource = FakeAuthNetworkDataSource().apply {
-            refreshResult = { Either.Left(DataError.Network.RequestTimeout) }
+            refreshResult = { Either.Left(NetworkError.Transport.Timeout) }
         }
-        val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+        val repository = createRepository(networkDataSource, tokenDataSource)
 
         val result = repository.refresh("stale_token")
 
-        assertTrue(result.isLeft())
-        assertEquals(DataError.Network.RequestTimeout, (result as Either.Left).value)
+        assertNull(result)
+        // Ensure network timeout does NOT evict the session
+        assertEquals("invalid_refresh_token", tokenDataSource.savedRefreshToken)
+    }
+
+    @Test
+    fun refreshToken_unauthorizedError_clearsAuthDataAndEvictsSession() = runTest {
+        val tokenDataSource = FakeTokenDataSource().apply {
+            savedAccessToken = "stale_token"
+            savedRefreshToken = "invalid_refresh_token"
+        }
+        val networkDataSource = FakeAuthNetworkDataSource().apply {
+            refreshResult = {
+                Either.Left(
+                    NetworkError.Business(
+                        error = AuthServerError.InvalidToken,
+                        message = "Refresh token expired or invalid"
+                    )
+                )
+            }
+        }
+        val repository = createRepository(networkDataSource, tokenDataSource)
+
+        val result = repository.refresh("stale_token")
+
+        assertNull(result)
+        assertTrue(tokenDataSource.clearCalled)
+        assertNull(tokenDataSource.savedRefreshToken)
+        assertNull(tokenDataSource.savedAccessToken)
     }
 
     @Test
@@ -222,7 +319,7 @@ class AuthRepositoryImplTest {
             savedRefreshToken = "refresh_token"
         }
         val networkDataSource = FakeAuthNetworkDataSource()
-        val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+        val repository = createRepository(networkDataSource, tokenDataSource)
 
         val result = repository.logout()
 
@@ -238,7 +335,7 @@ class AuthRepositoryImplTest {
     fun logout_withoutTokenStored_clearsAuthDataWithoutNetworkLogout() = runTest {
         val tokenDataSource = FakeTokenDataSource()
         val networkDataSource = FakeAuthNetworkDataSource()
-        val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+        val repository = createRepository(networkDataSource, tokenDataSource)
 
         val result = repository.logout()
 
@@ -256,7 +353,7 @@ class AuthRepositoryImplTest {
         val networkDataSource = FakeAuthNetworkDataSource().apply {
             logoutDelayMs = 50
         }
-        val repository = AuthRepositoryImpl(networkDataSource, tokenDataSource)
+        val repository = createRepository(networkDataSource, tokenDataSource)
 
         // Launch logout and refresh token concurrently
         val logoutCall = async { repository.logout() }
@@ -266,9 +363,22 @@ class AuthRepositoryImplTest {
         val refreshResult = refreshCall.await()
 
         assertTrue(logoutResult.isRight())
-        // Since logout acquired lock first and cleared data, refresh returns error
-        assertTrue(refreshResult.isLeft())
-        assertEquals(DataError.Local.Unauthorized, (refreshResult as Either.Left).value)
+        // Since logout acquired lock first and cleared data, refresh returns null
+        assertNull(refreshResult)
         assertTrue(tokenDataSource.clearCalled)
     }
+
+    @Test
+    fun logout_clearsChatDaoCache() = runTest {
+        val fakeDao = FakeChatDao()
+        val tokenDataSource = FakeTokenDataSource()
+        val networkDataSource = FakeAuthNetworkDataSource()
+        val repository = createRepository(networkDataSource, tokenDataSource, fakeDao)
+
+        val result = repository.logout()
+
+        assertTrue(result.isRight())
+        assertTrue(fakeDao.clearAllChatDataCalled)
+    }
 }
+

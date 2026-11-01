@@ -7,15 +7,16 @@ import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
+import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
+import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
-import io.github.neronguyen.chat.core.network.model.websocket.WsClientMessage
-import io.github.neronguyen.chat.core.network.model.websocket.WsServerEvent
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -65,8 +66,8 @@ class RealtimeConnectionManagerTest {
 
         override suspend fun sendMessage(
             message: WsClientMessage
-        ): Either<DataError.Realtime, Unit> {
-            return Either.Right(Unit)
+        ): Boolean {
+            return true
         }
     }
 
@@ -99,7 +100,7 @@ class RealtimeConnectionManagerTest {
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val manager = RealtimeConnectionManager(
+        val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
             appScope = externalScope,
@@ -119,7 +120,7 @@ class RealtimeConnectionManagerTest {
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val manager = RealtimeConnectionManager(
+        val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
             appScope = externalScope,
@@ -146,7 +147,7 @@ class RealtimeConnectionManagerTest {
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val manager = RealtimeConnectionManager(
+        val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
             appScope = externalScope,
@@ -167,7 +168,7 @@ class RealtimeConnectionManagerTest {
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource(initialAuthState = AuthState.Unauthenticated)
 
-        val manager = RealtimeConnectionManager(
+        val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
             appScope = externalScope,
@@ -181,4 +182,43 @@ class RealtimeConnectionManagerTest {
         assertEquals(0, fakeDataSource.connectCalledCount)
         assertTrue(fakeDataSource.disconnectCalledCount >= 1)
     }
+
+    @Test
+    fun `connectionState maps socket states to domain RealtimeConnectionState`() = runTest {
+        val externalScope = TestScope(testDispatcher)
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val fakeToken = FakeTokenDataSource()
+
+        val manager = RealtimeConnectionManagerImpl(
+            realtimeDataSource = fakeDataSource,
+            tokenDataSource = fakeToken,
+            appScope = externalScope,
+            ioDispatcher = testDispatcher
+        )
+
+        assertEquals(
+            io.github.neronguyen.chat.core.model.RealtimeConnectionState.DISCONNECTED,
+            manager.connectionState.first()
+        )
+
+        fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connecting
+        assertEquals(
+            io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTING,
+            manager.connectionState.first()
+        )
+
+        fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
+        assertEquals(
+            io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTED,
+            manager.connectionState.first()
+        )
+
+        fakeDataSource.connectionStateFlow.value = SocketConnectionState.Failed()
+        assertEquals(
+            io.github.neronguyen.chat.core.model.RealtimeConnectionState.FAILED,
+            manager.connectionState.first()
+        )
+    }
 }
+
+

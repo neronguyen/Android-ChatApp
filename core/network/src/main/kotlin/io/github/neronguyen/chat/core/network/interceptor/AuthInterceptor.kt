@@ -1,6 +1,5 @@
 package io.github.neronguyen.chat.core.network.interceptor
 
-import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import jakarta.inject.Inject
 import jakarta.inject.Singleton
 import kotlinx.coroutines.runBlocking
@@ -9,13 +8,13 @@ import okhttp3.Response
 
 @Singleton
 internal class AuthInterceptor @Inject constructor(
-    private val tokenDataSource: TokenDataSource
+    private val tokenProvider: TokenProvider
 ) : Interceptor {
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val token = runBlocking {
-            tokenDataSource.getAccessToken()
+            tokenProvider.getAccessToken()
         }
 
         val authenticatedRequest =

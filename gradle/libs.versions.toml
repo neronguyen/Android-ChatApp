@@ -10,6 +10,7 @@ androidxNavigation3 = "1.1.4"
 androidxWork = "2.11.2"
 arrow = "2.2.3"
 coil = "3.5.0"
+contract = "0.3.1"
 errorprone = "2.50.0"
 hilt = "2.60"
 hiltExt = "1.4.0"
@@ -47,6 +48,14 @@ androidx-compose-material-icons-extended = { group = "androidx.compose.material"
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+
+# Contracts
+contract-common = { group = "io.github.neronguyenvn.nerochat.contract", name = "common", version.ref = "contract" }
+contract-auth = { group = "io.github.neronguyenvn.nerochat.contract", name = "auth", version.ref = "contract" }
+contract-chat = { group = "io.github.neronguyenvn.nerochat.contract", name = "chat", version.ref = "contract" }
+validation-common = { group = "io.github.neronguyenvn.nerochat.validation", name = "common", version.ref = "contract" }
+validation-auth = { group = "io.github.neronguyenvn.nerochat.validation", name = "auth", version.ref = "contract" }
+validation-chat = { group = "io.github.neronguyenvn.nerochat.validation", name = "chat", version.ref = "contract" }
 
 # Hilt
 hilt-android = { group = "com.google.dagger", name = "hilt-android", version.ref = "hilt" }

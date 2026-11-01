@@ -5,7 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.feature.auth.presentation.util.AuthValidationError
+import io.github.neronguyenvn.nerochat.contract.validation.EmailValidator
+import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -38,33 +39,21 @@ class RegisterViewModel @Inject constructor(
     private fun register() {
         if (_uiState.value.isLoading) return
 
-        val emailText = emailState.text.toString().trim()
+        val emailText = EmailValidator.normalize(emailState.text.toString())
         val displayNameText = displayNameState.text.toString().trim()
         val passwordText = passwordState.text.toString()
 
-        if (emailText.isBlank()) {
+        val validationError = AuthValidator.validateRegister(
+            email = emailText,
+            displayName = displayNameText,
+            password = passwordText,
+        ).firstOrNull()
+
+        if (validationError != null) {
             _uiState.update {
                 it.copy(
-                    validationError = AuthValidationError.EmptyEmail,
-                    dataError = null,
-                )
-            }
-            return
-        }
-        if (displayNameText.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    validationError = AuthValidationError.EmptyDisplayName,
-                    dataError = null,
-                )
-            }
-            return
-        }
-        if (passwordText.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    validationError = AuthValidationError.EmptyPassword,
-                    dataError = null,
+                    validationError = validationError,
+                    authError = null,
                 )
             }
             return
@@ -74,7 +63,7 @@ class RegisterViewModel @Inject constructor(
             it.copy(
                 isLoading = true,
                 validationError = null,
-                dataError = null,
+                authError = null,
             )
         }
 
@@ -84,11 +73,11 @@ class RegisterViewModel @Inject constructor(
                 displayName = displayNameText,
                 password = passwordText,
             )
-                .onLeft { networkError ->
+                .onLeft { error ->
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            dataError = networkError,
+                            authError = error,
                         )
                     }
                 }

@@ -1,18 +1,19 @@
 package io.github.neronguyen.chat.core.network.retrofit
 
 import arrow.core.Either
-import arrow.core.raise.either
-import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.BuildConfig
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.di.AuthenticatedOkHttp
-import io.github.neronguyen.chat.core.network.model.AddChatParticipantRequest
-import io.github.neronguyen.chat.core.network.model.ChatMessageSliceDto
-import io.github.neronguyen.chat.core.network.model.ChatParticipantDto
-import io.github.neronguyen.chat.core.network.model.ChatRoomDto
-import io.github.neronguyen.chat.core.network.model.CreateDirectChatRoomRequest
-import io.github.neronguyen.chat.core.network.model.CreateGroupChatRoomRequest
+import io.github.neronguyen.chat.core.network.util.NetworkError
 import io.github.neronguyen.chat.core.network.util.safeCall
+import io.github.neronguyen.chat.core.network.util.safeCallCommon
+import io.github.neronguyenvn.nerochat.contract.chat.AddChatParticipantRequest
+import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageSliceDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
+import io.github.neronguyenvn.nerochat.contract.chat.CreateDirectChatRoomRequest
+import io.github.neronguyenvn.nerochat.contract.chat.CreateGroupChatRoomRequest
+import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -79,7 +80,7 @@ private interface RetrofitChatNetworkApi {
 
 @Singleton
 internal class RetrofitChatNetwork @Inject constructor(
-    networkJson: Json,
+    private val networkJson: Json,
     @AuthenticatedOkHttp okHttpClient: dagger.Lazy<OkHttpClient>
 ) : ChatNetworkDataSource {
 
@@ -93,61 +94,55 @@ internal class RetrofitChatNetwork @Inject constructor(
             .create(RetrofitChatNetworkApi::class.java)
     }
 
-    override suspend fun getChatRoomsForUser(): Either<DataError.Network, List<ChatRoomDto>> =
-        either { safeCall { networkApi.getChatRoomsForUser() } }
+    override suspend fun getChatRoomsForUser(): Either<NetworkError<Nothing>, List<ChatRoomDto>> =
+        safeCallCommon(networkJson) { networkApi.getChatRoomsForUser() }
 
-    override suspend fun getChatRoom(roomId: String): Either<DataError.Network, ChatRoomDto> =
-        either { safeCall { networkApi.getChatRoom(roomId) } }
+    override suspend fun getChatRoom(roomId: String): Either<NetworkError<ChatServerError.GetRoom>, ChatRoomDto> =
+        safeCall(networkJson, ChatServerError.GetRoom) { networkApi.getChatRoom(roomId) }
 
     override suspend fun getMessagesForChatRoom(
         roomId: String,
         before: Instant?
-    ): Either<DataError.Network, ChatMessageSliceDto> =
-        either { safeCall { networkApi.getMessagesForChatRoom(roomId, before) } }
+    ): Either<NetworkError<ChatServerError.GetMessages>, ChatMessageSliceDto> =
+        safeCall(networkJson, ChatServerError.GetMessages) { networkApi.getMessagesForChatRoom(roomId, before) }
 
-    override suspend fun getParticipantByEmail(email: String): Either<DataError.Network, ChatParticipantDto> =
-        either { safeCall { networkApi.getParticipantByEmail(email) } }
+    override suspend fun getParticipantByEmail(email: String): Either<NetworkError<ChatServerError.GetParticipant>, ChatParticipantDto> =
+        safeCall(networkJson, ChatServerError.GetParticipant) { networkApi.getParticipantByEmail(email) }
 
     override suspend fun createDirectChatRoom(
         targetUserId: String,
         message: String
-    ): Either<DataError.Network, ChatRoomDto> =
-        either {
-            safeCall {
-                networkApi.createDirectChatRoom(
-                    CreateDirectChatRoomRequest(targetUserId = targetUserId, message = message)
-                )
-            }
+    ): Either<NetworkError<ChatServerError.CreateRoom>, ChatRoomDto> =
+        safeCall(networkJson, ChatServerError.CreateRoom) {
+            networkApi.createDirectChatRoom(
+                CreateDirectChatRoomRequest(targetUserId = targetUserId, message = message)
+            )
         }
 
     override suspend fun createGroupChatRoom(
         participantIds: List<String>,
         name: String?
-    ): Either<DataError.Network, ChatRoomDto> =
-        either {
-            safeCall {
-                networkApi.createGroupChatRoom(
-                    CreateGroupChatRoomRequest(name = name ?: "", participantIds = participantIds)
-                )
-            }
+    ): Either<NetworkError<ChatServerError.CreateRoom>, ChatRoomDto> =
+        safeCall(networkJson, ChatServerError.CreateRoom) {
+            networkApi.createGroupChatRoom(
+                CreateGroupChatRoomRequest(participantIds = participantIds, name = name)
+            )
         }
 
     override suspend fun addParticipantsToGroup(
         roomId: String,
         userIds: List<String>
-    ): Either<DataError.Network, ChatRoomDto> =
-        either {
-            safeCall {
-                networkApi.addParticipantsToGroup(
-                    roomId = roomId,
-                    request = AddChatParticipantRequest(userIds = userIds)
-                )
-            }
+    ): Either<NetworkError<ChatServerError.AddParticipants>, ChatRoomDto> =
+        safeCall(networkJson, ChatServerError.AddParticipants) {
+            networkApi.addParticipantsToGroup(
+                roomId = roomId,
+                request = AddChatParticipantRequest(userIds = userIds)
+            )
         }
 
-    override suspend fun leaveChatRoom(roomId: String): Either<DataError.Network, Unit> =
-        either { safeCall { networkApi.leaveChatRoom(roomId) } }
+    override suspend fun leaveChatRoom(roomId: String): Either<NetworkError<ChatServerError.LeaveRoom>, Unit> =
+        safeCall(networkJson, ChatServerError.LeaveRoom) { networkApi.leaveChatRoom(roomId) }
 
-    override suspend fun deleteMessage(messageId: String): Either<DataError.Network, Unit> =
-        either { safeCall { networkApi.deleteMessage(messageId) } }
+    override suspend fun deleteMessage(messageId: String): Either<NetworkError<ChatServerError.DeleteMessage>, Unit> =
+        safeCall(networkJson, ChatServerError.DeleteMessage) { networkApi.deleteMessage(messageId) }
 }

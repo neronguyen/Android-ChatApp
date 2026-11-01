@@ -1,7 +1,5 @@
 package io.github.neronguyen.chat.core.network.websocket
 
-import arrow.core.Either
-import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.BuildConfig
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.di.RealtimeOkHttp
@@ -10,8 +8,8 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connecting
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Disconnected
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Failed
-import io.github.neronguyen.chat.core.network.model.websocket.WsClientMessage
-import io.github.neronguyen.chat.core.network.model.websocket.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
+import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -40,7 +38,7 @@ internal class ChatWebSocketClient @Inject constructor(
 ) : ChatRealtimeDataSource {
 
     private val json = Json {
-        classDiscriminator = EVENT_TYPE
+        classDiscriminator = WsServerEvent.CLASS_DISCRIMINATOR
         ignoreUnknownKeys = true
     }
 
@@ -89,24 +87,19 @@ internal class ChatWebSocketClient @Inject constructor(
 
     override suspend fun sendMessage(
         message: WsClientMessage
-    ): Either<DataError.Realtime, Unit> {
-        val socket = webSocket.load() ?: return Either.Left(DataError.Realtime.SocketError)
+    ): Boolean {
+        val socket = webSocket.load() ?: return false
         if (_connectionState.value !is Connected) {
-            return Either.Left(DataError.Realtime.SocketError)
+            return false
         }
 
         return try {
             val text = json.encodeToString(message)
-            val enqueued = socket.send(text)
-            if (enqueued) {
-                Either.Right(Unit)
-            } else {
-                Either.Left(DataError.Realtime.SocketError)
-            }
+            socket.send(text)
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            Either.Left(DataError.Realtime.SocketError)
+            false
         }
     }
 
@@ -160,7 +153,6 @@ internal class ChatWebSocketClient @Inject constructor(
     }
 
     companion object {
-        private const val EVENT_TYPE = "type"
         private const val NORMAL_CLOSURE_STATUS = 1000
     }
 }

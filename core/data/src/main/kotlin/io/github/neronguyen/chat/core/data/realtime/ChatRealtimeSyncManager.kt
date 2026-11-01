@@ -9,7 +9,7 @@ import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Disconnected
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Failed
-import io.github.neronguyen.chat.core.network.model.websocket.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -39,7 +39,9 @@ class ChatRealtimeSyncManager @Inject constructor(
                     is WsServerEvent.ParticipantJoined -> handleParticipantJoined(event)
                     is WsServerEvent.ParticipantLeft -> handleParticipantLeft(event)
                     is WsServerEvent.Error -> {
-                        // Ignore or log error
+                        event.messageId?.let { messageId ->
+                            chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
+                        }
                     }
                 }
             }

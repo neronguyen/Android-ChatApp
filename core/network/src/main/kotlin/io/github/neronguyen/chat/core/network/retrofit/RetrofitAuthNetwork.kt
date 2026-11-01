@@ -1,18 +1,18 @@
 package io.github.neronguyen.chat.core.network.retrofit
 
 import arrow.core.Either
-import arrow.core.raise.either
-import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.AuthNetworkDataSource
 import io.github.neronguyen.chat.core.network.BuildConfig
 import io.github.neronguyen.chat.core.network.di.BaseOkHttp
 import io.github.neronguyen.chat.core.network.di.RefreshOkHttp
-import io.github.neronguyen.chat.core.network.model.AuthenticatedUserDto
-import io.github.neronguyen.chat.core.network.model.LoginRequest
-import io.github.neronguyen.chat.core.network.model.RefreshTokenRequest
-import io.github.neronguyen.chat.core.network.model.RegisterRequest
-import io.github.neronguyen.chat.core.network.model.UserDto
+import io.github.neronguyen.chat.core.network.util.NetworkError
 import io.github.neronguyen.chat.core.network.util.safeCall
+import io.github.neronguyenvn.nerochat.contract.auth.AuthenticatedUserDto
+import io.github.neronguyenvn.nerochat.contract.auth.LoginRequest
+import io.github.neronguyenvn.nerochat.contract.auth.RefreshTokenRequest
+import io.github.neronguyenvn.nerochat.contract.auth.RegisterRequest
+import io.github.neronguyenvn.nerochat.contract.auth.UserDto
+import io.github.neronguyenvn.nerochat.contract.auth.error.AuthServerError
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -57,17 +57,17 @@ internal class RetrofitAuthNetwork @Inject constructor(
     private val publicApi by lazy { createApi(baseClient.get()) }
     private val refreshApi by lazy { createApi(refreshClient.get()) }
 
-    override suspend fun register(request: RegisterRequest): Either<DataError.Network, UserDto> =
-        either { safeCall { publicApi.register(request) } }
+    override suspend fun register(request: RegisterRequest): Either<NetworkError<AuthServerError.Register>, UserDto> =
+        safeCall(networkJson, AuthServerError.Register) { publicApi.register(request) }
 
-    override suspend fun login(request: LoginRequest): Either<DataError.Network, AuthenticatedUserDto> =
-        either { safeCall { publicApi.login(request) } }
+    override suspend fun login(request: LoginRequest): Either<NetworkError<AuthServerError.Login>, AuthenticatedUserDto> =
+        safeCall(networkJson, AuthServerError.Login) { publicApi.login(request) }
 
-    override suspend fun refreshToken(request: RefreshTokenRequest): Either<DataError.Network, AuthenticatedUserDto> =
-        either { safeCall { refreshApi.refreshToken(request) } }
+    override suspend fun refreshToken(request: RefreshTokenRequest): Either<NetworkError<AuthServerError.RefreshToken>, AuthenticatedUserDto> =
+        safeCall(networkJson, AuthServerError.RefreshToken) { refreshApi.refreshToken(request) }
 
-    override suspend fun logout(request: RefreshTokenRequest): Either<DataError.Network, Unit> =
-        either { safeCall { publicApi.logout(request) } }
+    override suspend fun logout(request: RefreshTokenRequest): Either<NetworkError<AuthServerError.Logout>, Unit> =
+        safeCall(networkJson, AuthServerError.Logout) { publicApi.logout(request) }
 
     private fun createApi(client: OkHttpClient): RetrofitAuthNetworkApi {
         val contentType = "application/json".toMediaType()

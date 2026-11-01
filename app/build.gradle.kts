@@ -54,6 +54,7 @@ kotlin {
 
 dependencies {
     implementation(projects.feature.auth)
+    implementation(projects.feature.chat)
 
     implementation(projects.core.model)
     implementation(projects.core.data)

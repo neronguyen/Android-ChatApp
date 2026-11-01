@@ -1,12 +1,5 @@
 package io.github.neronguyen.chat.core.network.interceptor
 
-import arrow.core.Either
-import io.github.neronguyen.chat.core.datastore.TokenDataSource
-import io.github.neronguyen.chat.core.model.AuthState
-import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.DataError
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
@@ -19,33 +12,16 @@ import kotlin.test.assertNull
 
 class TokenAuthenticatorTest {
 
-    private class FakeTokenDataSource : TokenDataSource {
+    private class FakeTokenProvider : TokenProvider {
         var savedAccessToken: String? = null
-
-        override val authState: Flow<AuthState> = emptyFlow()
-
-        override suspend fun getRefreshToken(): String? = null
         override suspend fun getAccessToken(): String? = savedAccessToken
-
-        override suspend fun saveAuthData(user: User, accessToken: String, refreshToken: String) {
-            savedAccessToken = accessToken
-        }
-
-        override suspend fun saveTokens(accessToken: String, refreshToken: String) {
-            savedAccessToken = accessToken
-        }
-
-        override suspend fun clearAuthData() {
-            savedAccessToken = null
-        }
     }
 
     private class FakeTokenRefresher : TokenRefresher {
-        var refreshResult: (String) -> Either<DataError, String> =
-            { Either.Left(DataError.Network.Unknown) }
+        var refreshResult: (String) -> String? = { null }
         val refreshedStaleTokens = mutableListOf<String>()
 
-        override suspend fun refresh(staleToken: String): Either<DataError, String> {
+        override suspend fun refresh(staleToken: String): String? {
             refreshedStaleTokens.add(staleToken)
             return refreshResult(staleToken)
         }
@@ -73,13 +49,13 @@ class TokenAuthenticatorTest {
 
     @Test
     fun authenticate_refreshesTokenAndReturnsNewRequest_whenTokenIsStale() = runTest {
-        val fakeTokenDS = FakeTokenDataSource().apply { savedAccessToken = "stale_token" }
+        val fakeTokenProvider = FakeTokenProvider().apply { savedAccessToken = "stale_token" }
         val fakeRefresher = FakeTokenRefresher().apply {
-            refreshResult = { Either.Right("new_access_token") }
+            refreshResult = { "new_access_token" }
         }
 
         val authenticator = TokenAuthenticator(
-            tokenDataSource = fakeTokenDS,
+            tokenProvider = fakeTokenProvider,
             tokenRefresherProvider = { fakeRefresher }
         )
 
@@ -97,12 +73,12 @@ class TokenAuthenticatorTest {
 
     @Test
     fun authenticate_reusesNewToken_whenAlreadyRefreshedByConcurrentRequest() = runTest {
-        val fakeTokenDS =
-            FakeTokenDataSource().apply { savedAccessToken = "already_refreshed_token" }
+        val fakeTokenProvider =
+            FakeTokenProvider().apply { savedAccessToken = "already_refreshed_token" }
         val fakeRefresher = FakeTokenRefresher()
 
         val authenticator = TokenAuthenticator(
-            tokenDataSource = fakeTokenDS,
+            tokenProvider = fakeTokenProvider,
             tokenRefresherProvider = { fakeRefresher }
         )
 
@@ -120,11 +96,11 @@ class TokenAuthenticatorTest {
 
     @Test
     fun authenticate_aborts_whenResponseCountIsThreeOrMore() = runTest {
-        val fakeTokenDS = FakeTokenDataSource().apply { savedAccessToken = "token" }
+        val fakeTokenProvider = FakeTokenProvider().apply { savedAccessToken = "token" }
         val fakeRefresher = FakeTokenRefresher()
 
         val authenticator = TokenAuthenticator(
-            tokenDataSource = fakeTokenDS,
+            tokenProvider = fakeTokenProvider,
             tokenRefresherProvider = { fakeRefresher }
         )
 
@@ -141,13 +117,13 @@ class TokenAuthenticatorTest {
 
     @Test
     fun authenticate_returnsNull_whenRefreshFails() = runTest {
-        val fakeTokenDS = FakeTokenDataSource().apply { savedAccessToken = "stale_token" }
+        val fakeTokenProvider = FakeTokenProvider().apply { savedAccessToken = "stale_token" }
         val fakeRefresher = FakeTokenRefresher().apply {
-            refreshResult = { Either.Left(DataError.Local.Unauthorized) }
+            refreshResult = { null }
         }
 
         val authenticator = TokenAuthenticator(
-            tokenDataSource = fakeTokenDS,
+            tokenProvider = fakeTokenProvider,
             tokenRefresherProvider = { fakeRefresher }
         )
 

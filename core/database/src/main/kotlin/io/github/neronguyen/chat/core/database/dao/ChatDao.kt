@@ -134,10 +134,47 @@ interface ChatDao {
         timestamp: Long?
     )
 
+    @Query("DELETE FROM chat_rooms WHERE id = :roomId")
+    suspend fun deleteRoom(roomId: String)
+
+    @Query("DELETE FROM chat_room_participants WHERE roomId = :roomId")
+    suspend fun deleteCrossRefsForRoom(roomId: String)
+
+    @Query("DELETE FROM chat_messages WHERE roomId = :roomId")
+    suspend fun deleteMessagesForRoom(roomId: String)
+
+    @Query("DELETE FROM chat_rooms")
+    suspend fun clearRooms()
+
+    @Query("DELETE FROM chat_messages")
+    suspend fun clearMessages()
+
+    @Query("DELETE FROM chat_participants")
+    suspend fun clearParticipants()
+
+    @Query("DELETE FROM chat_room_participants")
+    suspend fun clearCrossRefs()
+
     @Delete
     suspend fun deleteCrossRefs(crossRefs: List<ChatRoomParticipantCrossRef>)
 
     // --- Transactions ---
+
+    @Transaction
+    suspend fun clearAllChatData() {
+        clearCrossRefs()
+        clearMessages()
+        clearRooms()
+        clearParticipants()
+    }
+
+    @Transaction
+    suspend fun removeRoomAndData(roomId: String) {
+        deleteCrossRefsForRoom(roomId)
+        deleteMessagesForRoom(roomId)
+        deleteRoom(roomId)
+    }
+
 
     @Transaction
     suspend fun insertSendingMessage(message: ChatMessageEntity) {
@@ -197,18 +234,15 @@ interface ChatDao {
     @Transaction
     suspend fun insertFullChat(
         room: ChatRoomEntity,
-        creator: ChatParticipantEntity,
         participants: List<ChatParticipantEntity>,
         lastMessage: ChatMessageEntity?
     ) {
-        upsertParticipant(creator)
         upsertParticipants(participants)
-        lastMessage?.let { upsertMessage(it) }
         upsertRoom(room)
+        lastMessage?.let { upsertMessage(it) }
 
-        val allParticipantIds = (participants.map { it.userId } + creator.userId).distinct()
-        val crossRefs = allParticipantIds.map { userId ->
-            ChatRoomParticipantCrossRef(roomId = room.id, userId = userId)
+        val crossRefs = participants.distinctBy { it.userId }.map { participant ->
+            ChatRoomParticipantCrossRef(roomId = room.id, userId = participant.userId)
         }
 
         upsertCrossRefs(crossRefs)
@@ -224,8 +258,8 @@ interface ChatDao {
         if (rooms.isEmpty()) return
 
         upsertParticipants(participants)
-        upsertMessages(lastMessages)
         upsertRooms(rooms)
+        upsertMessages(lastMessages)
 
         val roomIds = rooms.map { it.id }
         val existingCrossRefs = roomIds.chunked(500).flatMap { chunk ->

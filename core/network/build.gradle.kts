@@ -46,11 +46,14 @@ kotlin {
 
 dependencies {
     implementation(projects.core.common)
-    implementation(projects.core.model)
-    implementation(projects.core.datastore)
 
     // Arrow
     implementation(libs.arrow.core)
+
+    // Contract
+    api(libs.contract.common)
+    api(libs.contract.auth)
+    api(libs.contract.chat)
 
     // Coil
     implementation(libs.coil.kt.network.okhttp)

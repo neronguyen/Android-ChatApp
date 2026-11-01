@@ -11,16 +11,17 @@ import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
-import io.github.neronguyen.chat.core.network.model.ChatMessageDto
-import io.github.neronguyen.chat.core.network.model.ChatMessageSliceDto
-import io.github.neronguyen.chat.core.network.model.ChatParticipantDto
-import io.github.neronguyen.chat.core.network.model.ChatRoomDto
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
-import io.github.neronguyen.chat.core.network.model.websocket.WsClientMessage
-import io.github.neronguyen.chat.core.network.model.websocket.WsServerEvent
+import io.github.neronguyen.chat.core.network.util.NetworkError
+import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageSliceDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
+import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
+import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,9 +57,19 @@ class ChatMessageRepositoryImplTest {
         override fun getRecentMessages(roomId: String, limit: Int): Flow<List<ChatMessageEntity>> =
             emptyFlow()
 
-        override suspend fun getMessageById(id: String): ChatMessageEntity? = null
+        override suspend fun getMessageById(id: String): ChatMessageEntity? =
+            insertedMessages.find { it.id == id }
         override suspend fun getOldestSentMessageTimestamp(roomId: String): Long? =
             oldestSentTimestampToReturn
+
+        override suspend fun deleteRoom(roomId: String) {}
+        override suspend fun deleteCrossRefsForRoom(roomId: String) {}
+        override suspend fun deleteMessagesForRoom(roomId: String) {}
+        override suspend fun clearRooms() {}
+        override suspend fun clearMessages() {}
+        override suspend fun clearParticipants() {}
+        override suspend fun clearCrossRefs() {}
+
 
         override suspend fun getNewestSentMessageTimestamp(roomId: String): Long? =
             newestSentTimestampToReturn
@@ -192,12 +203,8 @@ class ChatMessageRepositoryImplTest {
 
         override suspend fun sendMessage(
             message: WsClientMessage
-        ): Either<DataError.Realtime, Unit> {
-            return if (shouldSucceed) {
-                Either.Right(Unit)
-            } else {
-                Either.Left(DataError.Realtime.SocketError)
-            }
+        ): Boolean {
+            return shouldSucceed
         }
     }
 
@@ -205,42 +212,45 @@ class ChatMessageRepositoryImplTest {
         var lastRequestedBefore: Instant? = null
         var messagesToReturn = ChatMessageSliceDto(messages = emptyList(), hasMore = false)
 
-        override suspend fun getChatRoomsForUser(): Either<DataError.Network, List<ChatRoomDto>> =
+        override suspend fun getChatRoomsForUser(): Either<NetworkError<Nothing>, List<ChatRoomDto>> =
             Either.Right(emptyList())
 
-        override suspend fun getChatRoom(roomId: String): Either<DataError.Network, ChatRoomDto> =
-            Either.Left(DataError.Network.Unknown)
+        override suspend fun getChatRoom(roomId: String): Either<NetworkError<ChatServerError.GetRoom>, ChatRoomDto> =
+            Either.Left(NetworkError.Transport.NoInternet)
 
         override suspend fun getMessagesForChatRoom(
             roomId: String,
             before: Instant?
-        ): Either<DataError.Network, ChatMessageSliceDto> {
+        ): Either<NetworkError<ChatServerError.GetMessages>, ChatMessageSliceDto> {
             lastRequestedBefore = before
             return Either.Right(messagesToReturn)
         }
 
-        override suspend fun getParticipantByEmail(email: String): Either<DataError.Network, ChatParticipantDto> =
-            Either.Left(DataError.Network.Unknown)
+        override suspend fun getParticipantByEmail(email: String): Either<NetworkError<ChatServerError.GetParticipant>, ChatParticipantDto> =
+            Either.Left(NetworkError.Transport.NoInternet)
 
         override suspend fun createDirectChatRoom(
             targetUserId: String,
             message: String
-        ): Either<DataError.Network, ChatRoomDto> = Either.Left(DataError.Network.Unknown)
+        ): Either<NetworkError<ChatServerError.CreateRoom>, ChatRoomDto> =
+            Either.Left(NetworkError.Transport.NoInternet)
 
         override suspend fun createGroupChatRoom(
             participantIds: List<String>,
             name: String?
-        ): Either<DataError.Network, ChatRoomDto> = Either.Left(DataError.Network.Unknown)
+        ): Either<NetworkError<ChatServerError.CreateRoom>, ChatRoomDto> =
+            Either.Left(NetworkError.Transport.NoInternet)
 
         override suspend fun addParticipantsToGroup(
             roomId: String,
             userIds: List<String>
-        ): Either<DataError.Network, ChatRoomDto> = Either.Left(DataError.Network.Unknown)
+        ): Either<NetworkError<ChatServerError.AddParticipants>, ChatRoomDto> =
+            Either.Left(NetworkError.Transport.NoInternet)
 
-        override suspend fun leaveChatRoom(roomId: String): Either<DataError.Network, Unit> =
+        override suspend fun leaveChatRoom(roomId: String): Either<NetworkError<ChatServerError.LeaveRoom>, Unit> =
             Either.Right(Unit)
 
-        override suspend fun deleteMessage(messageId: String): Either<DataError.Network, Unit> =
+        override suspend fun deleteMessage(messageId: String): Either<NetworkError<ChatServerError.DeleteMessage>, Unit> =
             Either.Right(Unit)
     }
 
@@ -263,6 +273,19 @@ class ChatMessageRepositoryImplTest {
         override suspend fun clearAuthData() {}
     }
 
+    private fun createRepository(
+        chatDao: ChatDao,
+        realtimeDataSource: ChatRealtimeDataSource,
+        networkDataSource: ChatNetworkDataSource,
+        tokenDataSource: TokenDataSource,
+    ): ChatMessageRepositoryImpl = ChatMessageRepositoryImpl(
+        chatDao = chatDao,
+        realtimeDataSource = realtimeDataSource,
+        networkDataSource = networkDataSource,
+        tokenDataSource = tokenDataSource,
+        defaultDispatcher = testDispatcher
+    )
+
     @Test
     fun `getMessages validates limit greater than 0`() {
         val fakeDao = FakeChatDao()
@@ -270,13 +293,13 @@ class ChatMessageRepositoryImplTest {
         val fakeNetwork = FakeChatNetworkDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
+
 
         assertFailsWith<IllegalArgumentException> {
             repository.getMessages("room1", limit = 0)
@@ -294,12 +317,11 @@ class ChatMessageRepositoryImplTest {
         }
         val fakeToken = FakeTokenDataSource()
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
 
         val result = repository.syncRecentMessages("room1")
@@ -331,12 +353,11 @@ class ChatMessageRepositoryImplTest {
             val fakeRealtime = FakeChatRealtimeDataSource()
             val fakeToken = FakeTokenDataSource()
 
-            val repository = ChatMessageRepositoryImpl(
+            val repository = createRepository(
                 chatDao = fakeDao,
                 realtimeDataSource = fakeRealtime,
                 networkDataSource = fakeNetwork,
-                tokenDataSource = fakeToken,
-                defaultDispatcher = testDispatcher
+                tokenDataSource = fakeToken
             )
 
             val result = repository.syncRecentMessages("room1")
@@ -369,12 +390,11 @@ class ChatMessageRepositoryImplTest {
         }
         val fakeToken = FakeTokenDataSource()
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
 
         val result = repository.loadOlderMessages("room1")
@@ -430,12 +450,11 @@ class ChatMessageRepositoryImplTest {
         val fakeRealtime = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
 
         val result = repository.syncRecentMessages("room1")
@@ -470,12 +489,11 @@ class ChatMessageRepositoryImplTest {
         val fakeRealtime = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
 
         val result = repository.syncRecentMessages("room1")
@@ -492,17 +510,15 @@ class ChatMessageRepositoryImplTest {
             val fakeNetwork = FakeChatNetworkDataSource()
             val fakeToken = FakeTokenDataSource()
 
-            val repository = ChatMessageRepositoryImpl(
+            val repository = createRepository(
                 chatDao = fakeDao,
                 realtimeDataSource = fakeRealtime,
                 networkDataSource = fakeNetwork,
-                tokenDataSource = fakeToken,
-                defaultDispatcher = testDispatcher
+                tokenDataSource = fakeToken
             )
 
-            val result = repository.sendMessage("room1", "Hello World")
+            repository.sendMessage("room1", "Hello World")
 
-            assertTrue(result.isRight())
             assertEquals(1, fakeDao.insertedMessages.size)
 
             val insertedMsg = fakeDao.insertedMessages.first()
@@ -524,18 +540,15 @@ class ChatMessageRepositoryImplTest {
         val fakeNetwork = FakeChatNetworkDataSource()
         val fakeToken = FakeTokenDataSource()
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
 
-        val result = repository.sendMessage("room1", "Hello World")
+        repository.sendMessage("room1", "Hello World")
 
-        assertTrue(result.isLeft())
-        assertEquals(DataError.Realtime.SocketError, result.leftOrNull())
         assertEquals(1, fakeDao.insertedMessages.size)
 
         val insertedMsg = fakeDao.insertedMessages.first()
@@ -543,24 +556,96 @@ class ChatMessageRepositoryImplTest {
     }
 
     @Test
-    fun `sendMessage returns Unauthorized error when unauthenticated`() = runTest {
+    fun `sendMessage does not insert when unauthenticated`() = runTest {
         val fakeDao = FakeChatDao()
         val fakeRealtime = FakeChatRealtimeDataSource()
         val fakeNetwork = FakeChatNetworkDataSource()
         val fakeToken = FakeTokenDataSource(initialAuthState = AuthState.Unauthenticated)
 
-        val repository = ChatMessageRepositoryImpl(
+        val repository = createRepository(
             chatDao = fakeDao,
             realtimeDataSource = fakeRealtime,
             networkDataSource = fakeNetwork,
-            tokenDataSource = fakeToken,
-            defaultDispatcher = testDispatcher
+            tokenDataSource = fakeToken
         )
 
-        val result = repository.sendMessage("room1", "Hello World")
+        repository.sendMessage("room1", "Hello World")
 
-        assertTrue(result.isLeft())
-        assertEquals(DataError.Local.Unauthorized, result.leftOrNull())
         assertEquals(0, fakeDao.insertedMessages.size)
     }
+
+    @Test
+    fun `retryMessage updates status to SENDING and sends through realtime`() = runTest {
+        val fakeDao = FakeChatDao().apply {
+            insertedMessages.add(
+                ChatMessageEntity(
+                    id = "msg-123",
+                    roomId = "room1",
+                    senderId = "u1",
+                    content = "Retry me",
+                    timestamp = 1000L,
+                    deliveryStatus = MessageDeliveryStatus.FAILED
+                )
+            )
+        }
+        val fakeRealtime = FakeChatRealtimeDataSource().apply { shouldSucceed = true }
+        val fakeNetwork = FakeChatNetworkDataSource()
+        val fakeToken = FakeTokenDataSource()
+
+        val repository = createRepository(
+            chatDao = fakeDao,
+            realtimeDataSource = fakeRealtime,
+            networkDataSource = fakeNetwork,
+            tokenDataSource = fakeToken
+        )
+
+        repository.retryMessage("msg-123")
+        assertEquals(MessageDeliveryStatus.SENDING, fakeDao.updatedStatuses["msg-123"])
+    }
+
+    @Test
+    fun `retryMessage does nothing when message is missing locally`() = runTest {
+        val fakeDao = FakeChatDao()
+        val repository = createRepository(
+            chatDao = fakeDao,
+            realtimeDataSource = FakeChatRealtimeDataSource().apply { shouldSucceed = true },
+            networkDataSource = FakeChatNetworkDataSource(),
+            tokenDataSource = FakeTokenDataSource()
+        )
+
+        repository.retryMessage("missing-id")
+
+        assertTrue(fakeDao.updatedStatuses.isEmpty())
+    }
+
+    @Test
+    fun `deleteMessage calls network and updates local delivery status to DELETED`() = runTest {
+        val fakeDao = FakeChatDao().apply {
+            insertedMessages.add(
+                ChatMessageEntity(
+                    id = "msg-456",
+                    roomId = "room1",
+                    senderId = "u1",
+                    content = "Delete me",
+                    timestamp = 1000L,
+                    deliveryStatus = MessageDeliveryStatus.SENT
+                )
+            )
+        }
+        val fakeRealtime = FakeChatRealtimeDataSource()
+        val fakeNetwork = FakeChatNetworkDataSource()
+        val fakeToken = FakeTokenDataSource()
+
+        val repository = createRepository(
+            chatDao = fakeDao,
+            realtimeDataSource = fakeRealtime,
+            networkDataSource = fakeNetwork,
+            tokenDataSource = fakeToken
+        )
+
+        val result = repository.deleteMessage("msg-456")
+        assertTrue(result.isRight())
+        assertEquals(MessageDeliveryStatus.DELETED, fakeDao.updatedStatuses["msg-456"])
+    }
 }
+

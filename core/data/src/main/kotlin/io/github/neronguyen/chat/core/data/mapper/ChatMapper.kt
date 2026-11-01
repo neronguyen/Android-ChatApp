@@ -7,10 +7,22 @@ import io.github.neronguyen.chat.core.database.model.ChatRoomWithDetails
 import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
+import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
-import io.github.neronguyen.chat.core.network.model.ChatMessageDto
-import io.github.neronguyen.chat.core.network.model.ChatParticipantDto
-import io.github.neronguyen.chat.core.network.model.ChatRoomDto
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTED
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTING
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState.DISCONNECTED
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState.FAILED
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connected
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connecting
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Disconnected
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Failed
+import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomType as ContractChatRoomType
 import kotlin.time.Instant
 
 fun ChatParticipantDto.toDomain(): ChatParticipant {
@@ -88,10 +100,17 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
     )
 }
 
+fun ContractChatRoomType.toDomain(): ChatRoomType = when (this) {
+    ContractChatRoomType.DIRECT -> ChatRoomType.DIRECT
+    ContractChatRoomType.GROUP -> ChatRoomType.GROUP
+}
+
+fun ContractChatRoomType.toEntity(): ChatRoomType = toDomain()
+
 fun ChatRoomDto.toDomain(): ChatRoom {
     return ChatRoom(
         id = id,
-        type = type,
+        type = type.toDomain(),
         name = name,
         creator = creator.toDomain(),
         participants = participants.map { it.toDomain() },
@@ -103,11 +122,11 @@ fun ChatRoomDto.toDomain(): ChatRoom {
 fun ChatRoomDto.toEntity(): ChatRoomEntity {
     return ChatRoomEntity(
         id = id,
-        type = type,
+        type = type.toEntity(),
         name = name,
         creatorId = creator.userId,
         lastMessageId = lastMessage?.id,
-        lastActivityAt = lastActivityAt?.toEpochMilliseconds()
+        lastActivityAt = lastActivityAt.toEpochMilliseconds()
     )
 }
 
@@ -124,3 +143,11 @@ fun ChatRoomWithDetails.toDomain(): ChatRoom {
         lastActivityAt = room.lastActivityAt?.let { Instant.fromEpochMilliseconds(it) }
     )
 }
+
+fun SocketConnectionState.toDomain(): RealtimeConnectionState = when (this) {
+    is Connecting -> CONNECTING
+    is Connected -> CONNECTED
+    is Disconnected -> DISCONNECTED
+    is Failed -> FAILED
+}
+

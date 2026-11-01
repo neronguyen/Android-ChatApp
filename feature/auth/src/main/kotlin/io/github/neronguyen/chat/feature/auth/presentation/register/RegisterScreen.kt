@@ -125,7 +125,7 @@ fun RegisterScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        val activeErrorText = uiState.validationError?.asUiText() ?: uiState.dataError?.asUiText()
+        val activeErrorText = uiState.validationError?.asUiText() ?: uiState.authError?.asUiText()
         Text(
             text = activeErrorText.orEmpty(),
             color = MaterialTheme.colorScheme.error,

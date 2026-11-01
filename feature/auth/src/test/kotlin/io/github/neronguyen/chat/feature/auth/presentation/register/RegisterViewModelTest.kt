@@ -5,8 +5,9 @@ import arrow.core.Either
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.User
+import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.DataError
-import io.github.neronguyen.chat.feature.auth.presentation.util.AuthValidationError
+import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,7 +87,7 @@ class RegisterViewModelTest {
             assertFalse(handledState.isSuccess)
             assertEquals(successState.isLoading, handledState.isLoading)
             assertEquals(successState.validationError, handledState.validationError)
-            assertEquals(successState.dataError, handledState.dataError)
+            assertEquals(successState.authError, handledState.authError)
 
             viewModel.onRegisterSuccessHandled()
             val rehandledState = viewModel.uiState.value
@@ -96,7 +97,7 @@ class RegisterViewModelTest {
 
     @Test
     fun `two immediate submissions start only one register request`() = runTest {
-        val completable = CompletableDeferred<Either<DataError.Network, User>>()
+        val completable = CompletableDeferred<Either<AuthError.Register, User>>()
         fakeRepository.registerCompletable = completable
 
         viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
@@ -120,7 +121,7 @@ class RegisterViewModelTest {
 
     @Test
     fun `submission during active request starts no additional request`() = runTest {
-        val completable = CompletableDeferred<Either<DataError.Network, User>>()
+        val completable = CompletableDeferred<Either<AuthError.Register, User>>()
         fakeRepository.registerCompletable = completable
 
         viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
@@ -156,8 +157,21 @@ class RegisterViewModelTest {
     }
 
     @Test
+    fun `short or non-alphanumeric password sets InvalidPassword validation error`() = runTest {
+        viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
+        viewModel.displayNameState.setTextAndPlaceCursorAtEnd("Test User")
+        viewModel.passwordState.setTextAndPlaceCursorAtEnd("short")
+
+        viewModel.onEvent(RegisterUiEvent.Register)
+
+        assertEquals(0, fakeRepository.registerCallCount)
+        assertFalse(viewModel.uiState.value.isLoading)
+        assertEquals(AuthValidationError.InvalidPassword, viewModel.uiState.value.validationError)
+    }
+
+    @Test
     fun `after failed request, new submission can start another request`() = runTest {
-        var completable = CompletableDeferred<Either<DataError.Network, User>>()
+        var completable = CompletableDeferred<Either<AuthError.Register, User>>()
         fakeRepository.registerCompletable = completable
 
         viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
@@ -168,11 +182,11 @@ class RegisterViewModelTest {
         testScheduler.runCurrent()
         assertEquals(1, fakeRepository.registerCallCount)
 
-        completable.complete(Either.Left(DataError.Network.Unknown))
+        completable.complete(Either.Left(AuthError.EmailAlreadyInUse))
         testScheduler.advanceUntilIdle()
 
         assertFalse(viewModel.uiState.value.isLoading)
-        assertEquals(DataError.Network.Unknown, viewModel.uiState.value.dataError)
+        assertEquals(AuthError.EmailAlreadyInUse, viewModel.uiState.value.authError)
 
         completable = CompletableDeferred()
         fakeRepository.registerCompletable = completable
@@ -192,14 +206,14 @@ class RegisterViewModelTest {
 
 private class FakeAuthRepository : AuthRepository {
     var registerCallCount = 0
-    var registerCompletable: CompletableDeferred<Either<DataError.Network, User>>? = null
+    var registerCompletable: CompletableDeferred<Either<AuthError.Register, User>>? = null
 
     override fun getAuthState(): Flow<AuthState> = flowOf(AuthState.Unauthenticated)
 
     override suspend fun login(
         email: String,
         password: String,
-    ): Either<DataError.Network, User> {
+    ): Either<AuthError.Login, User> {
         val user = User("1", email, "Test User", true)
         return Either.Right(user)
     }
@@ -208,7 +222,7 @@ private class FakeAuthRepository : AuthRepository {
         email: String,
         displayName: String,
         password: String,
-    ): Either<DataError.Network, User> {
+    ): Either<AuthError.Register, User> {
         registerCallCount++
         val completable = registerCompletable
         return if (completable != null) {
@@ -218,5 +232,5 @@ private class FakeAuthRepository : AuthRepository {
         }
     }
 
-    override suspend fun logout(): Either<DataError.Network, Unit> = Either.Right(Unit)
+    override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
 }

@@ -10,11 +10,12 @@ import io.github.neronguyen.chat.core.database.model.ChatRoomWithDetails
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
-import io.github.neronguyen.chat.core.network.model.ChatMessageDto
-import io.github.neronguyen.chat.core.network.model.ChatParticipantDto
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
-import io.github.neronguyen.chat.core.network.model.websocket.WsClientMessage
-import io.github.neronguyen.chat.core.network.model.websocket.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageDto
+import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
+import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
+import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -61,8 +62,8 @@ class ChatRealtimeSyncManagerTest {
 
         override suspend fun sendMessage(
             message: WsClientMessage
-        ): Either<DataError.Realtime, Unit> {
-            return Either.Right(Unit)
+        ): Boolean {
+            return true
         }
     }
 
@@ -100,6 +101,13 @@ class ChatRealtimeSyncManagerTest {
             emptyList()
 
         override suspend fun deleteCrossRefs(crossRefs: List<ChatRoomParticipantCrossRef>) {}
+        override suspend fun deleteRoom(roomId: String) {}
+        override suspend fun deleteCrossRefsForRoom(roomId: String) {}
+        override suspend fun deleteMessagesForRoom(roomId: String) {}
+        override suspend fun clearRooms() {}
+        override suspend fun clearMessages() {}
+        override suspend fun clearParticipants() {}
+        override suspend fun clearCrossRefs() {}
 
         override suspend fun upsertRoom(room: ChatRoomEntity) {}
         override suspend fun upsertRooms(rooms: List<ChatRoomEntity>) {}
@@ -200,7 +208,6 @@ class ChatRealtimeSyncManagerTest {
 
         val messageDto = ChatMessageDto(
             id = "server-456",
-            tempId = "temp-123",
             roomId = "room-1",
             senderId = "user-1",
             content = "Hello",
@@ -341,4 +348,32 @@ class ChatRealtimeSyncManagerTest {
             testScheduler.advanceUntilIdle()
             assertEquals(initialCount + 1, fakeDao.markSendingFailedCount)
         }
+
+    @Test
+    fun `WsServerEvent Error with messageId marks message delivery status as FAILED`() = runTest {
+        val externalScope = TestScope(testDispatcher)
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val fakeDao = FakeChatDao()
+
+        val syncManager = ChatRealtimeSyncManager(
+            realtimeDataSource = fakeDataSource,
+            chatDao = fakeDao,
+            appScope = externalScope,
+            ioDispatcher = testDispatcher
+        )
+
+        syncManager.initialize()
+        testScheduler.advanceUntilIdle()
+
+        fakeDataSource.incomingEventsFlow.emit(
+            WsServerEvent.Error(
+                error = ChatServerError.DuplicateMessageId,
+                message = "Message already processed",
+                messageId = "msg-123"
+            )
+        )
+
+        testScheduler.advanceUntilIdle()
+        assertEquals(MessageDeliveryStatus.FAILED, fakeDao.updatedStatuses["msg-123"])
+    }
 }

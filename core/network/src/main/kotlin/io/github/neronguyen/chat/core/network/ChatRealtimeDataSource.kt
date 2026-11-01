@@ -1,10 +1,8 @@
 package io.github.neronguyen.chat.core.network
 
-import arrow.core.Either
-import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
-import io.github.neronguyen.chat.core.network.model.websocket.WsClientMessage
-import io.github.neronguyen.chat.core.network.model.websocket.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
+import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -17,5 +15,5 @@ interface ChatRealtimeDataSource {
 
     suspend fun sendMessage(
         message: WsClientMessage
-    ): Either<DataError.Realtime, Unit>
+    ): Boolean
 }

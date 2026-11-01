@@ -1,6 +1,5 @@
 package io.github.neronguyen.chat.core.network.interceptor
 
-import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import jakarta.inject.Inject
 import jakarta.inject.Singleton
 import kotlinx.coroutines.runBlocking
@@ -11,7 +10,7 @@ import okhttp3.Route
 
 @Singleton
 internal class TokenAuthenticator @Inject constructor(
-    private val tokenDataSource: TokenDataSource,
+    private val tokenProvider: TokenProvider,
     private val tokenRefresherProvider: dagger.Lazy<TokenRefresher>
 ) : Authenticator {
 
@@ -25,7 +24,7 @@ internal class TokenAuthenticator @Inject constructor(
             ?.trim()
 
         val currentToken = runBlocking {
-            tokenDataSource.getAccessToken()
+            tokenProvider.getAccessToken()
         }
 
         // Token was already refreshed by another concurrent request
@@ -34,7 +33,7 @@ internal class TokenAuthenticator @Inject constructor(
         } else {
             runBlocking {
                 tokenRefresherProvider.get().refresh(staleToken = failedToken.orEmpty())
-            }.getOrNull()
+            }
         } ?: return null
 
         return response.request

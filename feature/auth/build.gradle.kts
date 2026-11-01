@@ -44,6 +44,9 @@ dependencies {
     // Arrow
     implementation(libs.arrow.core)
 
+    // Contract Validation
+    implementation(libs.validation.auth)
+
     // Compose
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.material3)

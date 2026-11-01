@@ -1,10 +1,5 @@
 package io.github.neronguyen.chat.core.network.interceptor
 
-import io.github.neronguyen.chat.core.datastore.TokenDataSource
-import io.github.neronguyen.chat.core.model.AuthState
-import io.github.neronguyen.chat.core.model.User
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
 import okhttp3.Interceptor
 import okhttp3.MediaType.Companion.toMediaType
@@ -19,25 +14,9 @@ import kotlin.test.assertNull
 
 class AuthInterceptorTest {
 
-    private class FakeTokenDataSource : TokenDataSource {
+    private class FakeTokenProvider : TokenProvider {
         var savedAccessToken: String? = null
-
-        override val authState: Flow<AuthState> = emptyFlow()
-
-        override suspend fun getRefreshToken(): String? = null
         override suspend fun getAccessToken(): String? = savedAccessToken
-
-        override suspend fun saveAuthData(user: User, accessToken: String, refreshToken: String) {
-            savedAccessToken = accessToken
-        }
-
-        override suspend fun saveTokens(accessToken: String, refreshToken: String) {
-            savedAccessToken = accessToken
-        }
-
-        override suspend fun clearAuthData() {
-            savedAccessToken = null
-        }
     }
 
     private fun createChain(
@@ -92,7 +71,7 @@ class AuthInterceptorTest {
 
     @Test
     fun normalEndpoint_attachesBearerTokenHeader() = runTest {
-        val fakeTokenDS = FakeTokenDataSource().apply { savedAccessToken = "valid_access_token" }
+        val fakeTokenDS = FakeTokenProvider().apply { savedAccessToken = "valid_access_token" }
         val interceptor = AuthInterceptor(fakeTokenDS)
 
         val request = Request.Builder().url("https://example.com/api/chat").build()
@@ -113,7 +92,7 @@ class AuthInterceptorTest {
 
     @Test
     fun normalEndpoint_whenNoToken_doesNotAttachHeader() = runTest {
-        val fakeTokenDS = FakeTokenDataSource().apply { savedAccessToken = null }
+        val fakeTokenDS = FakeTokenProvider().apply { savedAccessToken = null }
         val interceptor = AuthInterceptor(fakeTokenDS)
 
         val request = Request.Builder().url("https://example.com/api/chat").build()
@@ -134,7 +113,7 @@ class AuthInterceptorTest {
 
     @Test
     fun normalEndpoint_whenHeaderAlreadyPresent_doesNotOverwrite() = runTest {
-        val fakeTokenDS = FakeTokenDataSource().apply { savedAccessToken = "new_token" }
+        val fakeTokenDS = FakeTokenProvider().apply { savedAccessToken = "new_token" }
         val interceptor = AuthInterceptor(fakeTokenDS)
 
         val request = Request.Builder()

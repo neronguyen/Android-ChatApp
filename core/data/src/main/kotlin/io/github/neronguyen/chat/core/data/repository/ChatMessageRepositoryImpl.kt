@@ -3,6 +3,8 @@ package io.github.neronguyen.chat.core.data.repository
 import arrow.core.Either
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
+import io.github.neronguyen.chat.core.data.mapper.toDataError
+import io.github.neronguyen.chat.core.data.mapper.toDeleteMessageError
 import io.github.neronguyen.chat.core.data.mapper.toDomain
 import io.github.neronguyen.chat.core.data.mapper.toEntity
 import io.github.neronguyen.chat.core.database.dao.ChatDao
@@ -11,15 +13,17 @@ import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
+import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
-import io.github.neronguyen.chat.core.network.model.websocket.WsClientMessage
+import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
@@ -43,15 +47,17 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         }.flowOn(defaultDispatcher)
     }
 
-    override suspend fun syncRecentMessages(roomId: String): Either<DataError.Network, Boolean> {
-        return networkDataSource.getMessagesForChatRoom(roomId, before = null).map { slice ->
-            val remoteEntities = slice.messages.map { it.toEntity(MessageDeliveryStatus.SENT) }
-            chatDao.syncRecentMessagesTransaction(roomId, remoteEntities)
-            slice.hasMore
-        }
+    override suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean> {
+        return networkDataSource.getMessagesForChatRoom(roomId, before = null)
+            .mapLeft { it.toDataError() }
+            .map { slice ->
+                val remoteEntities = slice.messages.map { it.toEntity(MessageDeliveryStatus.SENT) }
+                chatDao.syncRecentMessagesTransaction(roomId, remoteEntities)
+                slice.hasMore
+            }
     }
 
-    override suspend fun loadOlderMessages(roomId: String): Either<DataError.Network, Boolean> {
+    override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> {
         val oldestTimestamp = chatDao.getOldestSentMessageTimestamp(roomId)
             ?: return syncRecentMessages(roomId)
 
@@ -60,7 +66,8 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         return networkDataSource.getMessagesForChatRoom(
             roomId = roomId,
             before = before
-        ).map { slice ->
+        ).mapLeft { it.toDataError() }
+        .map { slice ->
             if (slice.messages.isNotEmpty()) {
                 chatDao.upsertMessages(slice.messages.map { it.toEntity(MessageDeliveryStatus.SENT) })
             }
@@ -72,10 +79,10 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
     @OptIn(ExperimentalUuidApi::class)
     override suspend fun sendMessage(
         roomId: String,
-        message: String
-    ): Either<DataError, Unit> {
+        message: String,
+    ) {
         val auth = tokenDataSource.authState.firstOrNull() as? AuthState.Authenticated
-            ?: return Either.Left(DataError.Local.Unauthorized)
+            ?: return
 
         val messageId = Uuid.generateV7().toString()
         val now = System.currentTimeMillis()
@@ -86,19 +93,45 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
             senderId = auth.user.id,
             content = message,
             timestamp = now,
-            deliveryStatus = MessageDeliveryStatus.SENDING
+            deliveryStatus = MessageDeliveryStatus.SENDING,
         )
 
         chatDao.insertSendingMessage(sendingEntity)
 
-        return realtimeDataSource.sendMessage(
+        val enqueued = realtimeDataSource.sendMessage(
             WsClientMessage.NewMessage(
                 roomId = roomId,
                 content = message,
-                messageId = messageId
+                messageId = messageId,
             )
-        ).onLeft {
+        )
+        if (!enqueued) {
             chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
         }
+    }
+
+    override suspend fun retryMessage(messageId: String) {
+        val entity = chatDao.getMessageById(messageId) ?: return
+
+        chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.SENDING)
+
+        val enqueued = realtimeDataSource.sendMessage(
+            WsClientMessage.NewMessage(
+                roomId = entity.roomId,
+                content = entity.content,
+                messageId = messageId,
+            )
+        )
+        if (!enqueued) {
+            chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
+        }
+    }
+
+    override suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit> {
+        return networkDataSource.deleteMessage(messageId)
+            .mapLeft { it.toDeleteMessageError() }
+            .map {
+                chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.DELETED)
+            }
     }
 }

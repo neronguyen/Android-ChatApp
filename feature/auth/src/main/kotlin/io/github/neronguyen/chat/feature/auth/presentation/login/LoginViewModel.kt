@@ -5,7 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.feature.auth.presentation.util.AuthValidationError
+import io.github.neronguyenvn.nerochat.contract.validation.EmailValidator
+import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,25 +38,19 @@ class LoginViewModel @Inject constructor(
     private fun login() {
         if (_uiState.value.isLoading) return
 
-        val emailText = emailState.text.toString().trim()
+        val emailText = EmailValidator.normalize(emailState.text.toString())
         val passwordText = passwordState.text.toString()
 
-        // TODO: Validate email and password with proper use cases and error handling
-        if (emailText.isBlank()) {
-            _uiState.update {
-                it.copy(
-                    validationError = AuthValidationError.EmptyEmail,
-                    dataError = null,
-                )
-            }
-            return
-        }
+        val validationError = AuthValidator.validateLogin(
+            email = emailText,
+            password = passwordText,
+        ).firstOrNull()
 
-        if (passwordText.isBlank()) {
+        if (validationError != null) {
             _uiState.update {
                 it.copy(
-                    validationError = AuthValidationError.EmptyPassword,
-                    dataError = null,
+                    validationError = validationError,
+                    authError = null,
                 )
             }
             return
@@ -65,7 +60,7 @@ class LoginViewModel @Inject constructor(
             it.copy(
                 isLoading = true,
                 validationError = null,
-                dataError = null,
+                authError = null,
             )
         }
 
@@ -74,11 +69,11 @@ class LoginViewModel @Inject constructor(
                 email = emailText,
                 password = passwordText,
             )
-                .onLeft { networkError ->
+                .onLeft { error ->
                     _uiState.update {
                         it.copy(
                             isLoading = false,
-                            dataError = networkError,
+                            authError = error,
                         )
                     }
                 }

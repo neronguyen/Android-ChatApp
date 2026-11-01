@@ -3,7 +3,10 @@
     <string name="error_no_internet">No internet connection. Please check your network.</string>
     <string name="error_timeout">Request timed out. Please try again.</string>
     <string name="error_serialization">Data parsing error.</string>
-    <string name="error_socket">Connection error. Could not send message.</string>
     <string name="error_unauthorized">Session expired or unauthorized. Please log in again.</string>
+    <string name="error_forbidden">Access denied.</string>
+    <string name="error_rate_limited">Too many requests. Please try again later.</string>
+    <string name="error_server_unavailable">Server is temporarily unavailable. Please try again later.</string>
+    <string name="error_fields_rejected">Please check the following fields: %s</string>
     <string name="error_unknown">An unknown error occurred. Please try again.</string>
 </resources>
