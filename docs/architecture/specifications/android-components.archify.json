@@ -1,0 +1,588 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Android App Components (C4 Level 3)",
+    "output": "docs/architecture/interactive/c4-android-components.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "git@github.com:neronguyen/Android-NeroChatApp.git",
+      "link_mode": "local-only",
+      "revision": "8eaad7bef26b966bc0a6556f7df61e9f365c11b7"
+    }
+  },
+  "components": [
+    {
+      "id": "app_host",
+      "type": "frontend",
+      "label": "App Host & Root Nav",
+      "sublabel": "ChatApplication · MainActivity",
+      "tag": ":app",
+      "pos": [
+        60,
+        55
+      ],
+      "size": [
+        175,
+        66
+      ],
+      "sources": [
+        {
+          "path": "app/src/main/kotlin/io/github/neronguyen/chat/ChatApplication.kt",
+          "line": 14,
+          "end_line": 34
+        },
+        {
+          "path": "app/src/main/kotlin/io/github/neronguyen/chat/MainActivity.kt",
+          "line": 22,
+          "end_line": 66
+        }
+      ]
+    },
+    {
+      "id": "feature_auth",
+      "type": "frontend",
+      "label": "Auth Feature UI",
+      "sublabel": "AuthNavGraph · Login/Register VM",
+      "tag": ":feature:auth",
+      "pos": [
+        60,
+        195
+      ],
+      "size": [
+        175,
+        66
+      ],
+      "sources": [
+        {
+          "path": "feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/login/LoginViewModel.kt",
+          "line": 17,
+          "end_line": 89
+        },
+        {
+          "path": "feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/register/RegisterViewModel.kt",
+          "line": 17,
+          "end_line": 93
+        }
+      ]
+    },
+    {
+      "id": "feature_chat",
+      "type": "frontend",
+      "label": "Chat Feature UI",
+      "sublabel": "List · Conversation · Account VM",
+      "tag": ":feature:chat",
+      "pos": [
+        60,
+        340
+      ],
+      "size": [
+        175,
+        68
+      ],
+      "sources": [
+        {
+          "path": "feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/conversation/ConversationViewModel.kt",
+          "line": 43,
+          "end_line": 220
+        },
+        {
+          "path": "feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/list/ChatListViewModel.kt",
+          "line": 31,
+          "end_line": 187
+        },
+        {
+          "path": "feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/account/AccountViewModel.kt",
+          "line": 19,
+          "end_line": 105
+        }
+      ]
+    },
+    {
+      "id": "kmp_contract",
+      "type": "cloud",
+      "label": "KMP-ChatContract",
+      "sublabel": "Validators · DTOs · WsEvents",
+      "tag": "shared-contract",
+      "pos": [
+        60,
+        510
+      ],
+      "size": [
+        175,
+        66
+      ],
+      "sources": [
+        {
+          "path": "feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/login/LoginViewModel.kt",
+          "line": 8,
+          "end_line": 10
+        },
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/mapper/ChatErrorMapper.kt",
+          "line": 1,
+          "end_line": 62
+        }
+      ]
+    },
+    {
+      "id": "auth_repo",
+      "type": "backend",
+      "label": "Auth Repository",
+      "sublabel": "AuthRepositoryImpl · TokenRefresher",
+      "tag": ":core:data",
+      "pos": [
+        390,
+        90
+      ],
+      "size": [
+        185,
+        68
+      ],
+      "sources": [
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/repository/AuthRepositoryImpl.kt",
+          "line": 25,
+          "end_line": 118
+        }
+      ]
+    },
+    {
+      "id": "chat_repos",
+      "type": "backend",
+      "label": "Chat & Message Repos",
+      "sublabel": "ChatRoomRepo · ChatMessageRepo",
+      "tag": ":core:data",
+      "pos": [
+        390,
+        290
+      ],
+      "size": [
+        185,
+        68
+      ],
+      "sources": [
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/repository/ChatRoomRepositoryImpl.kt",
+          "line": 26,
+          "end_line": 152
+        },
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/repository/ChatMessageRepositoryImpl.kt",
+          "line": 27,
+          "end_line": 136
+        }
+      ]
+    },
+    {
+      "id": "realtime_managers",
+      "type": "backend",
+      "label": "Realtime Lifecycle & Sync",
+      "sublabel": "ConnectionManager · SyncManager",
+      "tag": ":core:data",
+      "pos": [
+        390,
+        490
+      ],
+      "size": [
+        185,
+        68
+      ],
+      "sources": [
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/realtime/RealtimeConnectionManagerImpl.kt",
+          "line": 34,
+          "end_line": 131
+        },
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/realtime/ChatRealtimeSyncManager.kt",
+          "line": 22,
+          "end_line": 82
+        }
+      ]
+    },
+    {
+      "id": "token_datastore",
+      "type": "database",
+      "label": "Token DataStore",
+      "sublabel": "PreferencesTokenDataSource",
+      "tag": ":core:datastore",
+      "pos": [
+        765,
+        55
+      ],
+      "size": [
+        180,
+        66
+      ],
+      "sources": [
+        {
+          "path": "core/datastore/src/main/kotlin/io/github/neronguyen/chat/core/datastore/PreferencesTokenDataSource.kt",
+          "line": 39,
+          "end_line": 165
+        },
+        {
+          "path": "core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/di/DataModule.kt",
+          "line": 56,
+          "end_line": 61
+        }
+      ]
+    },
+    {
+      "id": "room_database",
+      "type": "database",
+      "label": "Room Database (SSOT)",
+      "sublabel": "ChatDatabase · ChatDao",
+      "tag": ":core:database",
+      "pos": [
+        765,
+        210
+      ],
+      "size": [
+        180,
+        66
+      ],
+      "sources": [
+        {
+          "path": "core/database/src/main/kotlin/io/github/neronguyen/chat/core/database/ChatDatabase.kt",
+          "line": 13,
+          "end_line": 23
+        },
+        {
+          "path": "core/database/src/main/kotlin/io/github/neronguyen/chat/core/database/dao/ChatDao.kt",
+          "line": 17,
+          "end_line": 306
+        }
+      ]
+    },
+    {
+      "id": "keystore_crypto",
+      "type": "security",
+      "label": "KeyStore Crypto",
+      "sublabel": "AES-256 GCM Hardware Key",
+      "tag": ":core:security",
+      "pos": [
+        1120,
+        55
+      ],
+      "size": [
+        175,
+        66
+      ],
+      "sources": [
+        {
+          "path": "core/security/src/main/kotlin/io/github/neronguyen/chat/core/security/AndroidKeyStoreCryptoManager.kt",
+          "line": 13,
+          "end_line": 76
+        }
+      ]
+    },
+    {
+      "id": "retrofit_network",
+      "type": "security",
+      "label": "REST & Auth Pipeline",
+      "sublabel": "Retrofit · AuthInterceptor · 401 Auth",
+      "tag": ":core:network",
+      "pos": [
+        765,
+        385
+      ],
+      "size": [
+        180,
+        68
+      ],
+      "sources": [
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/di/NetworkModule.kt",
+          "line": 72,
+          "end_line": 84
+        },
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/interceptor/TokenAuthenticator.kt",
+          "line": 11,
+          "end_line": 56
+        },
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/retrofit/RetrofitChatNetwork.kt",
+          "line": 46,
+          "end_line": 147
+        }
+      ]
+    },
+    {
+      "id": "ws_client",
+      "type": "messagebus",
+      "label": "WebSocket Client",
+      "sublabel": "ChatWebSocketClient (@RealtimeOkHttp)",
+      "tag": ":core:network",
+      "pos": [
+        765,
+        535
+      ],
+      "size": [
+        180,
+        66
+      ],
+      "sources": [
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/websocket/ChatWebSocketClient.kt",
+          "line": 35,
+          "end_line": 157
+        },
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/di/NetworkModule.kt",
+          "line": 86,
+          "end_line": 95
+        }
+      ]
+    },
+    {
+      "id": "backend_api",
+      "type": "external",
+      "label": "KMP-ChatBackend",
+      "sublabel": "Spring Boot REST & WS Server",
+      "pos": [
+        1120,
+        460
+      ],
+      "size": [
+        175,
+        68
+      ],
+      "sources": [
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/retrofit/RetrofitChatNetwork.kt",
+          "line": 23,
+          "end_line": 44
+        },
+        {
+          "path": "core/network/src/main/kotlin/io/github/neronguyen/chat/core/network/websocket/ChatWebSocketClient.kt",
+          "line": 71,
+          "end_line": 85
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Presentation Layer (:app, :feature:*)",
+      "wraps": [
+        "app_host",
+        "feature_auth",
+        "feature_chat"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Data & Offline-First Layer (:core:data)",
+      "wraps": [
+        "auth_repo",
+        "chat_repos",
+        "realtime_managers"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "Local Persistence & Security (:core:datastore, :core:database, :core:security)",
+      "wraps": [
+        "token_datastore",
+        "room_database",
+        "keystore_crypto"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Network & Realtime Layer (:core:network)",
+      "wraps": [
+        "retrofit_network",
+        "ws_client"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "app_to_auth_repo",
+      "from": "app_host",
+      "to": "auth_repo",
+      "label": "Observes AuthState",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "auth_ui_to_auth_repo",
+      "from": "feature_auth",
+      "to": "auth_repo",
+      "label": "Login & register",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "chat_ui_to_auth_repo",
+      "from": "feature_chat",
+      "to": "auth_repo",
+      "label": "Profile & logout",
+      "fromSide": "right",
+      "toSide": "bottom"
+    },
+    {
+      "id": "chat_ui_to_chat_repos",
+      "from": "feature_chat",
+      "to": "chat_repos",
+      "label": "Rooms, msgs & actions",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "chat_ui_to_realtime",
+      "from": "feature_chat",
+      "to": "realtime_managers",
+      "label": "Observes connectionState",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "contract_to_presentation",
+      "from": "kmp_contract",
+      "to": "feature_chat",
+      "label": "Auth & ChatValidators",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "contract_to_data",
+      "from": "kmp_contract",
+      "to": "realtime_managers",
+      "label": "DTOs, WsEvent & errors",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "auth_repo_to_datastore",
+      "from": "auth_repo",
+      "to": "token_datastore",
+      "label": "Tokens & AuthState",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "auth_repo_to_room",
+      "from": "auth_repo",
+      "to": "room_database",
+      "label": "Wipes DB on logout",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "auth_repo_to_retrofit",
+      "from": "auth_repo",
+      "to": "retrofit_network",
+      "label": "Auth REST & 401 Refresh",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "chat_repos_to_room",
+      "from": "chat_repos",
+      "to": "room_database",
+      "label": "Reactive Flows & SSOT",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "chat_repos_to_retrofit",
+      "from": "chat_repos",
+      "to": "retrofit_network",
+      "label": "Syncs rooms & history",
+      "fromSide": "right",
+      "toSide": "top"
+    },
+    {
+      "id": "chat_repos_to_ws",
+      "from": "chat_repos",
+      "to": "ws_client",
+      "label": "Sends WsClientMessage",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "realtime_to_room",
+      "from": "realtime_managers",
+      "to": "room_database",
+      "label": "Upserts WsServerEvent",
+      "fromSide": "right",
+      "toSide": "bottom"
+    },
+    {
+      "id": "realtime_to_ws",
+      "from": "realtime_managers",
+      "to": "ws_client",
+      "label": "Supervises socket",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "datastore_to_keystore",
+      "from": "token_datastore",
+      "to": "keystore_crypto",
+      "label": "AES-256 GCM",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "datastore_to_network",
+      "from": "token_datastore",
+      "to": "retrofit_network",
+      "label": "TokenProvider (Bearer JWT)",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right"
+    },
+    {
+      "id": "retrofit_to_backend",
+      "from": "retrofit_network",
+      "to": "backend_api",
+      "label": "HTTPS /api/**",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    },
+    {
+      "id": "ws_to_backend",
+      "from": "ws_client",
+      "to": "backend_api",
+      "label": "WSS /ws/chat",
+      "variant": "emphasis",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Offline-First SSOT & Optimistic UI",
+      "items": [
+        "Room (ChatDao) is the Single Source of Truth; ViewModels observe reactive SQLite Flows while syncing in the background",
+        "Outgoing messages insert immediately as SENDING in Room before dispatching WsClientMessage over WebSocket"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Lifecycle-Aware Realtime & Single-Flight Auth",
+      "items": [
+        "RealtimeConnectionManager combines ProcessLifecycleOwner and AuthState to supervise WebSocket connections with exponential backoff",
+        "AuthRepositoryImpl implements TokenRefresher with a Mutex lock so concurrent HTTP 401s trigger only one refresh request"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Hardware-Backed Token Security",
+      "items": [
+        "PreferencesTokenDataSource encrypts access and refresh tokens via AndroidKeyStore AES-256 GCM before persisting to DataStore",
+        "AuthInterceptor and TokenAuthenticator share the authenticated OkHttp pipeline across both REST and WebSocket (/ws/chat) upgrades"
+      ]
+    }
+  ]
+}
