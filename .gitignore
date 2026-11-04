@@ -36,3 +36,7 @@ google-services.json
 
 # Archify working directory
 .archify/
+
+# Archify local delivery sidecars
+*.delivery.json
+*.delivery-*.json
