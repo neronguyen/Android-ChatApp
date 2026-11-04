@@ -18,6 +18,7 @@ kotlin = "2.4.0"
 kotlinxCoroutines = "1.11.0"
 kotlinxDatetime = "0.8.0"
 kotlinxSerializationJson = "1.11.0"
+konsist = "0.18.1"
 ksp = "2.3.9"
 okhttp = "5.4.0"
 retrofit = "3.0.0"
@@ -88,6 +89,7 @@ room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "
 androidx-work-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "androidxWork" }
 
 # Local Unit Testing
+konsist = { group = "com.lemonappdev", name = "konsist", version.ref = "konsist" }
 kotlin-test-junit = { group = "org.jetbrains.kotlin", name = "kotlin-test-junit", version.ref = "kotlin" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutines" }
 turbine = { group = "app.cash.turbine", name = "turbine", version.ref = "turbine" }

@@ -32,7 +32,7 @@ import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalAtomicApi::class)
 @Singleton
-class RealtimeConnectionManagerImpl @Inject constructor(
+internal class RealtimeConnectionManagerImpl @Inject constructor(
     private val realtimeDataSource: ChatRealtimeDataSource,
     private val tokenDataSource: TokenDataSource,
     @AppScope private val appScope: CoroutineScope,

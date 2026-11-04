@@ -36,6 +36,11 @@ dependencies {
     implementation(projects.core.datastore)
     implementation(projects.core.database)
 
+    // Contracts
+    implementation(libs.contract.common)
+    implementation(libs.contract.auth)
+    implementation(libs.contract.chat)
+
     // Arrow
     implementation(libs.arrow.core)
 

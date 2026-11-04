@@ -25,7 +25,7 @@ import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
 import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomType as ContractChatRoomType
 import kotlin.time.Instant
 
-fun ChatParticipantDto.toDomain(): ChatParticipant {
+internal fun ChatParticipantDto.toDomain(): ChatParticipant {
     return ChatParticipant(
         userId = userId,
         email = email,
@@ -34,7 +34,7 @@ fun ChatParticipantDto.toDomain(): ChatParticipant {
     )
 }
 
-fun ChatParticipantDto.toEntity(): ChatParticipantEntity {
+internal fun ChatParticipantDto.toEntity(): ChatParticipantEntity {
     return ChatParticipantEntity(
         userId = userId,
         email = email,
@@ -43,7 +43,7 @@ fun ChatParticipantDto.toEntity(): ChatParticipantEntity {
     )
 }
 
-fun ChatParticipantEntity.toDomain(): ChatParticipant {
+internal fun ChatParticipantEntity.toDomain(): ChatParticipant {
     return ChatParticipant(
         userId = userId,
         email = email,
@@ -52,7 +52,7 @@ fun ChatParticipantEntity.toDomain(): ChatParticipant {
     )
 }
 
-fun ChatMessageDto.toDomain(
+internal fun ChatMessageDto.toDomain(
     status: MessageDeliveryStatus = MessageDeliveryStatus.SENT
 ): ChatMessage {
     return ChatMessage(
@@ -65,7 +65,7 @@ fun ChatMessageDto.toDomain(
     )
 }
 
-fun ChatMessageDto.toEntity(
+internal fun ChatMessageDto.toEntity(
     status: MessageDeliveryStatus = MessageDeliveryStatus.SENT
 ): ChatMessageEntity {
     return ChatMessageEntity(
@@ -78,7 +78,7 @@ fun ChatMessageDto.toEntity(
     )
 }
 
-fun ChatMessageEntity.toDomain(): ChatMessage {
+internal fun ChatMessageEntity.toDomain(): ChatMessage {
     return ChatMessage(
         id = id,
         roomId = roomId,
@@ -89,7 +89,7 @@ fun ChatMessageEntity.toDomain(): ChatMessage {
     )
 }
 
-fun ChatMessage.toEntity(): ChatMessageEntity {
+internal fun ChatMessage.toEntity(): ChatMessageEntity {
     return ChatMessageEntity(
         id = id,
         roomId = roomId,
@@ -100,14 +100,14 @@ fun ChatMessage.toEntity(): ChatMessageEntity {
     )
 }
 
-fun ContractChatRoomType.toDomain(): ChatRoomType = when (this) {
+internal fun ContractChatRoomType.toDomain(): ChatRoomType = when (this) {
     ContractChatRoomType.DIRECT -> ChatRoomType.DIRECT
     ContractChatRoomType.GROUP -> ChatRoomType.GROUP
 }
 
-fun ContractChatRoomType.toEntity(): ChatRoomType = toDomain()
+internal fun ContractChatRoomType.toEntity(): ChatRoomType = toDomain()
 
-fun ChatRoomDto.toDomain(): ChatRoom {
+internal fun ChatRoomDto.toDomain(): ChatRoom {
     return ChatRoom(
         id = id,
         type = type.toDomain(),
@@ -119,7 +119,7 @@ fun ChatRoomDto.toDomain(): ChatRoom {
     )
 }
 
-fun ChatRoomDto.toEntity(): ChatRoomEntity {
+internal fun ChatRoomDto.toEntity(): ChatRoomEntity {
     return ChatRoomEntity(
         id = id,
         type = type.toEntity(),
@@ -130,7 +130,7 @@ fun ChatRoomDto.toEntity(): ChatRoomEntity {
     )
 }
 
-fun ChatRoomWithDetails.toDomain(): ChatRoom {
+internal fun ChatRoomWithDetails.toDomain(): ChatRoom {
     val creatorParticipant = creator?.toDomain()
         ?: ChatParticipant(userId = room.creatorId, email = "", displayName = "")
     return ChatRoom(
@@ -144,7 +144,7 @@ fun ChatRoomWithDetails.toDomain(): ChatRoom {
     )
 }
 
-fun SocketConnectionState.toDomain(): RealtimeConnectionState = when (this) {
+internal fun SocketConnectionState.toDomain(): RealtimeConnectionState = when (this) {
     is Connecting -> CONNECTING
     is Connected -> CONNECTED
     is Disconnected -> DISCONNECTED

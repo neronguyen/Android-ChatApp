@@ -17,4 +17,7 @@ fun ChatValidationError.asUiText(): String = when (this) {
     ChatValidationError.InvalidGroupParticipantId -> stringResource(R.string.new_chat_error_no_group_participants)
     ChatValidationError.EmptyParticipantIds -> stringResource(R.string.new_chat_error_empty_participant_ids)
     ChatValidationError.InvalidParticipantId -> stringResource(R.string.new_chat_error_invalid_participant_id)
+    ChatValidationError.EmptyMessageContent -> stringResource(R.string.chat_error_empty_message_content)
+    ChatValidationError.InvalidMessageId -> stringResource(R.string.chat_error_invalid_message_id)
+    ChatValidationError.InvalidRoomId -> stringResource(R.string.chat_error_invalid_room_id)
 }

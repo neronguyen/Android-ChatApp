@@ -55,6 +55,9 @@
     <string name="new_chat_error_no_group_participants">Select at least two participants to create a group.</string>
     <string name="new_chat_error_empty_participant_ids">Participant list must not be empty.</string>
     <string name="new_chat_error_invalid_participant_id">Participant ID must be a valid UUID.</string>
+    <string name="chat_error_empty_message_content">Message content cannot be empty.</string>
+    <string name="chat_error_invalid_message_id">Message ID must be a valid UUIDv7.</string>
+    <string name="chat_error_invalid_room_id">Room ID must be a valid UUID.</string>
     <string name="conversation_group_members_count">%1$d members</string>
     <string name="conversation_direct_chat_subtitle">Direct chat</string>
     <string name="conversation_connecting_banner">Connecting…</string>

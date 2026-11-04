@@ -51,9 +51,9 @@ dependencies {
     implementation(libs.arrow.core)
 
     // Contract
-    api(libs.contract.common)
-    api(libs.contract.auth)
-    api(libs.contract.chat)
+    implementation(libs.contract.common)
+    implementation(libs.contract.auth)
+    implementation(libs.contract.chat)
 
     // Coil
     implementation(libs.coil.kt.network.okhttp)

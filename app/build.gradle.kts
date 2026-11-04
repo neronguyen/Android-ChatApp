@@ -96,6 +96,7 @@ dependencies {
     implementation(libs.androidx.work.ktx)
 
     // Local Unit Testing
+    testImplementation(libs.konsist)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)
