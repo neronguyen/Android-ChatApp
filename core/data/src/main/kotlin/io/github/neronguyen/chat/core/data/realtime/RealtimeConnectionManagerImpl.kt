@@ -11,6 +11,7 @@ import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
+import io.github.neronguyen.chat.core.network.interceptor.TokenRefresher
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -35,6 +36,7 @@ import kotlin.time.Duration.Companion.milliseconds
 internal class RealtimeConnectionManagerImpl @Inject constructor(
     private val realtimeDataSource: ChatRealtimeDataSource,
     private val tokenDataSource: TokenDataSource,
+    private val tokenRefresher: dagger.Lazy<TokenRefresher>,
     @AppScope private val appScope: CoroutineScope,
     @Dispatcher(ChatDispatchers.IO) private val ioDispatcher: CoroutineDispatcher
 ) : RealtimeConnectionManager, DefaultLifecycleObserver {
@@ -100,6 +102,27 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
             when (state) {
                 is SocketConnectionState.Connected -> {
                     retryAttempt = 0
+                }
+
+                is SocketConnectionState.AuthenticationFailed -> {
+                    val staleToken = tokenDataSource.getAccessToken().orEmpty()
+                    val refreshedToken = try {
+                        tokenRefresher.get().refresh(staleToken)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        null
+                    }
+
+                    if (refreshedToken != null) {
+                        if (retryAttempt > 0) {
+                            delay(calculateBackoffDelay(retryAttempt).milliseconds)
+                        }
+                        retryAttempt++
+                        realtimeDataSource.connect()
+                    } else {
+                        tokenDataSource.clearAuthData()
+                    }
                 }
 
                 is SocketConnectionState.Failed,

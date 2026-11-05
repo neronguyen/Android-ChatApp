@@ -15,6 +15,7 @@ import io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTING
 import io.github.neronguyen.chat.core.model.RealtimeConnectionState.DISCONNECTED
 import io.github.neronguyen.chat.core.model.RealtimeConnectionState.FAILED
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.AuthenticationFailed
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connected
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connecting
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Disconnected
@@ -148,6 +149,7 @@ internal fun SocketConnectionState.toDomain(): RealtimeConnectionState = when (t
     is Connecting -> CONNECTING
     is Connected -> CONNECTED
     is Disconnected -> DISCONNECTED
+    is AuthenticationFailed -> FAILED
     is Failed -> FAILED
 }
 

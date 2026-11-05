@@ -2,6 +2,7 @@ package io.github.neronguyen.chat.core.network.websocket
 
 import io.github.neronguyen.chat.core.network.BuildConfig
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
+import io.github.neronguyen.chat.core.network.di.BaseUrl
 import io.github.neronguyen.chat.core.network.di.RealtimeOkHttp
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connected
@@ -35,6 +36,7 @@ import kotlin.coroutines.cancellation.CancellationException
 @Singleton
 internal class ChatWebSocketClient @Inject constructor(
     @RealtimeOkHttp private val okHttpClient: OkHttpClient,
+    @BaseUrl private val baseUrl: String,
 ) : ChatRealtimeDataSource {
 
     private val json = Json {
@@ -68,7 +70,7 @@ internal class ChatWebSocketClient @Inject constructor(
 
         _connectionState.value = Connecting
 
-        val rawBaseUrl = BuildConfig.BASE_URL.ifEmpty { "http://10.0.2.2:8080/" }
+        val rawBaseUrl = baseUrl.ifEmpty { "http://10.0.2.2:8080/" }
         val wsBaseUrl = when {
             rawBaseUrl.startsWith("https://") -> rawBaseUrl.replaceFirst("https://", "wss://")
             rawBaseUrl.startsWith("http://") -> rawBaseUrl.replaceFirst("http://", "ws://")
@@ -137,7 +139,14 @@ internal class ChatWebSocketClient @Inject constructor(
                     newValue = null
                 )
             ) {
-                _connectionState.value = Failed(t)
+                if (response?.code == 401) {
+                    _connectionState.value = SocketConnectionState.AuthenticationFailed(
+                        code = 401,
+                        reason = "HTTP 401 Unauthorized"
+                    )
+                } else {
+                    _connectionState.value = Failed(t)
+                }
             }
         }
 
@@ -147,12 +156,20 @@ internal class ChatWebSocketClient @Inject constructor(
                     newValue = null
                 )
             ) {
-                _connectionState.value = Disconnected
+                if (code == POLICY_VIOLATION_STATUS) {
+                    _connectionState.value = SocketConnectionState.AuthenticationFailed(
+                        code = code,
+                        reason = reason
+                    )
+                } else {
+                    _connectionState.value = Disconnected
+                }
             }
         }
     }
 
     companion object {
         private const val NORMAL_CLOSURE_STATUS = 1000
+        private const val POLICY_VIOLATION_STATUS = 1008
     }
 }

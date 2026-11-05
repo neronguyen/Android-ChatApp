@@ -4,6 +4,7 @@ import arrow.core.Either
 import io.github.neronguyen.chat.core.network.AuthNetworkDataSource
 import io.github.neronguyen.chat.core.network.BuildConfig
 import io.github.neronguyen.chat.core.network.di.BaseOkHttp
+import io.github.neronguyen.chat.core.network.di.BaseUrl
 import io.github.neronguyen.chat.core.network.di.RefreshOkHttp
 import io.github.neronguyen.chat.core.network.util.NetworkError
 import io.github.neronguyen.chat.core.network.util.safeCall
@@ -52,6 +53,7 @@ internal class RetrofitAuthNetwork @Inject constructor(
     private val networkJson: Json,
     @BaseOkHttp baseClient: dagger.Lazy<OkHttpClient>,
     @RefreshOkHttp refreshClient: dagger.Lazy<OkHttpClient>,
+    @BaseUrl private val baseUrl: String,
 ) : AuthNetworkDataSource {
 
     private val publicApi by lazy { createApi(baseClient.get()) }
@@ -72,7 +74,7 @@ internal class RetrofitAuthNetwork @Inject constructor(
     private fun createApi(client: OkHttpClient): RetrofitAuthNetworkApi {
         val contentType = "application/json".toMediaType()
         return Retrofit.Builder()
-            .baseUrl(BuildConfig.BASE_URL)
+            .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(networkJson.asConverterFactory(contentType))
             .build()

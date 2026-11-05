@@ -4,6 +4,7 @@ import arrow.core.Either
 import io.github.neronguyen.chat.core.network.BuildConfig
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.di.AuthenticatedOkHttp
+import io.github.neronguyen.chat.core.network.di.BaseUrl
 import io.github.neronguyen.chat.core.network.util.NetworkError
 import io.github.neronguyen.chat.core.network.util.safeCall
 import io.github.neronguyen.chat.core.network.util.safeCallCommon
@@ -81,13 +82,14 @@ private interface RetrofitChatNetworkApi {
 @Singleton
 internal class RetrofitChatNetwork @Inject constructor(
     private val networkJson: Json,
-    @AuthenticatedOkHttp okHttpClient: dagger.Lazy<OkHttpClient>
+    @AuthenticatedOkHttp okHttpClient: dagger.Lazy<OkHttpClient>,
+    @BaseUrl private val baseUrl: String,
 ) : ChatNetworkDataSource {
 
     private val networkApi: RetrofitChatNetworkApi by lazy {
         val contentType = "application/json".toMediaType()
         Retrofit.Builder()
-            .baseUrl(BuildConfig.BASE_URL)
+            .baseUrl(baseUrl)
             .callFactory { okHttpClient.get().newCall(it) }
             .addConverterFactory(networkJson.asConverterFactory(contentType))
             .build()

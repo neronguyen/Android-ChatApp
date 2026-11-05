@@ -122,5 +122,10 @@ internal abstract class NetworkModule {
         fun provideNetworkJson(): Json = Json {
             ignoreUnknownKeys = true
         }
+
+        @Provides
+        @Singleton
+        @BaseUrl
+        fun provideBaseUrl(): String = BuildConfig.BASE_URL
     }
 }

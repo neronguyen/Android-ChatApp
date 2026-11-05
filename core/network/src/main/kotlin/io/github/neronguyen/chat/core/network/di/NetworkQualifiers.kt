@@ -17,3 +17,7 @@ annotation class RealtimeOkHttp
 @Qualifier
 @Retention(AnnotationRetention.BINARY)
 annotation class RefreshOkHttp
+
+@Qualifier
+@Retention(AnnotationRetention.BINARY)
+annotation class BaseUrl

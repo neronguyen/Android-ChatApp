@@ -7,6 +7,7 @@ import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
+import io.github.neronguyen.chat.core.network.interceptor.TokenRefresher
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
@@ -71,6 +72,16 @@ class RealtimeConnectionManagerTest {
         }
     }
 
+    private class FakeTokenRefresher : TokenRefresher {
+        var refreshCalledCount = 0
+        var tokenToReturn: String? = "refreshed_access_token"
+
+        override suspend fun refresh(staleToken: String): String? {
+            refreshCalledCount++
+            return tokenToReturn
+        }
+    }
+
     private class FakeTokenDataSource(
         initialAuthState: AuthState = AuthState.Authenticated(
             user = User(
@@ -82,12 +93,18 @@ class RealtimeConnectionManagerTest {
             accessToken = "access_token"
         )
     ) : TokenDataSource {
-        override val authState: Flow<AuthState> = flowOf(initialAuthState)
+        val authStateFlow = MutableStateFlow(initialAuthState)
+        var clearAuthDataCalledCount = 0
+
+        override val authState: Flow<AuthState> = authStateFlow
         override suspend fun getRefreshToken(): String? = "refresh_token"
         override suspend fun getAccessToken(): String? = "access_token"
         override suspend fun saveAuthData(user: User, accessToken: String, refreshToken: String) {}
         override suspend fun saveTokens(accessToken: String, refreshToken: String) {}
-        override suspend fun clearAuthData() {}
+        override suspend fun clearAuthData() {
+            clearAuthDataCalledCount++
+            authStateFlow.value = AuthState.Unauthenticated
+        }
     }
 
     private class FakeLifecycleOwner : LifecycleOwner {
@@ -99,10 +116,12 @@ class RealtimeConnectionManagerTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
+        val fakeRefresher = FakeTokenRefresher()
 
         val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
@@ -119,10 +138,12 @@ class RealtimeConnectionManagerTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
+        val fakeRefresher = FakeTokenRefresher()
 
         val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
@@ -142,14 +163,77 @@ class RealtimeConnectionManagerTest {
     }
 
     @Test
-    fun `onStop disconnects realtime data source`() = runTest {
+    fun `onStart intercepts AuthenticationFailed, calls TokenRefresher, and reconnects`() = runTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
+        val fakeRefresher = FakeTokenRefresher()
 
         val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
+            appScope = externalScope,
+            ioDispatcher = testDispatcher
+        )
+
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, fakeDataSource.connectCalledCount)
+
+        // Simulate 1008 Authentication failure from WebSocket
+        fakeDataSource.connectionStateFlow.value =
+            SocketConnectionState.AuthenticationFailed(code = 1008, reason = "Policy Violation")
+
+        testScheduler.advanceUntilIdle()
+        // Verify TokenRefresher was invoked with stale token
+        assertEquals(1, fakeRefresher.refreshCalledCount)
+        // Should have re-connected with refreshed token
+        assertEquals(2, fakeDataSource.connectCalledCount)
+    }
+
+    @Test
+    fun `onStart clears auth data when TokenRefresher returns null on AuthenticationFailed`() = runTest {
+        val externalScope = TestScope(testDispatcher)
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val fakeToken = FakeTokenDataSource()
+        val fakeRefresher = FakeTokenRefresher().apply { tokenToReturn = null }
+
+        val manager = RealtimeConnectionManagerImpl(
+            realtimeDataSource = fakeDataSource,
+            tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
+            appScope = externalScope,
+            ioDispatcher = testDispatcher
+        )
+
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, fakeDataSource.connectCalledCount)
+
+        // Simulate 1008 Authentication failure from WebSocket
+        fakeDataSource.connectionStateFlow.value =
+            SocketConnectionState.AuthenticationFailed(code = 1008, reason = "Policy Violation")
+
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, fakeRefresher.refreshCalledCount)
+        assertEquals(1, fakeToken.clearAuthDataCalledCount)
+        assertEquals(1, fakeDataSource.disconnectCalledCount)
+    }
+
+    @Test
+    fun `onStop disconnects realtime data source`() = runTest {
+        val externalScope = TestScope(testDispatcher)
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val fakeToken = FakeTokenDataSource()
+        val fakeRefresher = FakeTokenRefresher()
+
+        val manager = RealtimeConnectionManagerImpl(
+            realtimeDataSource = fakeDataSource,
+            tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
@@ -167,10 +251,12 @@ class RealtimeConnectionManagerTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource(initialAuthState = AuthState.Unauthenticated)
+        val fakeRefresher = FakeTokenRefresher()
 
         val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
@@ -188,10 +274,12 @@ class RealtimeConnectionManagerTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
+        val fakeRefresher = FakeTokenRefresher()
 
         val manager = RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
+            tokenRefresher = { fakeRefresher },
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
@@ -210,6 +298,12 @@ class RealtimeConnectionManagerTest {
         fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
         assertEquals(
             io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTED,
+            manager.connectionState.first()
+        )
+
+        fakeDataSource.connectionStateFlow.value = SocketConnectionState.AuthenticationFailed()
+        assertEquals(
+            io.github.neronguyen.chat.core.model.RealtimeConnectionState.FAILED,
             manager.connectionState.first()
         )
 
