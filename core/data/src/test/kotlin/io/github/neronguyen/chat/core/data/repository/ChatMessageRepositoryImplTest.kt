@@ -333,6 +333,39 @@ class ChatMessageRepositoryImplTest {
     }
 
     @Test
+    fun `syncRecentMessages maps soft-deleted remote message with deletedAt to DELETED delivery status`() = runTest {
+        val fakeDao = FakeChatDao()
+        val fakeRealtime = FakeChatRealtimeDataSource()
+        val deletedDto = ChatMessageDto(
+            id = "m-deleted",
+            roomId = "room1",
+            senderId = "u1",
+            content = "",
+            createdAt = Instant.fromEpochMilliseconds(1000L),
+            deletedAt = Instant.fromEpochMilliseconds(1050L)
+        )
+        val fakeNetwork = FakeChatNetworkDataSource().apply {
+            messagesToReturn = ChatMessageSliceDto(messages = listOf(deletedDto), hasMore = false)
+        }
+        val fakeToken = FakeTokenDataSource()
+
+        val repository = createRepository(
+            chatDao = fakeDao,
+            realtimeDataSource = fakeRealtime,
+            networkDataSource = fakeNetwork,
+            tokenDataSource = fakeToken
+        )
+
+        val result = repository.syncRecentMessages("room1")
+
+        assertTrue(result.isRight())
+        assertEquals(1, fakeDao.insertedMessages.size)
+        val synced = fakeDao.insertedMessages.first()
+        assertEquals("m-deleted", synced.id)
+        assertEquals(MessageDeliveryStatus.DELETED, synced.deliveryStatus)
+    }
+
+    @Test
     fun `syncRecentMessages clears sent messages and updates room summary when remote is empty`() =
         runTest {
             val fakeDao = FakeChatDao().apply {

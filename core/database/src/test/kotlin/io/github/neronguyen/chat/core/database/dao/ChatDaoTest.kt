@@ -297,6 +297,29 @@ class ChatDaoTest {
     }
 
     @Test
+    fun syncRecentMessagesTransaction_reconcilesOfflineDeleteTombstone_fromSentToDeleted() = runTest {
+        // Contract SSOT: Backend returns soft-deleted tombstones (deletedAt != null -> DELETED)
+        createRoom("room-1")
+        val m1 = createMessage("m1", timestamp = 100L, deliveryStatus = MessageDeliveryStatus.SENT)
+        val m2 = createMessage("m2", timestamp = 200L, deliveryStatus = MessageDeliveryStatus.SENT)
+        val m3 = createMessage("m3", timestamp = 300L, deliveryStatus = MessageDeliveryStatus.SENT)
+        chatDao.upsertMessages(listOf(m1, m2, m3))
+
+        // Remote page delivers m2 as a soft-deleted tombstone (content redacted, status DELETED)
+        val remoteM1 = createMessage("m1", timestamp = 100L, deliveryStatus = MessageDeliveryStatus.SENT)
+        val remoteM2Tombstone = createMessage("m2", content = "", timestamp = 200L, deliveryStatus = MessageDeliveryStatus.DELETED)
+        val remoteM3 = createMessage("m3", timestamp = 300L, deliveryStatus = MessageDeliveryStatus.SENT)
+
+        chatDao.syncRecentMessagesTransaction("room-1", listOf(remoteM1, remoteM2Tombstone, remoteM3))
+
+        // m2 is successfully updated to DELETED tombstone; no ghost message remains!
+        val reconciled = chatDao.getMessageById("m2")
+        assertNotNull(reconciled)
+        assertEquals(MessageDeliveryStatus.DELETED, reconciled.deliveryStatus)
+        assertEquals("", reconciled.content)
+    }
+
+    @Test
     fun syncRecentMessagesTransaction_knownGap_offlineDeleteLeavesGhostSentMessage() = runTest {
         // Characterization test for Q2-A:
         // When a message is deleted server-side while the client is offline,

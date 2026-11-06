@@ -5261,8 +5261,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <path data-edge-from="sending" data-edge-to="deleted" data-edge-label="MessageDeleted event" data-edge-key="6" data-edge-id="sending-deleted" data-composition-points="470,70;470,40;1117,40;1117,70" data-composition-crossover="halo" data-composition-independent="true" d="M 470 70 L 470 52 Q 470 40 482 40 L 1105 40 Q 1117 40 1117 52 L 1117 70" class="a-security" data-animate="edge" style="--step:6" stroke-width="1.2" marker-end="url(#arrowhead-security)"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
-          <path data-graph-role="automatic-crossover-underlay" d="M 813.5 244 L 813.5 134" fill="none" stroke="var(--mask)" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="remote_inbound" data-edge-to="sent" data-edge-label="upsertIncomingOrAcked" data-edge-key="7" data-edge-id="remote-sent" data-composition-points="813.5,244;813.5,134" data-composition-crossover="halo" data-composition-independent="true" d="M 813.5 244 L 813.5 134" class="a-default" data-animate="edge" style="--step:7" stroke-width="1.2" marker-end="url(#arrowhead)"/>
+          <path data-graph-role="automatic-crossover-underlay" d="M 945.8 244 L 945.8 180 Q 945.8 168 933.8 168 L 825.5 168 Q 813.5 168 813.5 156 L 813.5 134" fill="none" stroke="var(--mask)" stroke-width="5.2" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="remote_inbound" data-edge-to="sent" data-edge-label="upsertIncomingOrAcked" data-edge-key="7" data-edge-id="remote-sent" data-composition-points="945.8,244;945.8,168;813.5,168;813.5,134" data-composition-crossover="halo" data-composition-independent="true" d="M 945.8 244 L 945.8 180 Q 945.8 168 933.8 168 L 825.5 168 Q 813.5 168 813.5 156 L 813.5 134" class="a-default" data-animate="edge" style="--step:7" stroke-width="1.2" marker-end="url(#arrowhead)"/>
+        </g>
+        <g data-graph-role="automatic-crossover" style="--step:8">
+          <path data-graph-role="automatic-crossover-underlay" d="M 971.8 244 L 971.8 180 Q 971.8 168 983.8 168 L 1105 168 Q 1117 168 1117 156 L 1117 134" fill="none" stroke="var(--mask)" stroke-width="5.8" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
+          <path data-edge-from="remote_inbound" data-edge-to="deleted" data-edge-label="sync deletedAt != null" data-edge-key="8" data-edge-id="remote-deleted" data-composition-points="971.8,244;971.8,168;1117,168;1117,134" data-composition-crossover="halo" data-composition-independent="true" d="M 971.8 244 L 971.8 180 Q 971.8 168 983.8 168 L 1105 168 Q 1117 168 1117 156 L 1117 134" class="a-emphasis" data-animate="edge" style="--step:8" stroke-width="1.8" marker-end="url(#arrowhead-emphasis)"/>
         </g>
 
 
@@ -5334,15 +5338,15 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
         <g id="node-remote_inbound" data-node-id="remote_inbound" data-node-label="Remote Inbound" tabindex="0" role="button" aria-label="Focus Remote Inbound, incoming WS / sync, Lifecycle state" aria-pressed="false" data-node-kind="external" data-node-sublabel="incoming WS / sync" data-node-tag="external" data-node-context="Lifecycle state">
           <title>Remote Inbound · incoming WS / sync · Lifecycle state · external</title>
-          <rect x="729.5" y="244" width="142" height="64" rx="8" class="c-mask"/>
-          <rect x="729.5" y="244" width="142" height="64" rx="8" class="c-external" data-animate="node" style="--step:0" stroke-width="1.5"/>
-          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(735.5 250) scale(0.6875)">
+          <rect x="887.75" y="244" width="142" height="64" rx="8" class="c-mask"/>
+          <rect x="887.75" y="244" width="142" height="64" rx="8" class="c-external" data-animate="node" style="--step:0" stroke-width="1.5"/>
+          <g aria-hidden="true" data-semantic-sigil="external" class="semantic-sigil s-external" transform="translate(893.75 250) scale(0.6875)">
             <rect x="2.5" y="5" width="8.5" height="8" rx="1.5"/>
             <path d="M8 2.5h5.5V8M13.5 2.5 7.5 8.5"/>
           </g>
-          <text data-node-label="" data-detail-anchor="" x="800.5" y="267" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">Remote Inbound</text>
-          <text data-detail="context" x="800.5" y="284" class="t-muted" font-size="9" text-anchor="middle">incoming WS / sync</text>
-          <text data-detail="fine" x="800.5" y="299" class="t-muted" font-size="8" text-anchor="middle">external</text>
+          <text data-node-label="" data-detail-anchor="" x="958.75" y="267" class="t-primary" font-size="12" font-weight="600" text-anchor="middle">Remote Inbound</text>
+          <text data-detail="context" x="958.75" y="284" class="t-muted" font-size="9" text-anchor="middle">incoming WS / sync</text>
+          <text data-detail="fine" x="958.75" y="299" class="t-muted" font-size="8" text-anchor="middle">external</text>
         </g>
 
         <!-- Transition labels -->
@@ -5375,8 +5379,12 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <text x="793.5" y="43.5" class="t-edge-security" font-size="10" text-anchor="middle">MessageDeleted event</text>
         </g>
         <g data-detail="context" data-edge-from="remote_inbound" data-edge-to="sent" data-edge-label="upsertIncomingOrAcked" data-edge-key="7" data-edge-id="remote-sent">
-          <rect x="819.5" y="181" width="138" height="16" rx="4" class="c-mask"/>
-          <text x="888.5" y="192.5" class="t-muted" font-size="10" text-anchor="middle">upsertIncomingOrAcked</text>
+          <rect x="801.8" y="198" width="138" height="16" rx="4" class="c-mask"/>
+          <text x="870.8" y="209.5" class="t-muted" font-size="10" text-anchor="middle">upsertIncomingOrAcked</text>
+        </g>
+        <g data-detail="context" data-edge-from="remote_inbound" data-edge-to="deleted" data-edge-label="sync deletedAt != null" data-edge-key="8" data-edge-id="remote-deleted">
+          <rect x="977.8" y="198" width="144" height="16" rx="4" class="c-mask"/>
+          <text x="1049.8" y="209.5" class="t-edge-emphasis" font-size="10" text-anchor="middle">sync deletedAt != null</text>
         </g>
 
         <!-- Legend -->
@@ -5596,7 +5604,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         <ul>
           <li>Optimistic Sending: Messages are assigned client UUIDv7 and inserted as SENDING before network transit</li>
           <li>Sync Gap Safety: Gap-clearing removes ONLY local SENT rows; local SENDING, FAILED, and DELETED rows survive</li>
-          <li>Server Hard Delete: Backend uses SQL DELETE; soft-deleted tombstones are never resurrected by REST pagination</li>
+          <li>Backend Soft Delete: Server persists deletedAt tombstones; REST sync returns tombstones without resurrecting content</li>
         </ul>
       </div>
 
@@ -5607,7 +5615,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </div>
         <ul>
           <li>Foreign Key Hazard (Q1): upsertIncomingOrAckedMessage throws SQLiteConstraintException if room is not yet cached locally</li>
-          <li>Ghost Messages (Q2): Server deletes while client is offline are not pruned during non-gap sync; client retains ghost SENT rows</li>
+          <li>Tombstone Reconciliation (Q2): Remote sync delivers deletedAt != null, updating local SENT to DELETED tombstone (No Ghost!)</li>
           <li>Cascade Deletion: Room deletion cascades to messages and cross-references via SQLite foreign keys</li>
         </ul>
       </div>

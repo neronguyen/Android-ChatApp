@@ -8,5 +8,6 @@ data class ChatMessage(
     val senderId: String,
     val content: String,
     val timestamp: Instant,
-    val deliveryStatus: MessageDeliveryStatus
+    val deliveryStatus: MessageDeliveryStatus,
+    val deletedAt: Instant? = null
 )

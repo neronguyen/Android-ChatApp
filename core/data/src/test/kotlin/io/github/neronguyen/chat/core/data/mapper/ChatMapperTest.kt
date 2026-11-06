@@ -65,6 +65,47 @@ class ChatMapperTest {
     }
 
     @Test
+    fun `ChatMessageDto with deletedAt toEntity defaults to DELETED deliveryStatus`() {
+        val createdInstant = Instant.parse("2025-01-01T12:00:00Z")
+        val deletedInstant = Instant.parse("2025-01-01T12:05:00Z")
+
+        val dto = ChatMessageDto(
+            id = "msg-del-1",
+            roomId = "room1",
+            senderId = "sender1",
+            content = "",
+            createdAt = createdInstant,
+            deletedAt = deletedInstant
+        )
+
+        val entity = dto.toEntity()
+
+        assertEquals("msg-del-1", entity.id)
+        assertEquals(MessageDeliveryStatus.DELETED, entity.deliveryStatus)
+    }
+
+    @Test
+    fun `ChatMessageDto with deletedAt toDomain maps to DELETED deliveryStatus and preserves deletedAt`() {
+        val createdInstant = Instant.parse("2025-01-01T12:00:00Z")
+        val deletedInstant = Instant.parse("2025-01-01T12:05:00Z")
+
+        val dto = ChatMessageDto(
+            id = "msg-del-2",
+            roomId = "room1",
+            senderId = "sender1",
+            content = "",
+            createdAt = createdInstant,
+            deletedAt = deletedInstant
+        )
+
+        val domain = dto.toDomain()
+
+        assertEquals("msg-del-2", domain.id)
+        assertEquals(MessageDeliveryStatus.DELETED, domain.deliveryStatus)
+        assertEquals(deletedInstant, domain.deletedAt)
+    }
+
+    @Test
     fun `ChatMessageEntity toDomain and ChatMessage toEntity roundtrip preserves accuracy`() {
         val timeMillis = 1735732800000L // 2025-01-01T12:00:00Z
         val entity = ChatMessageEntity(

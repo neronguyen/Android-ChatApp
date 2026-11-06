@@ -54,7 +54,7 @@ internal fun ChatParticipantEntity.toDomain(): ChatParticipant {
 }
 
 internal fun ChatMessageDto.toDomain(
-    status: MessageDeliveryStatus = MessageDeliveryStatus.SENT
+    status: MessageDeliveryStatus = if (deletedAt != null) MessageDeliveryStatus.DELETED else MessageDeliveryStatus.SENT
 ): ChatMessage {
     return ChatMessage(
         id = id,
@@ -62,12 +62,13 @@ internal fun ChatMessageDto.toDomain(
         senderId = senderId,
         content = content,
         timestamp = createdAt,
-        deliveryStatus = status
+        deliveryStatus = status,
+        deletedAt = deletedAt
     )
 }
 
 internal fun ChatMessageDto.toEntity(
-    status: MessageDeliveryStatus = MessageDeliveryStatus.SENT
+    status: MessageDeliveryStatus = if (deletedAt != null) MessageDeliveryStatus.DELETED else MessageDeliveryStatus.SENT
 ): ChatMessageEntity {
     return ChatMessageEntity(
         id = id,

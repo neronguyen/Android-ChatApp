@@ -51,7 +51,7 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         return networkDataSource.getMessagesForChatRoom(roomId, before = null)
             .mapLeft { it.toDataError() }
             .map { slice ->
-                val remoteEntities = slice.messages.map { it.toEntity(MessageDeliveryStatus.SENT) }
+                val remoteEntities = slice.messages.map { it.toEntity() }
                 chatDao.syncRecentMessagesTransaction(roomId, remoteEntities)
                 slice.hasMore
             }
@@ -69,7 +69,7 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         ).mapLeft { it.toDataError() }
         .map { slice ->
             if (slice.messages.isNotEmpty()) {
-                chatDao.upsertMessages(slice.messages.map { it.toEntity(MessageDeliveryStatus.SENT) })
+                chatDao.upsertMessages(slice.messages.map { it.toEntity() })
             }
 
             slice.hasMore
