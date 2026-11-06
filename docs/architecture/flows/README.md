@@ -11,7 +11,7 @@ Shared client-server communication flows (WebSocket lifecycle, token refresh, op
 
 ## Android-Internal Flows (Track B+)
 
-| Flow | Type | Status | Specification | Asserting Test Suite |
+| Flow | Type | Status | Specification & Artifacts | Asserting Test Suite |
 |---|---|---|---|---|
-| *Room Message State Lifecycle (`MessageDeliveryStatus`)* | `lifecycle` | `[PLANNED]` | `docs/architecture/specifications/flows/message-delivery-status.lifecycle.archify.json` (Track B) | `:core:database:testDebugUnitTest` |
-| *Room to Compose UI Data Flow* | `dataflow` | `[PLANNED]` | `docs/architecture/specifications/flows/room-to-ui.dataflow.archify.json` (Track B) | `:feature:chat:testDebugUnitTest` |
+| Room Message State Lifecycle (`MessageDeliveryStatus`) | `lifecycle` | `[AS-IS]` | [Spec](../specifications/flows/message-delivery-status.lifecycle.archify.json) · [Viewer](../interactive/flows/message-delivery-status.html) · [Dark Preview](../assets/message-delivery-status.png) · [Light Preview](../assets/message-delivery-status.light.png) | `:core:database:testDebugUnitTest` |
+| *Room to Compose UI Data Flow* | `dataflow` | `[PLANNED]` | `docs/architecture/specifications/flows/room-to-ui.dataflow.archify.json` (Deferred) | `:feature:chat:testDebugUnitTest` |

@@ -62,7 +62,8 @@ All agent verification must be performed using these verified-green commands:
 | Task / Purpose | Verified Command |
 |---|---|
 | Run all unit tests across all modules | `./gradlew testDebugUnitTest` |
-| Fast re-run of tested modules | `./gradlew :core:network:testDebugUnitTest :core:data:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest --rerun-tasks` |
+| Fast re-run of tested modules | `./gradlew :core:database:testDebugUnitTest :core:network:testDebugUnitTest :core:data:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest --rerun-tasks` |
+| Run database module unit tests | `./gradlew :core:database:testDebugUnitTest --rerun-tasks` |
 | Run single module unit tests | `./gradlew :core:network:testDebugUnitTest --tests "*"` |
 | Assemble debug APK | `./gradlew assembleDebug` |
 | Run Android Lint on debug variant | `./gradlew lintDebug` |

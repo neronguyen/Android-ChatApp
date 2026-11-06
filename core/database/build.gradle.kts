@@ -20,6 +20,12 @@ android {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
+    }
 }
 
 kotlin {
@@ -42,4 +48,10 @@ dependencies {
     implementation(libs.room.ktx)
     implementation(libs.room.runtime)
     ksp(libs.room.compiler)
+
+    // Test
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.turbine)
+    testImplementation(libs.robolectric)
 }

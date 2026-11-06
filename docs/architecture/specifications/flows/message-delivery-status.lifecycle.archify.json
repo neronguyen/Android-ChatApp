@@ -1,0 +1,49 @@
+{
+  "schema_version": 3,
+  "diagram_type": "lifecycle",
+  "meta": {
+    "title": "[AS-IS] Room Message Delivery Status Lifecycle",
+    "output": "docs/architecture/interactive/flows/message-delivery-status.html",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "mainPath": ["created", "sending", "sent", "deleted"],
+  "states": [
+    { "id": "created", "type": "start", "label": "Local Draft", "sublabel": "client UUIDv7 generated", "tag": "init", "step": "01" },
+    { "id": "sending", "type": "active", "label": "SENDING", "sublabel": "optimistic SQLite insert", "tag": "in-flight", "step": "02" },
+    { "id": "sent", "type": "success", "label": "SENT", "sublabel": "server ack / synced", "tag": "delivered", "step": "03" },
+    { "id": "deleted", "type": "neutral", "label": "DELETED", "sublabel": "soft delete tombstone", "tag": "tombstone", "step": "04" },
+    { "id": "failed", "type": "failure", "label": "FAILED", "sublabel": "network error / dropped", "tag": "retryable" },
+    { "id": "remote_inbound", "type": "external", "label": "Remote Inbound", "sublabel": "incoming WS / sync", "tag": "external" }
+  ],
+  "transitions": [
+    { "id": "created-sending", "from": "created", "to": "sending", "label": "insertSendingMessage" },
+    { "id": "sending-sent", "from": "sending", "to": "sent", "label": "server ack / broadcast" },
+    { "id": "sent-deleted", "from": "sent", "to": "deleted", "label": "deleteMessage / event" },
+    { "id": "sending-failed", "from": "sending", "to": "failed", "label": "disconnect / WS error", "variant": "security" },
+    { "id": "failed-sending", "from": "failed", "to": "sending", "label": "retryMessage (same id)", "variant": "dashed" },
+    { "id": "failed-sent", "from": "failed", "to": "sent", "label": "late server ack", "variant": "emphasis" },
+    { "id": "sending-deleted", "from": "sending", "to": "deleted", "label": "MessageDeleted event", "variant": "security" },
+    { "id": "remote-sent", "from": "remote_inbound", "to": "sent", "label": "upsertIncomingOrAcked" }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Persistence & Sync Invariants",
+      "items": [
+        "Optimistic Sending: Messages are assigned client UUIDv7 and inserted as SENDING before network transit",
+        "Sync Gap Safety: Gap-clearing removes ONLY local SENT rows; local SENDING, FAILED, and DELETED rows survive",
+        "Server Hard Delete: Backend uses SQL DELETE; soft-deleted tombstones are never resurrected by REST pagination"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Failure Modes & Characterized Gaps",
+      "items": [
+        "Foreign Key Hazard (Q1): upsertIncomingOrAckedMessage throws SQLiteConstraintException if room is not yet cached locally",
+        "Ghost Messages (Q2): Server deletes while client is offline are not pruned during non-gap sync; client retains ghost SENT rows",
+        "Cascade Deletion: Room deletion cascades to messages and cross-references via SQLite foreign keys"
+      ]
+    }
+  ]
+}
