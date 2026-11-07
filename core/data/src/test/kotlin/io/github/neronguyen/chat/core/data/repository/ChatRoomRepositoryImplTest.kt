@@ -45,6 +45,7 @@ class ChatRoomRepositoryImplTest {
         override fun getChatsWithDetails(): Flow<List<ChatRoomWithDetails>> = emptyFlow()
         override fun getChatWithDetails(roomId: String): Flow<ChatRoomWithDetails?> =
             chatWithDetailsFlow
+        override suspend fun roomExists(roomId: String): Boolean = false
         override fun getRecentMessages(roomId: String, limit: Int): Flow<List<ChatMessageEntity>> =
             emptyFlow()
         override suspend fun getMessageById(id: String): ChatMessageEntity? = null

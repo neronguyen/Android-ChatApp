@@ -26,6 +26,9 @@ interface ChatDao {
     @Query("SELECT * FROM chat_rooms WHERE id = :roomId")
     fun getChatWithDetails(roomId: String): Flow<ChatRoomWithDetails?>
 
+    @Query("SELECT EXISTS(SELECT 1 FROM chat_rooms WHERE id = :roomId)")
+    suspend fun roomExists(roomId: String): Boolean
+
     @Query(
         """
         SELECT * FROM chat_messages

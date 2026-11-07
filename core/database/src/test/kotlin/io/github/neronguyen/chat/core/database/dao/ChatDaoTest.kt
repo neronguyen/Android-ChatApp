@@ -366,6 +366,13 @@ class ChatDaoTest {
     }
 
     @Test
+    fun roomExists_returnsFalseWhenMissing_andTrueWhenPresent() = runTest {
+        assertEquals(false, chatDao.roomExists("room-none"))
+        createRoom("room-present")
+        assertEquals(true, chatDao.roomExists("room-present"))
+    }
+
+    @Test
     fun deleteRoom_cascadesAndRemovesMessagesAndCrossRefs() = runTest {
         createRoom("room-1")
         createParticipant("user-1")

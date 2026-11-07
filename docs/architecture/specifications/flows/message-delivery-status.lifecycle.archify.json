@@ -41,7 +41,7 @@
       "dot": "rose",
       "title": "Failure Modes & Characterized Gaps",
       "items": [
-        "Foreign Key Hazard (Q1): upsertIncomingOrAckedMessage throws SQLiteConstraintException if room is not yet cached locally",
+        "Foreign Key Hazard (Q1): upsertIncomingOrAckedMessage guarded in ChatRealtimeSyncManager via single-flight room buffering",
         "Tombstone Reconciliation (Q2): Remote sync delivers deletedAt != null, updating local SENT to DELETED tombstone (No Ghost!)",
         "Cascade Deletion: Room deletion cascades to messages and cross-references via SQLite foreign keys"
       ]

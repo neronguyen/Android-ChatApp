@@ -14,4 +14,5 @@ Shared client-server communication flows (WebSocket lifecycle, token refresh, op
 | Flow | Type | Status | Specification & Artifacts | Asserting Test Suite |
 |---|---|---|---|---|
 | Room Message State Lifecycle (`MessageDeliveryStatus`) | `lifecycle` | `[AS-IS]` | [Spec](../specifications/flows/message-delivery-status.lifecycle.archify.json) · [Viewer](../interactive/flows/message-delivery-status.html) · [Dark Preview](../assets/message-delivery-status.png) · [Light Preview](../assets/message-delivery-status.light.png) | `:core:database:testDebugUnitTest` |
+| Unknown Room FK Guard (`ChatRealtimeSyncManager`) | `sequence` | `[AS-IS]` | [Spec](../specifications/flows/unknown-room-fk-guard.sequence.archify.json) · [Viewer](../interactive/flows/unknown-room-fk-guard.html) · [Dark Preview](../assets/unknown-room-fk-guard.png) · [Light Preview](../assets/unknown-room-fk-guard.light.png) | `:core:data:testDebugUnitTest` |
 | *Room to Compose UI Data Flow* | `dataflow` | `[PLANNED]` | `docs/architecture/specifications/flows/room-to-ui.dataflow.archify.json` (Deferred) | `:feature:chat:testDebugUnitTest` |

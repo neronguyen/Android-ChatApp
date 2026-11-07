@@ -1,13 +1,17 @@
 package io.github.neronguyen.chat.core.data.realtime
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
 import io.github.neronguyen.chat.core.database.dao.ChatDao
 import io.github.neronguyen.chat.core.database.entity.ChatMessageEntity
 import io.github.neronguyen.chat.core.database.entity.ChatParticipantEntity
 import io.github.neronguyen.chat.core.database.entity.ChatRoomEntity
 import io.github.neronguyen.chat.core.database.entity.ChatRoomParticipantCrossRef
 import io.github.neronguyen.chat.core.database.model.ChatRoomWithDetails
+import io.github.neronguyen.chat.core.model.ChatParticipant
+import io.github.neronguyen.chat.core.model.ChatRoom
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
+import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
@@ -32,6 +36,7 @@ import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -68,6 +73,7 @@ class ChatRealtimeSyncManagerTest {
     }
 
     private class FakeChatDao : ChatDao {
+        val existingRooms = mutableSetOf<String>("room-1")
         val upsertedMessages = mutableListOf<ChatMessageEntity>()
         val upsertedParticipants = mutableListOf<ChatParticipantEntity>()
         val upsertedCrossRefs = mutableListOf<ChatRoomParticipantCrossRef>()
@@ -80,6 +86,8 @@ class ChatRealtimeSyncManagerTest {
         override fun getChatsWithDetails(): Flow<List<ChatRoomWithDetails>> = emptyFlow()
         override fun getChatWithDetails(roomId: String): Flow<ChatRoomWithDetails?> =
             emptyFlow()
+
+        override suspend fun roomExists(roomId: String): Boolean = roomId in existingRooms
 
         override fun getRecentMessages(
             roomId: String,
@@ -109,8 +117,12 @@ class ChatRealtimeSyncManagerTest {
         override suspend fun clearParticipants() {}
         override suspend fun clearCrossRefs() {}
 
-        override suspend fun upsertRoom(room: ChatRoomEntity) {}
-        override suspend fun upsertRooms(rooms: List<ChatRoomEntity>) {}
+        override suspend fun upsertRoom(room: ChatRoomEntity) {
+            existingRooms.add(room.id)
+        }
+        override suspend fun upsertRooms(rooms: List<ChatRoomEntity>) {
+            existingRooms.addAll(rooms.map { it.id })
+        }
         override suspend fun upsertParticipant(participant: ChatParticipantEntity) {
             upsertedParticipants.add(participant)
         }
@@ -123,7 +135,9 @@ class ChatRealtimeSyncManagerTest {
             upsertedCrossRefs.addAll(crossRefs)
         }
 
-        override suspend fun upsertMessage(message: ChatMessageEntity) {}
+        override suspend fun upsertMessage(message: ChatMessageEntity) {
+            upsertedMessages.add(message)
+        }
 
         override suspend fun upsertMessages(messages: List<ChatMessageEntity>) {
             upsertedMessages.addAll(messages)
@@ -190,33 +204,59 @@ class ChatRealtimeSyncManagerTest {
         }
     }
 
+    private class FakeChatRoomRepository : ChatRoomRepository {
+        val syncedRooms = mutableListOf<String>()
+        var onSyncRoom: suspend (String) -> Either<ChatError.SyncRoom, Unit> = { Either.Right(Unit) }
+
+        override fun getChats(): Flow<List<ChatRoom>> = emptyFlow()
+        override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
+        override suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant> =
+            Either.Left(ChatError.ParticipantNotFound)
+        override suspend fun createDirectChatRoom(targetUserId: String, message: String): Either<ChatError.CreateRoom, ChatRoom> =
+            Either.Left(ChatError.ParticipantNotFound)
+        override suspend fun createGroupChatRoom(participantIds: List<String>, name: String?): Either<ChatError.CreateRoom, ChatRoom> =
+            Either.Left(ChatError.InvalidRoomSize)
+        override fun getChatRoom(roomId: String): Flow<ChatRoom?> = emptyFlow()
+
+        override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> {
+            syncedRooms.add(roomId)
+            return onSyncRoom(roomId)
+        }
+
+        override suspend fun addParticipantsToGroup(roomId: String, userIds: List<String>): Either<ChatError.AddParticipants, ChatRoom> =
+            Either.Left(ChatError.AlreadyInRoom)
+        override suspend fun leaveChatRoom(roomId: String): Either<ChatError.LeaveRoom, Unit> = Either.Right(Unit)
+    }
+
     @Test
     fun `initialize handles incoming NewMessage event and upserts incoming or acked message`() =
         runTest {
-        val externalScope = TestScope(testDispatcher)
-        val fakeDataSource = FakeChatRealtimeDataSource()
-        val fakeDao = FakeChatDao()
+            val externalScope = TestScope(testDispatcher)
+            val fakeDataSource = FakeChatRealtimeDataSource()
+            val fakeDao = FakeChatDao()
+            val fakeRoomRepo = FakeChatRoomRepository()
 
-        val syncManager = ChatRealtimeSyncManager(
-            realtimeDataSource = fakeDataSource,
-            chatDao = fakeDao,
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+            val syncManager = ChatRealtimeSyncManager(
+                realtimeDataSource = fakeDataSource,
+                chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
+                appScope = externalScope,
+                ioDispatcher = testDispatcher
+            )
 
-        syncManager.initialize()
+            syncManager.initialize()
 
-        val messageDto = ChatMessageDto(
-            id = "server-456",
-            roomId = "room-1",
-            senderId = "user-1",
-            content = "Hello",
-            createdAt = Instant.fromEpochMilliseconds(1000L)
-        )
+            val messageDto = ChatMessageDto(
+                id = "server-456",
+                roomId = "room-1",
+                senderId = "user-1",
+                content = "Hello",
+                createdAt = Instant.fromEpochMilliseconds(1000L)
+            )
 
-        fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(messageDto))
+            fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(messageDto))
 
-        testScheduler.advanceUntilIdle()
+            testScheduler.advanceUntilIdle()
             assertEquals("server-456", fakeDao.upsertedIncomingOrAckedMessage?.id)
             assertEquals("room-1", fakeDao.upsertedIncomingOrAckedMessage?.roomId)
             assertEquals(1000L, fakeDao.upsertedIncomingOrAckedMessage?.timestamp)
@@ -224,7 +264,213 @@ class ChatRealtimeSyncManagerTest {
                 MessageDeliveryStatus.SENT,
                 fakeDao.upsertedIncomingOrAckedMessage?.deliveryStatus
             )
-    }
+        }
+
+    @Test
+    fun `incoming NewMessage for unknown room buffers message, triggers syncChatRoom, and drains queued message upon success`() =
+        runTest {
+            val externalScope = TestScope(testDispatcher)
+            val fakeDataSource = FakeChatRealtimeDataSource()
+            val fakeDao = FakeChatDao()
+            fakeDao.existingRooms.clear()
+            val fakeRoomRepo = FakeChatRoomRepository()
+            fakeRoomRepo.onSyncRoom = { roomId ->
+                fakeDao.existingRooms.add(roomId)
+                Either.Right(Unit)
+            }
+
+            val syncManager = ChatRealtimeSyncManager(
+                realtimeDataSource = fakeDataSource,
+                chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
+                appScope = externalScope,
+                ioDispatcher = testDispatcher
+            )
+
+            syncManager.initialize()
+
+            val messageDto = ChatMessageDto(
+                id = "msg-buffered-1",
+                roomId = "unknown-room-1",
+                senderId = "user-1",
+                content = "Hello unknown room",
+                createdAt = Instant.fromEpochMilliseconds(2000L)
+            )
+
+            fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(messageDto))
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(listOf("unknown-room-1"), fakeRoomRepo.syncedRooms)
+            assertEquals("msg-buffered-1", fakeDao.upsertedIncomingOrAckedMessage?.id)
+            assertEquals("unknown-room-1", fakeDao.upsertedIncomingOrAckedMessage?.roomId)
+            assertEquals(MessageDeliveryStatus.SENT, fakeDao.upsertedIncomingOrAckedMessage?.deliveryStatus)
+        }
+
+    @Test
+    fun `multiple concurrent NewMessages for unknown room single-flight fetch metadata and drain all in order`() =
+        runTest {
+            val externalScope = TestScope(testDispatcher)
+            val fakeDataSource = FakeChatRealtimeDataSource()
+            val fakeDao = FakeChatDao()
+            fakeDao.existingRooms.clear()
+            val fakeRoomRepo = FakeChatRoomRepository()
+            fakeRoomRepo.onSyncRoom = { roomId ->
+                fakeDao.existingRooms.add(roomId)
+                Either.Right(Unit)
+            }
+
+            val syncManager = ChatRealtimeSyncManager(
+                realtimeDataSource = fakeDataSource,
+                chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
+                appScope = externalScope,
+                ioDispatcher = testDispatcher
+            )
+
+            syncManager.initialize()
+
+            val msg1 = ChatMessageDto(
+                id = "msg-burst-1",
+                roomId = "burst-room",
+                senderId = "user-1",
+                content = "Burst 1",
+                createdAt = Instant.fromEpochMilliseconds(1000L)
+            )
+            val msg2 = ChatMessageDto(
+                id = "msg-burst-2",
+                roomId = "burst-room",
+                senderId = "user-2",
+                content = "Burst 2",
+                createdAt = Instant.fromEpochMilliseconds(2000L)
+            )
+
+            fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(msg1))
+            fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(msg2))
+
+            testScheduler.advanceUntilIdle()
+            // Single-flight: syncChatRoom should be called exactly once for "burst-room"
+            assertEquals(listOf("burst-room"), fakeRoomRepo.syncedRooms)
+            // Both messages should be drained and upserted in arrival order
+            val upsertedIds = fakeDao.upsertedMessages.map { it.id }
+            assertTrue(upsertedIds.contains("msg-burst-1"))
+            assertTrue(upsertedIds.contains("msg-burst-2"))
+        }
+
+    @Test
+    fun `failed syncChatRoom drops buffered messages safely without throwing SQLiteConstraintException`() =
+        runTest {
+            val externalScope = TestScope(testDispatcher)
+            val fakeDataSource = FakeChatRealtimeDataSource()
+            val fakeDao = FakeChatDao()
+            fakeDao.existingRooms.clear()
+            val fakeRoomRepo = FakeChatRoomRepository()
+            fakeRoomRepo.onSyncRoom = {
+                Either.Left(ChatError.RoomNotFound)
+            }
+
+            val syncManager = ChatRealtimeSyncManager(
+                realtimeDataSource = fakeDataSource,
+                chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
+                appScope = externalScope,
+                ioDispatcher = testDispatcher
+            )
+
+            syncManager.initialize()
+
+            val messageDto = ChatMessageDto(
+                id = "msg-failed-room",
+                roomId = "unreachable-room",
+                senderId = "user-1",
+                content = "Will drop safely",
+                createdAt = Instant.fromEpochMilliseconds(3000L)
+            )
+
+            fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(messageDto))
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(listOf("unreachable-room"), fakeRoomRepo.syncedRooms)
+            // No messages upserted since room metadata fetch failed
+            assertTrue(fakeDao.upsertedMessages.isEmpty())
+        }
+
+    @Test
+    fun `incoming NewMessage for known room takes fast path without invoking syncChatRoom`() =
+        runTest {
+            val externalScope = TestScope(testDispatcher)
+            val fakeDataSource = FakeChatRealtimeDataSource()
+            val fakeDao = FakeChatDao()
+            fakeDao.existingRooms.add("cached-room")
+            val fakeRoomRepo = FakeChatRoomRepository()
+
+            val syncManager = ChatRealtimeSyncManager(
+                realtimeDataSource = fakeDataSource,
+                chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
+                appScope = externalScope,
+                ioDispatcher = testDispatcher
+            )
+
+            syncManager.initialize()
+
+            val messageDto = ChatMessageDto(
+                id = "msg-fast-path",
+                roomId = "cached-room",
+                senderId = "user-1",
+                content = "Fast path",
+                createdAt = Instant.fromEpochMilliseconds(4000L)
+            )
+
+            fakeDataSource.incomingEventsFlow.emit(WsServerEvent.NewMessage(messageDto))
+
+            testScheduler.advanceUntilIdle()
+            assertTrue(fakeRoomRepo.syncedRooms.isEmpty())
+            assertEquals("msg-fast-path", fakeDao.upsertedIncomingOrAckedMessage?.id)
+        }
+
+    @Test
+    fun `incoming ParticipantJoined for unknown room syncs room before applying cross refs`() =
+        runTest {
+            val externalScope = TestScope(testDispatcher)
+            val fakeDataSource = FakeChatRealtimeDataSource()
+            val fakeDao = FakeChatDao()
+            fakeDao.existingRooms.clear()
+            val fakeRoomRepo = FakeChatRoomRepository()
+            fakeRoomRepo.onSyncRoom = { roomId ->
+                fakeDao.existingRooms.add(roomId)
+                Either.Right(Unit)
+            }
+
+            val syncManager = ChatRealtimeSyncManager(
+                realtimeDataSource = fakeDataSource,
+                chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
+                appScope = externalScope,
+                ioDispatcher = testDispatcher
+            )
+
+            syncManager.initialize()
+
+            val newParticipant = ChatParticipantDto(
+                userId = "user-invitee",
+                email = "invitee@test.com",
+                displayName = "Invitee"
+            )
+
+            fakeDataSource.incomingEventsFlow.emit(
+                WsServerEvent.ParticipantJoined(
+                    roomId = "new-room-invite",
+                    newUsers = listOf(newParticipant),
+                    addedBy = null
+                )
+            )
+
+            testScheduler.advanceUntilIdle()
+            assertEquals(listOf("new-room-invite"), fakeRoomRepo.syncedRooms)
+            assertEquals(1, fakeDao.upsertedCrossRefs.size)
+            assertEquals("new-room-invite", fakeDao.upsertedCrossRefs[0].roomId)
+            assertEquals("user-invitee", fakeDao.upsertedCrossRefs[0].userId)
+        }
 
     @Test
     fun `initialize handles MessageDeleted event and updates message status to DELETED in DAO`() =
@@ -232,10 +478,12 @@ class ChatRealtimeSyncManagerTest {
             val externalScope = TestScope(testDispatcher)
             val fakeDataSource = FakeChatRealtimeDataSource()
             val fakeDao = FakeChatDao()
+            val fakeRoomRepo = FakeChatRoomRepository()
 
             val syncManager = ChatRealtimeSyncManager(
                 realtimeDataSource = fakeDataSource,
                 chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
                 appScope = externalScope,
                 ioDispatcher = testDispatcher
             )
@@ -256,10 +504,12 @@ class ChatRealtimeSyncManagerTest {
             val externalScope = TestScope(testDispatcher)
             val fakeDataSource = FakeChatRealtimeDataSource()
             val fakeDao = FakeChatDao()
+            val fakeRoomRepo = FakeChatRoomRepository()
 
             val syncManager = ChatRealtimeSyncManager(
                 realtimeDataSource = fakeDataSource,
                 chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
                 appScope = externalScope,
                 ioDispatcher = testDispatcher
             )
@@ -297,10 +547,12 @@ class ChatRealtimeSyncManagerTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeDao = FakeChatDao()
+        val fakeRoomRepo = FakeChatRoomRepository()
 
         val syncManager = ChatRealtimeSyncManager(
             realtimeDataSource = fakeDataSource,
             chatDao = fakeDao,
+            chatRoomRepository = fakeRoomRepo,
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
@@ -330,10 +582,12 @@ class ChatRealtimeSyncManagerTest {
             val externalScope = TestScope(testDispatcher)
             val fakeDataSource = FakeChatRealtimeDataSource()
             val fakeDao = FakeChatDao()
+            val fakeRoomRepo = FakeChatRoomRepository()
 
             val syncManager = ChatRealtimeSyncManager(
                 realtimeDataSource = fakeDataSource,
                 chatDao = fakeDao,
+                chatRoomRepository = fakeRoomRepo,
                 appScope = externalScope,
                 ioDispatcher = testDispatcher
             )
@@ -354,10 +608,12 @@ class ChatRealtimeSyncManagerTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeDao = FakeChatDao()
+        val fakeRoomRepo = FakeChatRoomRepository()
 
         val syncManager = ChatRealtimeSyncManager(
             realtimeDataSource = fakeDataSource,
             chatDao = fakeDao,
+            chatRoomRepository = fakeRoomRepo,
             appScope = externalScope,
             ioDispatcher = testDispatcher
         )
