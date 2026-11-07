@@ -40,6 +40,8 @@ class AuthRepositoryImplTest {
         override fun getChatsWithDetails(): Flow<List<ChatRoomWithDetails>> = emptyFlow()
         override fun getChatWithDetails(roomId: String): Flow<ChatRoomWithDetails?> = emptyFlow()
         override suspend fun roomExists(roomId: String): Boolean = false
+        override suspend fun getAllRoomsSnapshot(): List<ChatRoomEntity> = emptyList()
+        override suspend fun deleteRoomsByIds(roomIds: List<String>) {}
         override fun getRecentMessages(roomId: String, limit: Int): Flow<List<ChatMessageEntity>> =
             emptyFlow()
 

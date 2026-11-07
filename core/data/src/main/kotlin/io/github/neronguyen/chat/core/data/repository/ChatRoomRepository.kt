@@ -12,6 +12,12 @@ interface ChatRoomRepository {
 
     suspend fun syncChats(): Either<DataError, Unit>
 
+    val syncSuccessEvents: Flow<Unit>
+        get() = kotlinx.coroutines.flow.emptyFlow()
+
+    suspend fun syncChatsWithChangedRooms(): Either<DataError, List<String>> =
+        syncChats().map { emptyList() }
+
     suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant>
 
     suspend fun createDirectChatRoom(

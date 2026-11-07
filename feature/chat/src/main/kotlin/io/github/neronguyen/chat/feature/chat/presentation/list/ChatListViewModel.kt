@@ -46,6 +46,7 @@ class ChatListViewModel @Inject constructor(
     init {
         observeSearchField()
         observeChats()
+        observeSyncSuccess()
         syncChats()
     }
 
@@ -128,6 +129,20 @@ class ChatListViewModel @Inject constructor(
             syncError = syncStatus.syncError,
             isBannerDismissed = syncStatus.isBannerDismissed,
         )
+    }
+
+    private fun observeSyncSuccess() {
+        viewModelScope.launch {
+            chatRoomRepository.syncSuccessEvents.collect {
+                syncStatusFlow.update {
+                    it.copy(
+                        syncError = null,
+                        isInitialLoadComplete = true,
+                        isBannerDismissed = false,
+                    )
+                }
+            }
+        }
     }
 
     private fun syncChats() {

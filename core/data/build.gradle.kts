@@ -48,6 +48,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.process)
     implementation(libs.androidx.lifecycle.runtime)
 
+    // WorkManager
+    implementation(libs.androidx.work.ktx)
+    implementation(libs.hilt.ext.work)
+    ksp(libs.hilt.ext.compiler)
+
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)

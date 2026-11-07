@@ -88,6 +88,8 @@ class ChatRealtimeSyncManagerTest {
             emptyFlow()
 
         override suspend fun roomExists(roomId: String): Boolean = roomId in existingRooms
+        override suspend fun getAllRoomsSnapshot(): List<ChatRoomEntity> = emptyList()
+        override suspend fun deleteRoomsByIds(roomIds: List<String>) {}
 
         override fun getRecentMessages(
             roomId: String,

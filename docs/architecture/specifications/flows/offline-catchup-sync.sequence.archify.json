@@ -1,0 +1,78 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "[AS-IS] Android WorkManager Offline Catch-Up & Background Sync",
+    "output": "docs/architecture/interactive/flows/offline-catchup-sync.html",
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "ui", "type": "frontend", "label": "ChatListViewModel", "sublabel": "Jetpack Compose" },
+    { "id": "sync", "type": "frontend", "label": "ChatSyncManager", "sublabel": "WorkManager / Reconnect" },
+    { "id": "repo", "type": "frontend", "label": "ChatRoomRepository", "sublabel": "Single-Flight Coalescing" },
+    { "id": "msgRepo", "type": "frontend", "label": "ChatMessageRepository", "sublabel": "Message Prefetch" },
+    { "id": "dao", "type": "database", "label": "ChatDao", "sublabel": "Room SQLite" },
+    { "id": "api", "type": "backend", "label": "Backend REST API", "sublabel": "Spring Boot /api/chat" }
+  ],
+  "segments": [
+    { "from": 150, "to": 330, "label": "1. Offline Failure & Background Work Enqueue" },
+    { "from": 340, "to": 650, "label": "2. Connectivity Restored & Room List Reconcile" },
+    { "from": 660, "to": 860, "label": "3. Top-5 Changed Rooms Message Prefetch" }
+  ],
+  "messages": [
+    { "id": "ui-sync", "from": "ui", "to": "repo", "y": 165, "label": "syncChats()", "variant": "default" },
+    { "id": "api-fail-req", "from": "repo", "to": "api", "y": 200, "label": "GET /api/chat/rooms", "variant": "emphasis" },
+    { "id": "api-fail-resp", "from": "api", "to": "repo", "y": 235, "label": "Either.Left(NoInternet / Timeout)", "variant": "return" },
+    { "id": "enqueue-work", "from": "repo", "to": "sync", "y": 270, "label": "enqueueOneTimeCatchUpSync() [NetworkType.CONNECTED]", "variant": "emphasis" },
+    { "id": "ui-err-banner", "from": "repo", "to": "ui", "y": 305, "label": "Either.Left(DataError.Connectivity.NoInternet) -> show sync banner", "variant": "return" },
+    { "id": "catchup-trigger", "from": "sync", "to": "repo", "y": 365, "label": "syncChatsWithChangedRooms() [Single-Flight Coalesced]", "variant": "emphasis" },
+    { "id": "snap-req", "from": "repo", "to": "dao", "y": 400, "label": "getAllRoomsSnapshot()", "variant": "default" },
+    { "id": "snap-resp", "from": "dao", "to": "repo", "y": 435, "label": "List<ChatRoomEntity> (pre-sync snapshot)", "variant": "return" },
+    { "id": "api-ok-req", "from": "repo", "to": "api", "y": 470, "label": "GET /api/chat/rooms", "variant": "emphasis" },
+    { "id": "api-ok-resp", "from": "api", "to": "repo", "y": 510, "label": "200 OK (List<ChatRoomDto>)", "variant": "return" },
+    { "id": "insert-reconcile", "from": "repo", "to": "dao", "y": 550, "label": "insertFullChats(rooms, participants, lastMessages, crossRefs)", "variant": "emphasis" },
+    { "id": "clear-banner", "from": "repo", "to": "ui", "y": 590, "label": "syncSuccessEvents emit -> auto-clears sync banner", "variant": "return" },
+    { "id": "changed-rooms", "from": "repo", "to": "sync", "y": 625, "label": "Either.Right(changedRoomIds [top 5 by lastActivityAt DESC])", "variant": "return" },
+    { "id": "prefetch-req", "from": "sync", "to": "msgRepo", "y": 685, "label": "syncRecentMessages(roomId) [for each in top 5]", "variant": "emphasis" },
+    { "id": "api-msg-req", "from": "msgRepo", "to": "api", "y": 720, "label": "GET /api/chat/rooms/{id}/messages?limit=20", "variant": "emphasis" },
+    { "id": "api-msg-resp", "from": "api", "to": "msgRepo", "y": 760, "label": "200 OK (ChatMessageSliceDto)", "variant": "return" },
+    { "id": "save-msgs", "from": "msgRepo", "to": "dao", "y": 800, "label": "syncRecentMessagesTransaction(roomId, remoteMessages)", "variant": "emphasis" },
+    { "id": "prefetch-done", "from": "msgRepo", "to": "sync", "y": 835, "label": "Either.Right(hasMore)", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "ui", "from": 165, "to": 315 },
+    { "participant": "repo", "from": 165, "to": 315 },
+    { "participant": "api", "from": 200, "to": 245 },
+    { "participant": "sync", "from": 270, "to": 285 },
+    { "participant": "sync", "from": 365, "to": 845 },
+    { "participant": "repo", "from": 365, "to": 635 },
+    { "participant": "dao", "from": 400, "to": 445 },
+    { "participant": "api", "from": 470, "to": 520 },
+    { "participant": "dao", "from": 550, "to": 565 },
+    { "participant": "msgRepo", "from": 685, "to": 840 },
+    { "participant": "api", "from": 720, "to": 770 },
+    { "participant": "dao", "from": 800, "to": 815 }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Offline-First Self-Healing & Coalescing",
+      "items": [
+        "Periodic + Catch-Up Work: 15-min battery-friendly PeriodicWorkRequest plus network-constrained OneTimeWorkRequest on sync failure",
+        "WebSocket Reconnect Reconcile: Immediate catch-up triggered upon socket reconnection to recover dropped realtime frames",
+        "Single-Flight Deduplication: Simultaneous UI, WorkManager, and WS reconnect triggers share a single in-flight GET /api/chat/rooms call"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Consistency & Local State Invariants",
+      "items": [
+        "Conditional Prefetch (Cap 5): Automatically prefetches recent messages for up to 5 most recently active changed rooms",
+        "Authoritative Stale Pruning: Local rooms missing from GET /api/chat/rooms are deleted via ForeignKey.CASCADE",
+        "Optimistic Preview Preservation: Local SENDING or FAILED messages newer than server lastMessage remain as the room preview"
+      ]
+    }
+  ]
+}
