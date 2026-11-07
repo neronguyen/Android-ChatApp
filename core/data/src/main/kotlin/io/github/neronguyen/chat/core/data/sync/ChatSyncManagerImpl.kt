@@ -14,7 +14,9 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -34,60 +36,69 @@ internal class ChatSyncManagerImpl @Inject constructor(
 ) : ChatSyncManager {
 
     private val initialized = AtomicBoolean(false)
-    private var hasConnectedOnce = false
-    private var wasDisconnected = false
 
     override fun initialize() {
         if (!initialized.compareAndSet(expectedValue = false, newValue = true)) return
 
-        // 1. Observe auth state: schedule periodic work when Authenticated; cancel when Unauthenticated
         appScope.launch(ioDispatcher) {
             tokenDataSource.authState
                 .distinctUntilChanged()
-                .collect { authState ->
+                .collectLatest { authState ->
                     when (authState) {
                         is AuthState.Authenticated -> {
                             chatSyncScheduler.schedulePeriodicSync()
+                            observeReconnectTransitions()
                         }
                         is AuthState.Unauthenticated -> {
                             chatSyncScheduler.cancelAllSyncWork()
-                            hasConnectedOnce = false
-                            wasDisconnected = false
                         }
                     }
                 }
         }
+    }
 
-        // 2. Observe realtime connection state: when reconnecting from Disconnected/Failed -> Connected, trigger catch-up
-        appScope.launch(ioDispatcher) {
-            realtimeDataSource.connectionState.collect { connectionState ->
-                when (connectionState) {
+    private suspend fun observeReconnectTransitions() {
+        realtimeDataSource.connectionState
+            .runningFold<SocketConnectionState, Pair<ReconnectState, Boolean>>(ReconnectState.Initial to false) { (state, _), current ->
+                when (current) {
                     is SocketConnectionState.Connected -> {
-                        if (hasConnectedOnce && wasDisconnected) {
-                            wasDisconnected = false
-                            try {
-                                performCatchUpSync()
-                            } catch (e: CancellationException) {
-                                throw e
-                            } catch (_: Throwable) {
-                                // Ignore non-cancellation errors
-                            }
+                        if (state is ReconnectState.Dropped) {
+                            ReconnectState.ConnectedOnce to true
                         } else {
-                            hasConnectedOnce = true
-                            wasDisconnected = false
+                            ReconnectState.ConnectedOnce to false
                         }
                     }
                     is SocketConnectionState.Disconnected,
                     is SocketConnectionState.Failed -> {
-                        if (hasConnectedOnce) {
-                            wasDisconnected = true
+                        if (state is ReconnectState.ConnectedOnce) {
+                            ReconnectState.Dropped to false
+                        } else {
+                            state to false
                         }
                     }
                     is SocketConnectionState.Connecting,
-                    is SocketConnectionState.AuthenticationFailed -> Unit
+                    is SocketConnectionState.AuthenticationFailed -> {
+                        state to false
+                    }
                 }
             }
-        }
+            .collect { (_, triggerCatchUp) ->
+                if (triggerCatchUp) {
+                    try {
+                        performCatchUpSync()
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Throwable) {
+                        // Ignore non-cancellation errors
+                    }
+                }
+            }
+    }
+
+    private sealed interface ReconnectState {
+        data object Initial : ReconnectState
+        data object ConnectedOnce : ReconnectState
+        data object Dropped : ReconnectState
     }
 
     override suspend fun performCatchUpSync(): Either<DataError, Unit> {

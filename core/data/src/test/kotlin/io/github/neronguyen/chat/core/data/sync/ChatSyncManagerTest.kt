@@ -95,6 +95,8 @@ class ChatSyncManagerTest {
 
     @Test
     fun `websocket reconnect from Disconnected to Connected triggers catch-up sync and prefetches messages`() = runTest(testDispatcher) {
+        val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
+        fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
         fakeChatRoomRepository.changedRoomIdsResult = Either.Right(listOf("room-1", "room-2"))
 
         chatSyncManager.initialize()
