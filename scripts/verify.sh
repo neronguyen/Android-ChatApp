@@ -23,7 +23,6 @@ if [ -z "${JAVA_HOME:-}" ]; then
   fi
 fi
 
-export GRADLE_RO_DEP_CACHE="${GRADLE_RO_DEP_CACHE:-${HOME}/.gradle/caches}"
 GRADLE_USER_HOME="${GRADLE_USER_HOME:-/tmp/gradle-ro-home}"
 mkdir -p "$GRADLE_USER_HOME"
 if [ -d "${HOME}/.gradle/jdks" ] && [ ! -e "$GRADLE_USER_HOME/jdks" ]; then

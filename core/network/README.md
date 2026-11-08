@@ -6,7 +6,9 @@ Retrofit HTTP client infrastructure, authenticated OkHttp pipeline, token refres
 ## Interface
 - `[AuthNetworkDataSource.kt:AuthNetworkDataSource]`: Interface defining HTTP authentication remote calls.
 - `[ChatNetworkDataSource.kt:ChatNetworkDataSource]`: Interface defining HTTP chat room and message remote calls.
-- `[ChatWebSocketClient.kt:ChatWebSocketClient]`: OkHttp WebSocket manager encoding `WsClientMessage` and decoding `WsServerEvent`.
+- `[ChatRealtimeDataSource.kt:ChatRealtimeDataSource]`: Interface defining real-time WebSocket connection lifecycle and event stream.
+- `[ChatWebSocketClient.kt:ChatWebSocketClient]`: OkHttp WebSocket manager implementing `ChatRealtimeDataSource`, encoding `WsClientMessage` and decoding `WsServerEvent`.
+- `[SocketConnectionState.kt:SocketConnectionState]`: Network-level socket connection states (`Disconnected`, `Connecting`, `Connected`, `Failed`).
 - `[TokenAuthenticator.kt:TokenAuthenticator]`: OkHttp `Authenticator` intercepting `401 Unauthorized` responses and executing synchronized single-flight token refresh.
 - `[AuthInterceptor.kt:AuthInterceptor]`: OkHttp `Interceptor` injecting `Authorization: Bearer <token>` headers.
 - `[TokenRefresher.kt:TokenRefresher]`: Boundary interface allowing network layer to trigger repository-level token refresh without circular dependencies.

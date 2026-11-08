@@ -4,7 +4,7 @@ This directory tracks Android-specific state and persistence flows (e.g., Room S
 
 ## Cross-Repository Flows
 Shared client-server communication flows (WebSocket lifecycle, token refresh, optimistic message transmission) are specified in the Contract repository as the Single Source of Truth (SSOT):
-- **Master Flow Index**: [Contract Flow Registry](../../../KMP-ChatContract/docs/architecture/flows/README.md)
+- **Master Flow Index**: [Contract Flow Registry](../../../../KMP-ChatContract/docs/architecture/flows/README.md)
 - **WebSocket Connection & Backoff**: `ws-lifecycle.sequence.archify.json`
 - **Single-Flight Token Refresh**: `token-refresh.sequence.archify.json`
 - **Optimistic Send & Idempotency**: `optimistic-send.sequence.archify.json`

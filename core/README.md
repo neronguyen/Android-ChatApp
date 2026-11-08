@@ -10,5 +10,5 @@ Intermediate blueprint grouping core foundation modules of Android-ChatApp (doma
 - [core:datastore](./datastore/README.md) - Encrypted Preferences DataStore for session tokens.
 - [core:database](./database/README.md) - Room SQLite Single Source of Truth (`ChatDatabase`, `ChatDao`).
 - [core:network](./network/README.md) - Retrofit HTTP clients, OkHttp authenticator, and WebSocket client.
-- [core:data](./data/README.md) - Repositories, real-time sync manager, and WorkManager sync engine.
+- [core:data](./data/README.md) - Repositories, real-time sync manager, and WebSocket lifecycle coordinator.
 - [core:ui](./ui/README.md) - Shared Compose design system, themes, and UI components.

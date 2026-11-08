@@ -35,7 +35,7 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
   - [feature:auth](./feature/auth/README.md) - Login and registration UI flows (Jetpack Compose).
   - [feature:chat](./feature/chat/README.md) - Conversation, chat list, new chat, and account settings UI flows.
 - [core](./core/README.md) - Root blueprint for data, domain, persistence, network, security, and UI foundations.
-  - [core:data](./core/data/README.md) - Repositories, real-time sync coordinator, and WorkManager sync engine.
+  - [core:data](./core/data/README.md) - Repositories, real-time sync coordinator, and WebSocket lifecycle manager.
   - [core:network](./core/network/README.md) - Retrofit HTTP clients, OkHttp authenticator, and WebSocket client.
   - [core:database](./core/database/README.md) - Room database (`ChatDatabase`, `ChatDao`), SQLite entities and relations.
   - [core:datastore](./core/datastore/README.md) - Encrypted Preferences DataStore for tokens and `AuthState`.
@@ -60,7 +60,7 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 - **Preferences DataStore**: Private encrypted file storing authentication session tokens.
 - **Android KeyStore**: Hardware-backed cryptographic keys for token encryption.
 - **OkHttp WebSocket & HTTP**: Network connections to `/ws/chat` and backend REST APIs.
-- **WorkManager**: Background jobs (`ChatSyncWorker`) for periodic catch-up sync.
+- **Android WorkManager**: Configured runtime for deferred background tasks and workers.
 
 ## System Verification
 
