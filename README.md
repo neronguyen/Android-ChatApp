@@ -68,7 +68,7 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 # Fast cached unit tests (Tier 1 - Inner loop)
 ./scripts/verify.sh fast
 
-# Full clean verification gate (Tier 2 - Pre-commit)
+# Full clean unit tests & Android Lint gate (Tier 2 - Pre-commit)
 ./scripts/verify.sh clean
 
 # Direct Gradle commands

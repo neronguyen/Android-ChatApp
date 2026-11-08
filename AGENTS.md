@@ -78,6 +78,6 @@ All agent verification must be performed using these verified-green commands:
 > - Agents may use **Tier 1 (`fast`)** for rapid iterative feedback during development loops.
 > - Agents **MUST** run and pass **Tier 2 (`clean`)** before committing any changes or flipping any flow spec from `[PLANNED]` to `[AS-IS]`.
 
-*Note: `./scripts/verify.sh` automatically configures host Android SDK (`${HOME}/Android/Sdk`), JDK 21+, and sandbox-safe `ANDROID_USER_HOME=/tmp/android-home`.*
+*Note: `./scripts/verify.sh` is the Single Source of Truth for both Local/Sandbox and GitHub Actions CI (`CI=true`). It automatically configures host Android SDK (`${HOME}/Android/Sdk` or `${HOME}/.android/sdk`), JDK 21+ via 3-tier discovery, sandbox-safe `ANDROID_USER_HOME=/tmp/android-home`, and `GRADLE_RO_DEP_CACHE` with isolated `/tmp/gradle-ro-home`. Mode `fast` runs `testDebugUnitTest`; mode `clean` executes `testDebugUnitTest lintDebug --rerun-tasks`.*
 
 
