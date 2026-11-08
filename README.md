@@ -65,12 +65,13 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 ## System Verification
 
 ```bash
-# Run all unit tests across all modules
+# Fast cached unit tests (Tier 1 - Inner loop)
+./scripts/verify.sh fast
+
+# Full clean verification gate (Tier 2 - Pre-commit)
+./scripts/verify.sh clean
+
+# Direct Gradle commands
 ./gradlew testDebugUnitTest
-
-# Fast re-run of tested modules
-./gradlew :core:database:testDebugUnitTest :core:network:testDebugUnitTest :core:data:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest --rerun-tasks
-
-# Assemble debug APK
 ./gradlew assembleDebug
 ```

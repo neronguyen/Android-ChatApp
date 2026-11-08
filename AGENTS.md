@@ -63,16 +63,21 @@ To satisfy Step 3 (`To-Be Flow & Lifecycle Spec`) of the Planning Protocol:
 
 All agent verification must be performed using these verified-green commands:
 
-| Task / Purpose | Verified Command |
-|---|---|
-| Run all unit tests across all modules | `./gradlew testDebugUnitTest` |
-| Fast re-run of tested modules | `./gradlew :core:database:testDebugUnitTest :core:network:testDebugUnitTest :core:data:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest --rerun-tasks` |
-| Run database module unit tests | `./gradlew :core:database:testDebugUnitTest --rerun-tasks` |
-| Run single module unit tests | `./gradlew :core:network:testDebugUnitTest --tests "*"` |
-| Assemble debug APK | `./gradlew assembleDebug` |
-| Run Android Lint on debug variant | `./gradlew lintDebug` |
-| List runnable tasks | `./gradlew tasks` |
+| Task / Purpose | Tier | Verified Command |
+|---|---|---|
+| **Fast Inner-Loop Feedback** | Tier 1 (Iterative) | `./scripts/verify.sh fast` |
+| **Strict Clean Verification Gate** | Tier 2 (Pre-Commit / Gate) | `./scripts/verify.sh clean` |
+| Fast re-run of tested modules | Direct Gradle | `./gradlew :core:database:testDebugUnitTest :core:network:testDebugUnitTest :core:data:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest` |
+| Run database module unit tests | Direct Gradle | `./gradlew :core:database:testDebugUnitTest` |
+| Assemble debug APK | Direct Gradle | `./gradlew assembleDebug` |
+| Run Android Lint on debug variant | Direct Gradle | `./gradlew lintDebug` |
+| List runnable tasks | Utility | `./gradlew tasks` |
 
-*Note: `./gradlew` commands require access to host Android SDK (`/home/nero/Android/Sdk`) and JDK 21+.*
+> [!IMPORTANT]
+> **Verification Tier Policy**:
+> - Agents may use **Tier 1 (`fast`)** for rapid iterative feedback during development loops.
+> - Agents **MUST** run and pass **Tier 2 (`clean`)** before committing any changes or flipping any flow spec from `[PLANNED]` to `[AS-IS]`.
+
+*Note: `./scripts/verify.sh` automatically configures host Android SDK (`${HOME}/Android/Sdk`), JDK 21+, and sandbox-safe `ANDROID_USER_HOME=/tmp/android-home`.*
 
 
