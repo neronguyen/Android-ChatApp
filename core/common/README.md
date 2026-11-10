@@ -7,6 +7,11 @@ Application-wide coroutine dispatchers, application coroutine scope bindings, an
 
 - `[SingleFlight.kt:SingleFlight]`: Generic concurrency coalescing utility ensuring concurrent
   callers share a single in-flight `Deferred` and isolating caller cancellation.
+- `[KeyedSingleFlight.kt:KeyedSingleFlight]`: Keyed concurrency coalescing utility ensuring
+  concurrent callers for the same key share a single in-flight `Deferred`, with independent
+  execution across distinct keys.
+- `[ExponentialBackoff.kt:ExponentialBackoff]`: Parameterized exponential backoff and symmetric
+  jitter calculator for resilient reconnection loops and transient failure retries.
 - `[ChatDispatchers.kt:ChatDispatchers]`: Dispatcher enumeration (`Default`, `IO`) used with `@Dispatcher` qualifier.
 - `[AppScope.kt:AppScope]`: Application-scoped `CoroutineScope` qualifier for long-running background tasks.
 - `[DispatchersModule.kt:DispatchersModule]`: Hilt DI module providing qualified coroutine dispatchers.

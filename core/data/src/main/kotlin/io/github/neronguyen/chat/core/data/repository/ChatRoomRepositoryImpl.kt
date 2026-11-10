@@ -1,6 +1,7 @@
 package io.github.neronguyen.chat.core.data.repository
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.common.coroutine.KeyedSingleFlight
 import io.github.neronguyen.chat.core.common.coroutine.SingleFlight
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
@@ -40,6 +41,10 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
 ) : ChatRoomRepository {
 
     private val syncChatsFlight = SingleFlight<Either<DataError, List<String>>>(
+        scope = appScope,
+        dispatcher = defaultDispatcher
+    )
+    private val syncRoomFlight = KeyedSingleFlight<String, Either<ChatError.SyncRoom, Unit>>(
         scope = appScope,
         dispatcher = defaultDispatcher
     )
@@ -157,13 +162,14 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
         return chatDao.getChatWithDetails(roomId).map { it?.toDomain() }.flowOn(defaultDispatcher)
     }
 
-    override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> {
-        return networkDataSource.getChatRoom(roomId)
-            .mapLeft { it.toSyncRoomError() }
-            .map { dto ->
-                saveChatRoomDto(dto)
-            }
-    }
+    override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> =
+        syncRoomFlight.execute(roomId) {
+            networkDataSource.getChatRoom(roomId)
+                .mapLeft { it.toSyncRoomError() }
+                .map { dto ->
+                    saveChatRoomDto(dto)
+                }
+        }
 
     override suspend fun addParticipantsToGroup(
         roomId: String,

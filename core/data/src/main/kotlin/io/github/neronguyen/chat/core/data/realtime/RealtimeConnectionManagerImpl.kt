@@ -3,6 +3,7 @@ package io.github.neronguyen.chat.core.data.realtime
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import io.github.neronguyen.chat.core.common.coroutine.ExponentialBackoff
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
@@ -27,7 +28,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 
 @Singleton
@@ -37,7 +37,8 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
     private val tokenRefresher: dagger.Lazy<TokenRefresher>,
     private val networkMonitor: NetworkMonitor,
     @AppScope private val appScope: CoroutineScope,
-    @Dispatcher(ChatDispatchers.IO) private val ioDispatcher: CoroutineDispatcher
+    @Dispatcher(ChatDispatchers.IO) private val ioDispatcher: CoroutineDispatcher,
+    private val backoff: ExponentialBackoff = ExponentialBackoff()
 ) : RealtimeConnectionManager, DefaultLifecycleObserver {
 
     override val connectionState: Flow<RealtimeConnectionState> = realtimeDataSource.connectionState
@@ -135,7 +136,7 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
 
                     if (refreshedToken != null) {
                         if (retryAttempt > 0) {
-                            delay(calculateBackoffDelay(retryAttempt).milliseconds)
+                            delay(backoff.calculateDelay(retryAttempt))
                         }
                         retryAttempt++
                         realtimeDataSource.connect()
@@ -147,7 +148,7 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
                 is SocketConnectionState.Failed,
                 is SocketConnectionState.Disconnected -> {
                     if (!isImmediateAttempt && retryAttempt > 0) {
-                        delay(calculateBackoffDelay(retryAttempt).milliseconds)
+                        delay(backoff.calculateDelay(retryAttempt))
                     }
 
                     isImmediateAttempt = false
@@ -158,15 +159,6 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
                 is SocketConnectionState.Connecting -> Unit
             }
         }
-    }
-
-    private fun calculateBackoffDelay(attempt: Int): Long {
-        val baseDelayMs = 1_000L
-        val maxDelayMs = 30_000L
-        val expDelay = baseDelayMs * (1L shl attempt.coerceAtMost(5))
-        val cappedDelay = expDelay.coerceAtMost(maxDelayMs)
-        val jitter = (cappedDelay * 0.2 * Random.nextDouble(-1.0, 1.0)).toLong()
-        return (cappedDelay + jitter).coerceAtLeast(baseDelayMs)
     }
 
     companion object {

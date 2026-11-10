@@ -174,8 +174,19 @@ class ChatRoomRepositoryImplTest {
             }
         }
 
-        override suspend fun getChatRoom(roomId: String): Either<NetworkError<ChatServerError.GetRoom>, ChatRoomDto> =
-            Either.Left(NetworkError.Transport.NoInternet)
+        var getChatRoomCallCount = 0
+        var getChatRoomCompletable: CompletableDeferred<Either<NetworkError<ChatServerError.GetRoom>, ChatRoomDto>>? =
+            null
+
+        override suspend fun getChatRoom(roomId: String): Either<NetworkError<ChatServerError.GetRoom>, ChatRoomDto> {
+            getChatRoomCallCount++
+            val completable = getChatRoomCompletable
+            return if (completable != null) {
+                completable.await()
+            } else {
+                Either.Left(NetworkError.Transport.NoInternet)
+            }
+        }
 
         override suspend fun getMessagesForChatRoom(
             roomId: String,
@@ -512,6 +523,41 @@ class ChatRoomRepositoryImplTest {
             val res3 = repository.syncChatsAndGetChangedRooms()
             assertTrue(res3.isRight())
             assertEquals(2, fakeNetwork.getChatRoomsForUserCallCount)
+        }
+
+    @Test
+    fun `syncChatRoom coalesces concurrent calls for same room into single network request`() =
+        runTest {
+            val fakeDao = FakeChatDao()
+            val fakeNetwork = FakeChatNetworkDataSource()
+            val completable =
+                CompletableDeferred<Either<NetworkError<ChatServerError.GetRoom>, ChatRoomDto>>()
+            fakeNetwork.getChatRoomCompletable = completable
+
+            val testScope = TestScope(testDispatcher)
+            val repository = createRepository(fakeDao, fakeNetwork, scope = testScope)
+
+            val call1 = async { repository.syncChatRoom("room-1") }
+            val call2 = async { repository.syncChatRoom("room-1") }
+
+            testScheduler.runCurrent()
+            assertEquals(1, fakeNetwork.getChatRoomCallCount)
+
+            val participant = ChatParticipantDto("u1", "u1@test.com", "U1")
+            val roomDto = ChatRoomDto(
+                id = "room-1",
+                type = ContractChatRoomType.DIRECT,
+                creator = participant,
+                participants = listOf(participant),
+                lastMessage = null,
+                lastActivityAt = Instant.parse("2026-11-10T10:00:00Z")
+            )
+            completable.complete(Either.Right(roomDto))
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(call1.await().isRight())
+            assertTrue(call2.await().isRight())
+            assertEquals(1, fakeNetwork.getChatRoomCallCount)
         }
 }
 
