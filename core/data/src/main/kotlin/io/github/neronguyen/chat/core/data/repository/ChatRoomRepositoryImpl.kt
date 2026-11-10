@@ -1,6 +1,7 @@
 package io.github.neronguyen.chat.core.data.repository
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.common.coroutine.SingleFlight
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
@@ -24,15 +25,9 @@ import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
 import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -44,8 +39,10 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
     @Dispatcher(ChatDispatchers.Default) private val defaultDispatcher: CoroutineDispatcher
 ) : ChatRoomRepository {
 
-    private val syncMutex = Mutex()
-    private var inFlightSync: Deferred<Either<DataError, List<String>>>? = null
+    private val syncChatsFlight = SingleFlight<Either<DataError, List<String>>>(
+        scope = appScope,
+        dispatcher = defaultDispatcher
+    )
 
     override fun getChats(): Flow<List<ChatRoom>> {
         return chatDao.getChatsWithDetails().map { relations ->
@@ -57,25 +54,10 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
         return syncChatsAndGetChangedRooms().void()
     }
 
-    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
-        val deferred = syncMutex.withLock {
-            inFlightSync?.takeIf { it.isActive } ?: appScope.async(defaultDispatcher) {
-                try {
-                    executeSyncChatsWithChangedRooms()
-                } finally {
-                    withContext(NonCancellable) {
-                        syncMutex.withLock {
-                            if (inFlightSync === this@async) {
-                                inFlightSync = null
-                            }
-                        }
-                    }
-                }
-            }.also { inFlightSync = it }
+    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
+        syncChatsFlight.execute {
+            executeSyncChatsWithChangedRooms()
         }
-
-        return deferred.await()
-    }
 
     private suspend fun executeSyncChatsWithChangedRooms(): Either<DataError, List<String>> {
         val response = networkDataSource.getChatRoomsForUser()

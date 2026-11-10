@@ -17,9 +17,9 @@ Offline-first data repositories, real-time sync coordinator (`ChatRealtimeSyncMa
 ## Invariants
 - Repository implementations and data mappers must be `internal` to encapsulate persistence and network models.
 - Zero background WorkManager dependencies in `:core:data`; background scheduling is delegated to `:sync:work` via `ChatSyncScheduler` SPI.
-- Single-flight coroutine coalescing in `ChatRoomRepositoryImpl` and `ChatSyncManagerImpl` reuses
-  only active `appScope` jobs (`?.takeIf { it.isActive }`), isolating caller cancellation and
-  preventing stale job reuse.
+- Single-flight coroutine coalescing in `ChatRoomRepositoryImpl` and `ChatSyncManagerImpl` is
+  managed via `SingleFlight` (`:core:common`), isolating caller cancellation and preventing stale
+  job reuse.
 - Messages are optimistically inserted into SQLite with `SENDING` status before network dispatch.
 - WebSocket reconnection implements exponential backoff with jitter (`RealtimeConnectionManagerImpl`), triggering 0ms reconnect attempt on online restoration while preserving retry counter until `Connected`.
 - Out-of-order message frames for uncached rooms are buffered (up to 50 per room) until room metadata is fetched to prevent SQLite foreign key constraint crashes (`ChatRealtimeSyncManager`).
