@@ -3,6 +3,7 @@ package io.github.neronguyen.chat.sync.work
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ListenableWorker
 import androidx.work.WorkerParameters
 import arrow.core.Either
 import dagger.assisted.Assisted
@@ -18,20 +19,27 @@ internal class ChatSyncWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        return when (val result = chatSyncManager.performCatchUpSync()) {
-            is Either.Right -> Result.success()
-            is Either.Left -> {
-                if (result.value.isRetryable() && runAttemptCount < MAX_RUN_ATTEMPTS) {
-                    Result.retry()
-                } else {
-                    Result.failure()
-                }
-            }
-        }
+        return executeSyncWork(chatSyncManager, runAttemptCount)
     }
 
     companion object {
         const val MAX_RUN_ATTEMPTS = 3
+    }
+}
+
+internal suspend fun executeSyncWork(
+    chatSyncManager: ChatSyncManager,
+    runAttemptCount: Int,
+): ListenableWorker.Result {
+    return when (val result = chatSyncManager.performCatchUpSync()) {
+        is Either.Right -> ListenableWorker.Result.success()
+        is Either.Left -> {
+            if (result.value.isRetryable() && runAttemptCount < ChatSyncWorker.MAX_RUN_ATTEMPTS) {
+                ListenableWorker.Result.retry()
+            } else {
+                ListenableWorker.Result.failure()
+            }
+        }
     }
 }
 

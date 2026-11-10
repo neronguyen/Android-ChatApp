@@ -65,6 +65,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                             chatSyncScheduler.schedulePeriodicSync()
                             observeReconnectTransitions()
                         }
+
                         is AuthState.Unauthenticated -> {
                             chatSyncScheduler.cancelAllSyncWork()
                             _syncState.value = ChatSyncState.Idle
@@ -85,6 +86,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                             ReconnectState.ConnectedOnce to false
                         }
                     }
+
                     is SocketConnectionState.Disconnected,
                     is SocketConnectionState.Failed -> {
                         if (state is ReconnectState.ConnectedOnce) {
@@ -93,6 +95,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                             state to false
                         }
                     }
+
                     is SocketConnectionState.Connecting,
                     is SocketConnectionState.AuthenticationFailed -> {
                         state to false
@@ -121,13 +124,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
     override suspend fun performCatchUpSync(): Either<DataError, Unit> {
         val deferred = catchUpSyncMutex.withLock {
             inFlightCatchUpSync?.takeIf { it.isActive } ?: appScope.async(ioDispatcher) {
-                try {
-                    executeCatchUpSync()
-                } finally {
-                    catchUpSyncMutex.withLock {
-                        inFlightCatchUpSync = null
-                    }
-                }
+                executeCatchUpSync()
             }.also { inFlightCatchUpSync = it }
         }
         return deferred.await()
@@ -141,6 +138,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                     _syncState.value = ChatSyncState.Failed(syncResult.value)
                     syncResult
                 }
+
                 is Either.Right -> {
                     val changedRoomIds = syncResult.value
                     val semaphore = Semaphore(MAX_CONCURRENT_PREFETCH)
@@ -154,7 +152,8 @@ internal class ChatSyncManagerImpl @Inject constructor(
                         }.awaitAll()
                     }
 
-                    val errors = prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
+                    val errors =
+                        prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
                     if (errors.isNotEmpty()) {
                         val firstError = errors.first()
                         _syncState.value = ChatSyncState.Failed(firstError)

@@ -44,6 +44,7 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
         .map { it.toDomain() }
 
     private val isForeground = MutableStateFlow(false)
+    private var retryAttempt = 0
 
     init {
         startSupervision()
@@ -78,6 +79,9 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
                 tokenDataSource.authState.map { it is AuthState.Authenticated }.distinctUntilChanged(),
                 networkMonitor.isOnline.distinctUntilChanged()
             ) { foreground, isAuthenticated, isOnline ->
+                if (!isAuthenticated) {
+                    retryAttempt = 0
+                }
                 when {
                     !isAuthenticated || !isOnline -> ConnectionPolicy.DisconnectImmediate
                     foreground -> ConnectionPolicy.ActiveSupervision
@@ -109,7 +113,6 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
     }
 
     private suspend fun superviseConnection() {
-        var retryAttempt = 0
         var isImmediateAttempt = true
 
         realtimeDataSource.connectionState.collect { state ->

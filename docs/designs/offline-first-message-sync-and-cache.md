@@ -40,7 +40,9 @@ By scoping this slice to `:core:data`, `:sync:work`, and `:core:model`, UI prese
 1. **Modular WorkManager Extraction**: Extract all WorkManager implementations into an edge consumer module `:sync:work`. `:core:data` retains only a pure SPI interface (`ChatSyncScheduler`).
 2. **Proactive Network Reachability (`NetworkMonitor`)**: Implement `NetworkMonitor` wrapping Android `ConnectivityManager` callbacks. Synchronously seed initial network state on cold start, debounce offline transitions by 300ms to tolerate radio handovers, and immediately trigger 0ms reconnection on online recovery.
 3. **Safe Single-Flight Coalescing**: Repair the in-flight sync mutex in `ChatRoomRepositoryImpl` using `inFlightSync?.takeIf { it.isActive }` and decoupled `invokeOnCompletion` cleanup so cancellation is isolated to the caller and completed jobs are never reused.
-4. **Deterministic, Idempotent Outbound Messaging & Disconnect Sweep**: Update `sendMessage()` and `retryMessage()` to return `Either<ChatError.SendMessage, Unit>`. Transition orphan `SENDING` messages to `FAILED` upon socket disconnect, and reconcile `DuplicateMessageId` server responses to `SENT`.
+4. **Deterministic, Idempotent Outbound Messaging & Disconnect Sweep**: Update `sendMessage()` and
+   `retryMessage()` to return `Either<DataError, Unit>`. Transition orphan `SENDING` messages to
+   `FAILED` upon socket disconnect, and reconcile `DuplicateMessageId` server responses to `SENT`.
 5. **Bounded Parallel Catch-Up Prefetching**: Execute dirty-room prefetching concurrently using `Semaphore(3)` within `supervisorScope` in `ChatSyncManagerImpl.performCatchUpSync()`. Inspect prefetch results and propagate failure if any room fails.
 6. **Unified Data-Layer Sync State Machine**: Expose `ChatSyncState` (`Idle`, `Syncing`, `Synced`, `Failed(val error: DataError)`) from `ChatSyncManager.syncState` for reactive observation by consumers.
 
@@ -107,22 +109,42 @@ graph TD
 
 - **`:sync:work`**: Android library edge consumer. Hosts `ChatSyncWorker` (`@HiltWorker`) and `WorkManagerSyncSchedulerImpl`. Depends on `:core:data` and `:core:model`.
 - **`:core:data`**: Defines the `ChatSyncScheduler` SPI interface. Implements `ChatSyncManagerImpl`, `RealtimeConnectionManagerImpl`, and `ChatRealtimeSyncManager`.
-- **FK Guard Invariant**: `ChatRealtimeSyncManager` enforces Foreign Key guarding: before inserting incoming message entities into SQLite, it verifies the parent room entity exists in Room SQLite to prevent SQLite foreign key constraint violations during out-of-order frame delivery. If `syncChatRoom(roomId)` fails while buffering incoming frames, `ChatRealtimeSyncManager` schedules a catch-up sync once connectivity stabilizes so dropped room messages are fetched authoritatively from the REST slice.
+- **FK Guard Invariant**: `ChatRealtimeSyncManager` enforces Foreign Key guarding: before inserting
+  incoming message entities into SQLite, it verifies the parent room entity exists in Room SQLite to
+  prevent SQLite foreign key constraint violations during out-of-order frame delivery. If
+  `syncChatRoom(roomId)` fails while buffering incoming frames, buffered frames for that room are
+  safely dropped without throwing `SQLiteConstraintException`, and authoritative room/message state
+  is reconciled on subsequent catch-up syncs.
 
 #### 1.1 Architecture Diagrams & Living Specifications (Archify Integration)
 To comply with `AGENTS.md` Section 1 (Level 3 Architecture Governance) and Section 1.1 (Design-First Flow Gate):
 1. **Level 3 Android Components Diagram (`docs/architecture/specifications/android-components.archify.json`)**:
-   - Add new component node for `:sync:work` (`tag: ":sync:work"`, type: `service`, label: `Sync Work`, sublabel: `ChatSyncWorker · WorkManagerSyncSchedulerImpl`).
-   - Wire dependencies: `:app` -> `:sync:work`, `:sync:work` -> `:core:data`, `:sync:work` -> `:core:model`.
+    - Add new component node for `:sync:work` (`tag: ":sync:work"`, type: `backend`, label:
+      `Sync Work`, sublabel: `ChatSyncWorker · SyncScheduler`).
+    - Wire dependencies: `:app` -> `:sync:work`, `:sync:work` -> `:core:data`.
    - Update `:core:data` component node by removing WorkManager responsibilities and dependencies, leaving only SPI interface `ChatSyncScheduler`.
 2. **Offline Catch-Up Sequence Diagram (`docs/architecture/specifications/flows/offline-catchup-sync.sequence.archify.json`)**:
    - **Transition from Obsolete AS-IS to To-Be Flow**: The existing AS-IS diagram depicts the obsolete pattern where `ChatRoomRepository` directly enqueues WorkManager background jobs on network failure. The To-Be sequence replaces this with the decoupled architecture:
-     - **Participants**: `NetworkMonitor`, `RealtimeConnectionManagerImpl`, `ChatSyncWorker` (`:sync:work`), `ChatSyncManager` (`:core:data`), `ChatRoomRepository` (`syncChatsAndGetChangedRooms()`), `ChatMessageRepository` (`syncRecentMessages()`), `ChatDao`, `Backend REST API`.
-     - **Segment 1 (Proactive Network Restoration & Instant Reconnect)**: `NetworkMonitor` detects network restoration and emits `isOnline == true`, immediately cancelling backoff delays in `RealtimeConnectionManagerImpl` (0ms delay).
-     - **Segment 2 (Background Worker Execution)**: `ChatSyncWorker` delegates to `chatSyncManager.performCatchUpSync()` without `:sync:work` coupling to `:core:datastore`.
-     - **Segment 3 (Atomic Single-Flight Room Reconciliation)**: `ChatSyncManager` calls `chatRoomRepository.syncChatsAndGetChangedRooms()`, which coalesces concurrent requests and updates Room SQLite snapshot without self-enqueuing WorkManager.
-     - **Segment 4 (Bounded Parallel Message Prefetching)**: `ChatSyncManager` executes concurrent prefetching across dirty rooms using `Semaphore(3)` within `supervisorScope`, returning `Either.Left` if any room fails (`if (errors.isNotEmpty())`).
-     - **Segment 5 (Disconnect Sweep & Idempotent Conflict Reconciliation)**: Socket drop triggers `ChatRealtimeSyncManager` to sweep orphan `SENDING` messages to `FAILED`; duplicate server frames reconcile to `SENT`.
+       - **Participants**: `NetworkMonitor`, `WsConnection` (`OkHttp WS`), `SyncWorker`
+         (`:sync:work`), `SyncManager` (`:core:data`), `RoomRepo` (`Single-Flight`), `MessageRepo`
+         (`Parallel`), `ChatDao` (`Room SQLite`), `REST API` (`/api/chat`).
+       - **Segment 1 (Proactive Reachability & 0ms Reconnect Delay Cancel)**: `NetworkMonitor`
+         detects network restoration and emits `isOnline == true`, immediately cancelling backoff
+         delays in `RealtimeConnectionManagerImpl` (0ms delay), resetting `retryAttempt = 0`
+         strictly upon `101 Switching Protocols`.
+       - **Segment 2 (Background Worker Delegation & Single-Flight Coalescing)**: `ChatSyncWorker`
+         delegates to `chatSyncManager.performCatchUpSync()`, which calls
+         `chatRoomRepository.syncChatsAndGetChangedRooms()` guarded by
+         `inFlightSync?.takeIf { it.isActive }`.
+       - **Segment 3 (Authoritative Room Reconcile & Dirty Room Diff)**: `ChatRoomRepository`
+         compares pre-sync `getAllRoomsSnapshot()` against `GET /api/chat/rooms`, reconciles via
+         `insertFullChats(rooms, participants, lastMessages)`, and returns the unbounded diff list
+         of `changedRoomIds`.
+       - **Segment 4 (Bounded Parallel Catch-Up Prefetching)**: `ChatSyncManager` executes
+         concurrent prefetching across dirty rooms using `Semaphore(3)` within `supervisorScope`,
+         returning `Either.Left` if any room fails (`if (errors.isNotEmpty())`). (Disconnect sweep
+         and idempotent `DuplicateMessageId` transitions are tracked in
+         `message-delivery-status.lifecycle.archify.json`).
    - **Lifecycle State Gate**: Mark `meta.title` and registry row in `docs/architecture/flows/README.md` as `[PLANNED]` prior to code modification. After passing Tier 2 `./scripts/verify.sh clean`, flip to `[AS-IS]` and re-render visual assets.
 
 ---
@@ -191,37 +213,19 @@ stateDiagram-v2
 
 ### 4. Bounded Parallel Catch-Up Prefetching
 
-`ChatSyncManagerImpl.performCatchUpSync()` is a pure execution engine returning `Either<DataError, Unit>`. It coordinates with `ChatRoomRepository` interface and eliminates the sequential waterfall by running dirty-room message prefetching concurrently, capped at 3 simultaneous HTTP requests:
+`ChatSyncManager.performCatchUpSync(): Either<DataError, Unit>` coordinates catch-up reconciliation
+across `:core:data` repositories:
 
-```kotlin
-override suspend fun performCatchUpSync(): Either<DataError, Unit> {
-    return when (val syncResult = chatRoomRepository.syncChatsAndGetChangedRooms()) {
-        is Either.Left -> syncResult
-        is Either.Right -> {
-            val changedRoomIds = syncResult.value
-            val semaphore = Semaphore(3)
-            val prefetchResults = supervisorScope {
-                changedRoomIds.map { roomId ->
-                    async {
-                        semaphore.withPermit {
-                            chatMessageRepository.syncRecentMessages(roomId)
-                        }
-                    }
-                }.awaitAll()
-            }
-            
-            // If ANY room prefetch fails, propagate the error to prompt WorkManager retry and mark state as Failed
-            val errors = prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
-            if (errors.isNotEmpty()) {
-                Either.Left(errors.first())
-            } else {
-                Either.Right(Unit)
-            }
-        }
-    }
-}
-```
-*Note: `ChatSyncWorker` observes the return value and maps retryable errors to native WorkManager `Result.retry()`. `ChatSyncManagerImpl` never self-enqueues WorkManager jobs.*
+- **Single-Flight Execution**: Concurrent invocations coalesce onto the active `appScope` job
+  (`inFlightCatchUpSync?.takeIf { it.isActive }`), isolating individual caller cancellations from
+  aborting the shared sync cycle.
+- **Bounded Concurrency (`Semaphore(3)`)**: Eliminates the sequential room waterfall by prefetching
+  dirty rooms (`chatMessageRepository.syncRecentMessages(roomId)`) concurrently inside
+  `supervisorScope`, capped at `3` simultaneous requests.
+- **Fail-Fast Error Propagation**: If room list reconciliation or **any** dirty-room prefetch
+  returns `Either.Left<DataError>`, `performCatchUpSync()` transitions `syncState` to
+  `ChatSyncState.Failed(error)` and returns `Either.Left` so `ChatSyncWorker` can map retryable
+  errors to `Result.retry()`. `ChatSyncManagerImpl` never self-enqueues WorkManager jobs.
 
 ---
 
@@ -233,61 +237,48 @@ override suspend fun performCatchUpSync(): Either<DataError, Unit> {
 - Rename existing `syncChatsWithChangedRooms()` on the public `ChatRoomRepository` interface to `syncChatsAndGetChangedRooms(): Either<DataError, List<String>>`. Its concrete implementation in `ChatRoomRepositoryImpl` remains `internal`, while `ChatSyncManagerImpl` injects the `ChatRoomRepository` interface abstraction, preserving DIP and decoupled testability in `ChatSyncManagerTest`.
 
 #### 5.2 Single-Flight Coalescing Atomic Cancellation & Reuse Safety
-Single-flight coroutine coalescing is attached directly to `syncChatsAndGetChangedRooms()`, ensuring that manual calls via `syncChats()` and automated catch-up sync calls share the exact same deduplicated in-flight job:
 
-In `ChatRoomRepositoryImpl`:
-```kotlin
-private var inFlightSync: Deferred<Either<DataError, List<String>>>? = null
-private val syncMutex = Mutex()
+Single-flight coroutine coalescing is attached to `ChatRoomRepository.syncChatsAndGetChangedRooms()`
+(which `syncChats()` delegates to via `.void()`), ensuring manual refreshes and automated catch-up
+syncs share the same deduplicated in-flight job:
 
-override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
-    val deferred = syncMutex.withLock {
-        inFlightSync?.takeIf { it.isActive } ?: appScope.async(defaultDispatcher) {
-            executeSyncChatsWithChangedRooms() // Existing private helper in ChatRoomRepositoryImpl
-        }.also { newDeferred ->
-            inFlightSync = newDeferred
-            newDeferred.invokeOnCompletion {
-                appScope.launch(defaultDispatcher) {
-                    syncMutex.withLock {
-                        if (inFlightSync == newDeferred) {
-                            inFlightSync = null
-                        }
-                    }
-                }
-            }
-        }
-    }
-    return deferred.await()
-}
-
-override suspend fun syncChats(): Either<DataError, Unit> =
-    syncChatsAndGetChangedRooms().map { }
-```
-The check `inFlightSync?.takeIf { it.isActive }` guarantees that:
-1. Cancellation of Caller A's coroutine does not abort the shared `Deferred` running in `appScope`.
-2. Completed or cancelled `Deferred` instances are never reused by subsequent callers.
+- **Active Job Reuse Only**: Guarded by `syncMutex`, callers reuse
+  `inFlightSync?.takeIf { it.isActive }` or launch a new `Deferred` in `appScope`.
+- **Caller Cancellation Isolation**: Cancelling Caller A's awaiting coroutine does not cancel the
+  shared `Deferred` running in `appScope`, allowing Caller B to complete normally.
+- **No Stale Reuse or Reference Clobbering**: Completed or cancelled `Deferred` instances
+  (`isActive == false`) are never reused by subsequent callers, and reference cleanup
+  (`if (inFlightSync === this@async)`) runs under `NonCancellable` + `syncMutex` so a finishing job
+  never overwrites a newer `Deferred`.
 
 #### 5.3 Deterministic Outbound Messaging, Disconnect Sweep & Idempotency
 In `ChatMessageRepository`:
 ```kotlin
-suspend fun sendMessage(roomId: String, content: String): Either<ChatError.SendMessage, Unit>
-suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit>
+suspend fun sendMessage(roomId: String, content: String): Either<DataError, Unit>
+suspend fun retryMessage(messageId: String): Either<DataError, Unit>
 ```
-1. If unauthenticated, returns `Left(ChatError.SendMessage.NotAuthenticated)`.
-2. For `retryMessage`, if the message does not exist in SQLite, returns `Left(ChatError.SendMessage.MessageNotFound)`.
+
+1. If unauthenticated, returns `Left(DataError.Local.NotAuthenticated)`.
+2. For `retryMessage`, if the message does not exist in SQLite, returns
+   `Left(DataError.Local.NotFound)`.
 3. Inserts into SQLite as `SENDING` with client `UUIDv7`, and enqueues frame over WebSocket.
 4. If immediate socket enqueue fails, updates row to `FAILED`. Returns `Right(Unit)` because the message is successfully staged locally in Room SQLite, which is reactively observed by presentation consumers via `Flow<List<ChatMessage>>`.
-5. **Disconnect Sweep Invariant**: `ChatRealtimeSyncManager` (which already injects `ChatDao` and observes `realtimeDataSource.connectionState`) calls `chatDao.markSendingMessagesAsFailed()` whenever the connection transitions to `RealtimeConnectionState.DISCONNECTED` or `RealtimeConnectionState.FAILED`, ensuring that messages do not remain stuck in `SENDING` when the socket drops.
-6. **Server Idempotency**: In `ChatRealtimeSyncManager`, when handling `WsServerEvent.Error` with `ChatServerError.WebSocket.DuplicateMessageId`, the delivery status is updated to `SENT` instead of `FAILED`.
+5. **Disconnect Sweep Invariant**: `ChatRealtimeSyncManager` (which already injects `ChatDao` and
+   observes `realtimeDataSource.connectionState`) calls `chatDao.markSendingMessagesAsFailed()`
+   whenever the connection transitions to `SocketConnectionState.Disconnected` or
+   `SocketConnectionState.Failed`, ensuring that messages do not remain stuck in `SENDING` when the
+   socket drops.
+6. **Server Idempotency**: In `ChatRealtimeSyncManager`, when handling `WsServerEvent.Error` with
+   `ChatServerError.DuplicateMessageId.code`, the delivery status is updated to `SENT` instead of
+   `FAILED`.
 
 #### 5.4 Error Hierarchy Alignment
-- `ChatError.SendMessage`:
+
+- `DataError.Local`:
   ```kotlin
-  sealed interface SendMessage : ChatError {
-      data object NotAuthenticated : SendMessage
-      data object RoomNotFound : SendMessage
-      data object MessageNotFound : SendMessage, DeleteMessage
-      data class Data(val error: DataError) : SendMessage
+  sealed interface Local : DataError {
+      data object NotAuthenticated : Local
+      data object NotFound : Local
   }
   ```
 - `chatMessageRepository.syncRecentMessages(roomId)` and `loadOlderMessages(roomId)` strictly retain `Either<DataError, Boolean>`, matching `ChatSyncState.Failed(val error: DataError)` directly.

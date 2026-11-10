@@ -1,7 +1,6 @@
 package io.github.neronguyen.chat.core.data.realtime
 
 import androidx.lifecycle.LifecycleOwner
-import arrow.core.Either
 import io.github.neronguyen.chat.core.data.testing.TestNetworkMonitor
 import io.github.neronguyen.chat.core.data.util.NetworkMonitor
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
@@ -47,7 +46,7 @@ class RealtimeConnectionManagerTest {
         Dispatchers.resetMain()
     }
 
-    private class FakeChatRealtimeDataSource : ChatRealtimeDataSource {
+    private open class FakeChatRealtimeDataSource : ChatRealtimeDataSource {
         val incomingEventsFlow = MutableSharedFlow<WsServerEvent>()
         val connectionStateFlow = MutableStateFlow<SocketConnectionState>(SocketConnectionState.Disconnected)
 
@@ -267,6 +266,54 @@ class RealtimeConnectionManagerTest {
 
         assertEquals(1, fakeDataSource.connectCalledCount)
     }
+
+    @Test
+    fun `network flapping before Connected preserves retryAttempt backoff and resets only after Connected`() =
+        runTest {
+            var shouldSucceedConnect = false
+            val fakeDataSource = object : FakeChatRealtimeDataSource() {
+                override suspend fun connect() {
+                    connectCalledCount++
+                    connectionStateFlow.value = if (shouldSucceedConnect) {
+                        SocketConnectionState.Connected
+                    } else {
+                        SocketConnectionState.Failed(RuntimeException("Handshake failed #$connectCalledCount"))
+                    }
+                }
+            }
+            val networkMonitor = TestNetworkMonitor(initialOnline = true)
+            val manager = createManager(fakeDataSource, networkMonitor = networkMonitor)
+
+            val owner = FakeLifecycleOwner()
+            manager.onStart(owner)
+            testScheduler.runCurrent()
+
+            // 1st attempt runs immediately (0ms) and fails; retryAttempt is now 1 (backoff ~1600..2400ms)
+            assertEquals(1, fakeDataSource.connectCalledCount)
+
+            // Flap network offline -> online before backoff completes
+            networkMonitor.setConnected(false)
+            testScheduler.runCurrent()
+            networkMonitor.setConnected(true)
+            testScheduler.runCurrent()
+
+            // Online recovery triggers immediate attempt #2 (0ms), which also fails; retryAttempt is now 2 (backoff ~3200..4800ms)
+            assertEquals(2, fakeDataSource.connectCalledCount)
+
+            // Because retryAttempt was NOT reset to 0 by the online flap (it is 2, not 1),
+            // advancing 2500ms (enough for attempt 1's max 2400ms backoff, but less than attempt 2's min 3200ms backoff)
+            // must NOT trigger attempt #3 yet!
+            testScheduler.advanceTimeBy(2_500)
+            testScheduler.runCurrent()
+            assertEquals(2, fakeDataSource.connectCalledCount)
+
+            // Advancing past attempt 2's max backoff (4800ms total) triggers attempt #3, which succeeds -> resets retryAttempt = 0
+            shouldSucceedConnect = true
+            testScheduler.advanceTimeBy(2_500)
+            testScheduler.runCurrent()
+            assertEquals(3, fakeDataSource.connectCalledCount)
+            assertEquals(SocketConnectionState.Connected, fakeDataSource.connectionStateFlow.value)
+        }
 
     @Test
     fun `connectionState maps socket states to domain RealtimeConnectionState`() = runTest {

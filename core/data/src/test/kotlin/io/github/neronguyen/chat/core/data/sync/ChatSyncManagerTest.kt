@@ -184,6 +184,81 @@ class ChatSyncManagerTest {
         assertEquals(ChatSyncState.Idle, chatSyncManager.syncState.value)
     }
 
+    @Test
+    fun `performCatchUpSync bounds concurrent room message prefetching to 3 via Semaphore`() =
+        runTest(testDispatcher) {
+            val roomIds = (1..6).map { "room-$it" }
+            fakeChatRoomRepository.changedRoomIdsResult = Either.Right(roomIds)
+
+            var currentActive = 0
+            var maxObservedActive = 0
+            val gates = roomIds.associateWith { CompletableDeferred<Either<DataError, Boolean>>() }
+
+            fakeChatMessageRepository.customSyncRecentBlock = { roomId ->
+                currentActive++
+                if (currentActive > maxObservedActive) {
+                    maxObservedActive = currentActive
+                }
+                try {
+                    gates.getValue(roomId).await()
+                } finally {
+                    currentActive--
+                }
+            }
+
+            val syncJob = launch {
+                val result = chatSyncManager.performCatchUpSync()
+                assertTrue(result.isRight())
+            }
+            testScheduler.runCurrent()
+
+            // First wave: exactly 3 rooms should be actively executing inside Semaphore(3)
+            assertEquals(3, currentActive)
+            assertEquals(3, maxObservedActive)
+
+            // Release 1 room -> 4th room enters, active count stays capped at 3
+            gates.getValue("room-1").complete(Either.Right(false))
+            testScheduler.runCurrent()
+            assertEquals(3, currentActive)
+            assertEquals(3, maxObservedActive)
+
+            // Release remaining rooms
+            roomIds.drop(1).forEach { gates.getValue(it).complete(Either.Right(false)) }
+            testScheduler.advanceUntilIdle()
+            syncJob.join()
+
+            assertEquals(0, currentActive)
+            assertEquals(3, maxObservedActive)
+            assertEquals(6, fakeChatMessageRepository.syncedRoomIds.size)
+            assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
+        }
+
+    @Test
+    fun `performCatchUpSync coalesces concurrent calls and isolates caller cancellation`() =
+        runTest(testDispatcher) {
+            val gate = CompletableDeferred<Either<DataError, List<String>>>()
+            fakeChatRoomRepository.customSyncBlock = { gate.await() }
+
+            val caller1 = launch { chatSyncManager.performCatchUpSync() }
+            var caller2Result: Either<DataError, Unit>? = null
+            val caller2 = launch { caller2Result = chatSyncManager.performCatchUpSync() }
+
+            testScheduler.runCurrent()
+            assertEquals(1, fakeChatRoomRepository.syncChatsAndGetChangedRoomsCallCount)
+
+            // Cancel caller 1 mid-flight; caller 2 must still complete from the shared job
+            caller1.cancel()
+            testScheduler.runCurrent()
+
+            gate.complete(Either.Right(listOf("room-1")))
+            testScheduler.advanceUntilIdle()
+            caller2.join()
+
+            assertEquals(Either.Right(Unit), caller2Result)
+            assertEquals(1, fakeChatRoomRepository.syncChatsAndGetChangedRoomsCallCount)
+            assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
+        }
+
     private class FakeChatRoomRepository : ChatRoomRepository {
         var syncChatsAndGetChangedRoomsCallCount = 0
         var changedRoomIdsResult: Either<DataError, List<String>> = Either.Right(emptyList())
@@ -217,12 +292,13 @@ class ChatSyncManagerTest {
     private class FakeChatMessageRepository : ChatMessageRepository {
         val syncedRoomIds = mutableListOf<String>()
         var syncResultForRoom: (String) -> Either<DataError, Boolean> = { Either.Right(false) }
+        var customSyncRecentBlock: (suspend (String) -> Either<DataError, Boolean>)? = null
 
         override fun getMessages(roomId: String, limit: Int): Flow<List<ChatMessage>> = emptyFlow()
 
         override suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean> {
             syncedRoomIds.add(roomId)
-            return syncResultForRoom(roomId)
+            return customSyncRecentBlock?.invoke(roomId) ?: syncResultForRoom(roomId)
         }
 
         override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> = Either.Right(false)

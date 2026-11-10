@@ -25,13 +25,14 @@ import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -62,13 +63,15 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
                 try {
                     executeSyncChatsWithChangedRooms()
                 } finally {
-                    syncMutex.withLock {
-                        inFlightSync = null
+                    withContext(NonCancellable) {
+                        syncMutex.withLock {
+                            if (inFlightSync === this@async) {
+                                inFlightSync = null
+                            }
+                        }
                     }
                 }
-            }.also { newDeferred ->
-                inFlightSync = newDeferred
-            }
+            }.also { inFlightSync = it }
         }
 
         return deferred.await()

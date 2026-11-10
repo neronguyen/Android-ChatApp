@@ -1,7 +1,6 @@
 package io.github.neronguyen.chat.core.data.repository
 
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.sync.ChatSyncScheduler
 import io.github.neronguyen.chat.core.database.dao.ChatDao
 import io.github.neronguyen.chat.core.database.entity.ChatMessageEntity
 import io.github.neronguyen.chat.core.database.entity.ChatParticipantEntity
@@ -383,7 +382,8 @@ class ChatRoomRepositoryImplTest {
     }
 
     @Test
-    fun `syncChatsWithChangedRooms returns newly discovered and activity-advanced rooms capped at 5`() = runTest {
+    fun `syncChatsAndGetChangedRooms returns all newly discovered and activity-advanced rooms sorted by activity`() =
+        runTest {
         val fakeDao = FakeChatDao()
         // Local snapshot has room-1 with lastActivityAt 1000L and lastMessageId m-1
         fakeDao.allRoomsSnapshot = listOf(
@@ -477,5 +477,41 @@ class ChatRoomRepositoryImplTest {
         assertTrue(res2.isRight())
         assertEquals(1, fakeNetwork.getChatRoomsForUserCallCount)
     }
+
+    @Test
+    fun `syncChatsAndGetChangedRooms isolates caller cancellation so remaining callers and subsequent calls succeed`() =
+        runTest {
+            val fakeDao = FakeChatDao()
+            val fakeNetwork = FakeChatNetworkDataSource()
+            val completable =
+                CompletableDeferred<Either<NetworkError<Nothing>, List<ChatRoomDto>>>()
+            fakeNetwork.chatRoomsCompletable = completable
+
+            val testScope = TestScope(testDispatcher)
+            val repository = createRepository(fakeDao, fakeNetwork, scope = testScope)
+
+            val call1 = async { repository.syncChatsAndGetChangedRooms() }
+            val call2 = async { repository.syncChatsAndGetChangedRooms() }
+
+            testScheduler.runCurrent()
+            assertEquals(1, fakeNetwork.getChatRoomsForUserCallCount)
+
+            // Cancel caller 1 mid-flight; shared appScope Deferred and caller 2 must remain unaffected
+            call1.cancel()
+            testScheduler.runCurrent()
+
+            completable.complete(Either.Right(emptyList()))
+            testScheduler.advanceUntilIdle()
+
+            val res2 = call2.await()
+            assertTrue(res2.isRight())
+            assertEquals(1, fakeNetwork.getChatRoomsForUserCallCount)
+
+            // Subsequent call after completion must not reuse the completed Deferred
+            fakeNetwork.chatRoomsCompletable = null
+            val res3 = repository.syncChatsAndGetChangedRooms()
+            assertTrue(res3.isRight())
+            assertEquals(2, fakeNetwork.getChatRoomsForUserCallCount)
+        }
 }
 
