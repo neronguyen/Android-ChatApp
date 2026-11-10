@@ -10,6 +10,8 @@ Application-wide coroutine dispatchers, application coroutine scope bindings, an
 - `[KeyedSingleFlight.kt:KeyedSingleFlight]`: Keyed concurrency coalescing utility ensuring
   concurrent callers for the same key share a single in-flight `Deferred`, with independent
   execution across distinct keys.
+- `[ConcurrencyExtensions.kt:mapConcurrent]`: Bounded parallel transformation extension (`Semaphore`
+  + `supervisorScope`) isolating child failure while preserving output order.
 - `[ExponentialBackoff.kt:ExponentialBackoff]`: Parameterized exponential backoff and symmetric
   jitter calculator for resilient reconnection loops and transient failure retries.
 - `[ChatDispatchers.kt:ChatDispatchers]`: Dispatcher enumeration (`Default`, `IO`) used with `@Dispatcher` qualifier.

@@ -11,7 +11,6 @@ import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
@@ -24,12 +23,16 @@ import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -216,6 +219,8 @@ class ChatMessageRepositoryImplTest {
     private class FakeChatNetworkDataSource : ChatNetworkDataSource {
         var lastRequestedBefore: Instant? = null
         var messagesToReturn = ChatMessageSliceDto(messages = emptyList(), hasMore = false)
+        var getMessagesCallCount = 0
+        var getMessagesGate: CompletableDeferred<Unit>? = null
 
         override suspend fun getChatRoomsForUser(): Either<NetworkError<Nothing>, List<ChatRoomDto>> =
             Either.Right(emptyList())
@@ -227,7 +232,9 @@ class ChatMessageRepositoryImplTest {
             roomId: String,
             before: Instant?
         ): Either<NetworkError<ChatServerError.GetMessages>, ChatMessageSliceDto> {
+            getMessagesCallCount++
             lastRequestedBefore = before
+            getMessagesGate?.await()
             return Either.Right(messagesToReturn)
         }
 
@@ -283,11 +290,13 @@ class ChatMessageRepositoryImplTest {
         realtimeDataSource: ChatRealtimeDataSource,
         networkDataSource: ChatNetworkDataSource,
         tokenDataSource: TokenDataSource,
+        appScope: CoroutineScope = TestScope(testDispatcher),
     ): ChatMessageRepositoryImpl = ChatMessageRepositoryImpl(
         chatDao = chatDao,
         realtimeDataSource = realtimeDataSource,
         networkDataSource = networkDataSource,
         tokenDataSource = tokenDataSource,
+        appScope = appScope,
         defaultDispatcher = testDispatcher
     )
 
@@ -690,5 +699,63 @@ class ChatMessageRepositoryImplTest {
         assertTrue(result.isRight())
         assertEquals(MessageDeliveryStatus.DELETED, fakeDao.updatedStatuses["msg-456"])
     }
+
+    @Test
+    fun `concurrent syncRecentMessages calls for same room coalesce into single network call`() =
+        runTest(testDispatcher) {
+            val gate = CompletableDeferred<Unit>()
+            val fakeDao = FakeChatDao()
+            val fakeNetwork = FakeChatNetworkDataSource().apply {
+                getMessagesGate = gate
+                messagesToReturn = ChatMessageSliceDto(messages = emptyList(), hasMore = true)
+            }
+            val repository = createRepository(
+                chatDao = fakeDao,
+                realtimeDataSource = FakeChatRealtimeDataSource(),
+                networkDataSource = fakeNetwork,
+                tokenDataSource = FakeTokenDataSource(),
+                appScope = backgroundScope,
+            )
+
+            val first = async { repository.syncRecentMessages("room1") }
+            val second = async { repository.syncRecentMessages("room1") }
+            assertEquals(1, fakeNetwork.getMessagesCallCount)
+
+            gate.complete(Unit)
+
+            assertEquals(Either.Right(true), first.await())
+            assertEquals(Either.Right(true), second.await())
+            assertEquals(1, fakeNetwork.getMessagesCallCount)
+        }
+
+    @Test
+    fun `concurrent loadOlderMessages calls for same room coalesce into single network call`() =
+        runTest(testDispatcher) {
+            val gate = CompletableDeferred<Unit>()
+            val fakeDao = FakeChatDao().apply {
+                oldestSentTimestampToReturn = 1700000000000L
+            }
+            val fakeNetwork = FakeChatNetworkDataSource().apply {
+                getMessagesGate = gate
+                messagesToReturn = ChatMessageSliceDto(messages = emptyList(), hasMore = false)
+            }
+            val repository = createRepository(
+                chatDao = fakeDao,
+                realtimeDataSource = FakeChatRealtimeDataSource(),
+                networkDataSource = fakeNetwork,
+                tokenDataSource = FakeTokenDataSource(),
+                appScope = backgroundScope,
+            )
+
+            val first = async { repository.loadOlderMessages("room1") }
+            val second = async { repository.loadOlderMessages("room1") }
+            assertEquals(1, fakeNetwork.getMessagesCallCount)
+
+            gate.complete(Unit)
+
+            assertEquals(Either.Right(false), first.await())
+            assertEquals(Either.Right(false), second.await())
+            assertEquals(1, fakeNetwork.getMessagesCallCount)
+        }
 }
 

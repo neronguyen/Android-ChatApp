@@ -15,7 +15,8 @@ Pure Kotlin client domain models and typed domain error hierarchies.
   (`DISCONNECTED`, `CONNECTING`, `CONNECTED`, `FAILED`).
 - `[AuthError.kt:AuthError]`: Sealed hierarchy of client authentication errors.
 - `[ChatError.kt:ChatError]`: Sealed hierarchy of client chat errors.
-- `[DataError.kt:DataError]`: Sealed hierarchy of data storage and network failures.
+- `[DataError.kt:DataError]`: Sealed hierarchy of data storage and network failures, with
+  `DataError.isRetryable()` transient failure classification.
 
 ## Invariants
 - Zero Android framework or persistence dependencies (pure Kotlin JVM module).

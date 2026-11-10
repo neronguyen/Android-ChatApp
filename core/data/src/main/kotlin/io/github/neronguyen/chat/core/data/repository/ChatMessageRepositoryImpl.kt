@@ -1,6 +1,8 @@
 package io.github.neronguyen.chat.core.data.repository
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.common.coroutine.KeyedSingleFlight
+import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
 import io.github.neronguyen.chat.core.data.mapper.toDataError
@@ -19,6 +21,7 @@ import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
@@ -35,8 +38,18 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
     private val realtimeDataSource: ChatRealtimeDataSource,
     private val networkDataSource: ChatNetworkDataSource,
     private val tokenDataSource: TokenDataSource,
+    @AppScope private val appScope: CoroutineScope,
     @Dispatcher(ChatDispatchers.Default) private val defaultDispatcher: CoroutineDispatcher
 ) : ChatMessageRepository {
+
+    private val syncRecentFlight = KeyedSingleFlight<String, Either<DataError, Boolean>>(
+        scope = appScope,
+        dispatcher = defaultDispatcher,
+    )
+    private val loadOlderFlight = KeyedSingleFlight<String, Either<DataError, Boolean>>(
+        scope = appScope,
+        dispatcher = defaultDispatcher,
+    )
 
     override fun getMessages(roomId: String, limit: Int): Flow<List<ChatMessage>> {
         require(limit > 0) { "limit must be greater than 0" }
@@ -46,34 +59,36 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         }.flowOn(defaultDispatcher)
     }
 
-    override suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean> {
-        return networkDataSource.getMessagesForChatRoom(roomId, before = null)
-            .mapLeft { it.toDataError() }
-            .map { slice ->
-                val remoteEntities = slice.messages.map { it.toEntity() }
-                chatDao.syncRecentMessagesTransaction(roomId, remoteEntities)
-                slice.hasMore
-            }
-    }
-
-    override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> {
-        val oldestTimestamp = chatDao.getOldestSentMessageTimestamp(roomId)
-            ?: return syncRecentMessages(roomId)
-
-        val before = Instant.fromEpochMilliseconds(oldestTimestamp)
-
-        return networkDataSource.getMessagesForChatRoom(
-            roomId = roomId,
-            before = before
-        ).mapLeft { it.toDataError() }
-            .map { slice ->
-                if (slice.messages.isNotEmpty()) {
-                    chatDao.upsertMessages(slice.messages.map { it.toEntity() })
+    override suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean> =
+        syncRecentFlight.execute(roomId) {
+            networkDataSource.getMessagesForChatRoom(roomId, before = null)
+                .mapLeft { it.toDataError() }
+                .map { slice ->
+                    val remoteEntities = slice.messages.map { it.toEntity() }
+                    chatDao.syncRecentMessagesTransaction(roomId, remoteEntities)
+                    slice.hasMore
                 }
+        }
 
-                slice.hasMore
-            }
-    }
+    override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> =
+        loadOlderFlight.execute(roomId) {
+            val oldestTimestamp = chatDao.getOldestSentMessageTimestamp(roomId)
+                ?: return@execute syncRecentMessages(roomId)
+
+            val before = Instant.fromEpochMilliseconds(oldestTimestamp)
+
+            networkDataSource.getMessagesForChatRoom(
+                roomId = roomId,
+                before = before
+            ).mapLeft { it.toDataError() }
+                .map { slice ->
+                    if (slice.messages.isNotEmpty()) {
+                        chatDao.upsertMessages(slice.messages.map { it.toEntity() })
+                    }
+
+                    slice.hasMore
+                }
+        }
 
     @OptIn(ExperimentalUuidApi::class)
     override suspend fun sendMessage(

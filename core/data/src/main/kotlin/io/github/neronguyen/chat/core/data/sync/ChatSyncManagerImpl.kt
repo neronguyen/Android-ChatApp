@@ -2,6 +2,7 @@ package io.github.neronguyen.chat.core.data.sync
 
 import arrow.core.Either
 import io.github.neronguyen.chat.core.common.coroutine.SingleFlight
+import io.github.neronguyen.chat.core.common.coroutine.mapConcurrent
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
@@ -16,8 +17,6 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -25,9 +24,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.supervisorScope
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -137,15 +133,9 @@ internal class ChatSyncManagerImpl @Inject constructor(
 
                 is Either.Right -> {
                     val changedRoomIds = syncResult.value
-                    val semaphore = Semaphore(MAX_CONCURRENT_PREFETCH)
-                    val prefetchResults = supervisorScope {
-                        changedRoomIds.map { roomId ->
-                            async {
-                                semaphore.withPermit {
-                                    chatMessageRepository.syncRecentMessages(roomId)
-                                }
-                            }
-                        }.awaitAll()
+                    val prefetchResults =
+                        changedRoomIds.mapConcurrent(MAX_CONCURRENT_PREFETCH) { roomId ->
+                            chatMessageRepository.syncRecentMessages(roomId)
                     }
 
                     val errors =

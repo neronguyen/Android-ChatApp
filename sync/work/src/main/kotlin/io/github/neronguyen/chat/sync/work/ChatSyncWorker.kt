@@ -9,7 +9,7 @@ import arrow.core.Either
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
-import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.model.error.isRetryable
 
 @HiltWorker
 internal class ChatSyncWorker @AssistedInject constructor(
@@ -40,15 +40,5 @@ internal suspend fun executeSyncWork(
                 ListenableWorker.Result.failure()
             }
         }
-    }
-}
-
-internal fun DataError.isRetryable(): Boolean {
-    return when (this) {
-        is DataError.Connectivity.NoInternet,
-        is DataError.Connectivity.Timeout,
-        is DataError.Remote.RateLimited,
-        is DataError.Remote.Unavailable -> true
-        else -> false
     }
 }

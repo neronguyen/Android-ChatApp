@@ -5,6 +5,7 @@ import arrow.core.Either
 import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
 import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.model.error.isRetryable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.runTest

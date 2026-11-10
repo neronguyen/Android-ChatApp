@@ -31,3 +31,16 @@ sealed interface DataError {
         data object NotFound : Local
     }
 }
+
+/**
+ * Returns `true` when this [DataError] represents a transient connectivity or server availability
+ * failure that is safe to retry with backoff.
+ */
+fun DataError.isRetryable(): Boolean = when (this) {
+    is DataError.Connectivity.NoInternet,
+    is DataError.Connectivity.Timeout,
+    is DataError.Remote.RateLimited,
+    is DataError.Remote.Unavailable -> true
+
+    else -> false
+}
