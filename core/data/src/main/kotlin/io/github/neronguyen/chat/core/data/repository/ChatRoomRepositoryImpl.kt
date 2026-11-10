@@ -32,7 +32,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -54,7 +53,7 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
     }
 
     override suspend fun syncChats(): Either<DataError, Unit> {
-        return syncChatsAndGetChangedRooms().map { }
+        return syncChatsAndGetChangedRooms().void()
     }
 
     override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
@@ -76,63 +75,66 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
     }
 
     private suspend fun executeSyncChatsWithChangedRooms(): Either<DataError, List<String>> {
-        return withContext(defaultDispatcher) {
-            val response = networkDataSource.getChatRoomsForUser()
-            response.fold(
-                ifLeft = { networkError ->
-                    Either.Left(networkError.toDataError())
-                },
-                ifRight = { roomDtos ->
-                    val localSnapshot = chatDao.getAllRoomsSnapshot().associateBy { it.id }
+        val response = networkDataSource.getChatRoomsForUser()
+        return response.fold(
+            ifLeft = { networkError ->
+                Either.Left(networkError.toDataError())
+            },
+            ifRight = { roomDtos ->
+                val localSnapshot = chatDao.getAllRoomsSnapshot().associateBy { it.id }
 
-                    val changedRoomIds = roomDtos.filter { dto ->
-                        val local = localSnapshot[dto.id]
-                        if (local == null) {
-                            true
-                        } else {
-                            val serverActivity = dto.lastActivityAt.toEpochMilliseconds()
-                            val localActivity = local.lastActivityAt
-                            val activityAdvanced =
-                                localActivity == null || serverActivity > localActivity
-                            val serverLastMessageId = dto.lastMessage?.id
-                            val messageChanged =
-                                serverLastMessageId != null && serverLastMessageId != local.lastMessageId
-                            activityAdvanced || messageChanged
-                        }
+                val changedRoomIds = roomDtos.filter { dto ->
+                    val local = localSnapshot[dto.id]
+                    if (local == null) {
+                        true
+                    } else {
+                        val serverActivity = dto.lastActivityAt.toEpochMilliseconds()
+                        val localActivity = local.lastActivityAt
+                        val activityAdvanced =
+                            localActivity == null || serverActivity > localActivity
+                        val serverLastMessageId = dto.lastMessage?.id
+                        val messageChanged =
+                            serverLastMessageId != null && serverLastMessageId != local.lastMessageId
+                        activityAdvanced || messageChanged
                     }
-                        .sortedByDescending { it.lastActivityAt }
-                        .map { it.id }
-
-                    val rooms = roomDtos.map { it.toEntity() }
-
-                    val participants = mutableSetOf<ChatParticipantDto>()
-                    roomDtos.forEach { participants.addAll(it.participants + it.creator) }
-                    val participantEntities = participants.map { it.toEntity() }
-
-                    val lastMessages = roomDtos.mapNotNull {
-                        it.lastMessage?.toEntity(MessageDeliveryStatus.SENT)
-                    }
-
-                    val crossRefs = roomDtos.flatMap { dto ->
-                        val allParticipantIds =
-                            (dto.participants.map { it.userId } + dto.creator.userId).distinct()
-
-                        allParticipantIds.map { userId ->
-                            ChatRoomParticipantCrossRef(roomId = dto.id, userId = userId)
-                        }
-                    }
-
-                    chatDao.insertFullChats(
-                        rooms = rooms,
-                        participants = participantEntities,
-                        lastMessages = lastMessages,
-                        crossRefs = crossRefs
-                    )
-
-                    Either.Right(changedRoomIds)
                 }
-            )
-        }
+                    .sortedByDescending { it.lastActivityAt }
+                    .map { it.id }
+
+                val rooms = roomDtos.map { it.toEntity() }
+
+                val participants = mutableSetOf<ChatParticipantDto>()
+                roomDtos.forEach { dto ->
+                    participants.addAll(dto.participants)
+                    participants.add(dto.creator)
+                }
+                val participantEntities = participants.map { it.toEntity() }
+
+                val lastMessages = roomDtos.mapNotNull {
+                    it.lastMessage?.toEntity(MessageDeliveryStatus.SENT)
+                }
+
+                val crossRefs = roomDtos.flatMap { dto ->
+                    val allParticipantIds = buildSet {
+                        dto.participants.forEach { add(it.userId) }
+                        add(dto.creator.userId)
+                    }
+
+                    allParticipantIds.map { userId ->
+                        ChatRoomParticipantCrossRef(roomId = dto.id, userId = userId)
+                    }
+                }
+
+                chatDao.insertFullChats(
+                    rooms = rooms,
+                    participants = participantEntities,
+                    lastMessages = lastMessages,
+                    crossRefs = crossRefs
+                )
+
+                Either.Right(changedRoomIds)
+            }
+        )
     }
 
     override suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant> {
@@ -210,3 +212,5 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
         )
     }
 }
+
+private fun <A, B> Either<A, B>.void(): Either<A, Unit> = map { }

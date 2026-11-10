@@ -99,7 +99,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                     }
                 }
             }
-            .collect { (_, triggerCatchUp) ->
+            .collectLatest { (_, triggerCatchUp) ->
                 if (triggerCatchUp) {
                     try {
                         performCatchUpSync()
@@ -135,34 +135,44 @@ internal class ChatSyncManagerImpl @Inject constructor(
 
     private suspend fun executeCatchUpSync(): Either<DataError, Unit> {
         _syncState.value = ChatSyncState.Syncing
-        return when (val syncResult = chatRoomRepository.syncChatsAndGetChangedRooms()) {
-            is Either.Left -> {
-                _syncState.value = ChatSyncState.Failed(syncResult.value)
-                syncResult
-            }
-            is Either.Right -> {
-                val changedRoomIds = syncResult.value
-                val semaphore = Semaphore(3)
-                val prefetchResults = supervisorScope {
-                    changedRoomIds.map { roomId ->
-                        async {
-                            semaphore.withPermit {
-                                chatMessageRepository.syncRecentMessages(roomId)
+        try {
+            return when (val syncResult = chatRoomRepository.syncChatsAndGetChangedRooms()) {
+                is Either.Left -> {
+                    _syncState.value = ChatSyncState.Failed(syncResult.value)
+                    syncResult
+                }
+                is Either.Right -> {
+                    val changedRoomIds = syncResult.value
+                    val semaphore = Semaphore(MAX_CONCURRENT_PREFETCH)
+                    val prefetchResults = supervisorScope {
+                        changedRoomIds.map { roomId ->
+                            async {
+                                semaphore.withPermit {
+                                    chatMessageRepository.syncRecentMessages(roomId)
+                                }
                             }
-                        }
-                    }.awaitAll()
-                }
+                        }.awaitAll()
+                    }
 
-                val errors = prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
-                if (errors.isNotEmpty()) {
-                    val firstError = errors.first()
-                    _syncState.value = ChatSyncState.Failed(firstError)
-                    Either.Left(firstError)
-                } else {
-                    _syncState.value = ChatSyncState.Synced
-                    Either.Right(Unit)
+                    val errors = prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
+                    if (errors.isNotEmpty()) {
+                        val firstError = errors.first()
+                        _syncState.value = ChatSyncState.Failed(firstError)
+                        Either.Left(firstError)
+                    } else {
+                        _syncState.value = ChatSyncState.Synced
+                        Either.Right(Unit)
+                    }
                 }
+            }
+        } finally {
+            if (_syncState.value is ChatSyncState.Syncing) {
+                _syncState.value = ChatSyncState.Idle
             }
         }
+    }
+
+    private companion object {
+        private const val MAX_CONCURRENT_PREFETCH = 3
     }
 }

@@ -16,12 +16,15 @@ import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -163,16 +166,35 @@ class ChatSyncManagerTest {
         assertEquals(ChatSyncState.Failed(roomError), chatSyncManager.syncState.value)
     }
 
+    @Test
+    fun `when appScope is cancelled during catch-up sync, syncState resets to Idle`() = runTest(testDispatcher) {
+        val hangDeferred = CompletableDeferred<Either<DataError, List<String>>>()
+        fakeChatRoomRepository.customSyncBlock = { hangDeferred.await() }
+
+        launch {
+            chatSyncManager.performCatchUpSync()
+        }
+        testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Syncing, chatSyncManager.syncState.value)
+
+        testScope.cancel()
+        testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Idle, chatSyncManager.syncState.value)
+    }
+
     private class FakeChatRoomRepository : ChatRoomRepository {
         var syncChatsAndGetChangedRoomsCallCount = 0
         var changedRoomIdsResult: Either<DataError, List<String>> = Either.Right(emptyList())
+        var customSyncBlock: (suspend () -> Either<DataError, List<String>>)? = null
 
         override fun getChats(): Flow<List<ChatRoom>> = emptyFlow()
         override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
 
         override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
             syncChatsAndGetChangedRoomsCallCount++
-            return changedRoomIdsResult
+            return customSyncBlock?.invoke() ?: changedRoomIdsResult
         }
 
         override suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant> =
