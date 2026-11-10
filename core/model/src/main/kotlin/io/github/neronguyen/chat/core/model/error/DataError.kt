@@ -28,5 +28,6 @@ sealed interface DataError {
     /** Device-side state problem. */
     sealed interface Local : DataError {
         data object NotAuthenticated : Local
+        data object NotFound : Local
     }
 }

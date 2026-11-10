@@ -152,7 +152,7 @@ class ChatListViewModelTest {
         }
 
     @Test
-    fun `when sync fails offline and subsequent background sync emits syncSuccessEvents, syncError is cleared`() =
+    fun `when sync fails offline and subsequent sync succeeds on refresh, syncError is cleared`() =
         runTest {
             val cachedRoom = ChatRoom(
                 id = "room-1",
@@ -170,8 +170,9 @@ class ChatListViewModelTest {
             assertEquals(DataError.Connectivity.NoInternet, stateWithError.syncError)
             assertTrue(stateWithError.showSyncBanner)
 
-            // Background or reconnect sync succeeds and emits syncSuccessEvents
-            fakeChatRoomRepository.syncSuccessEventsFlow.tryEmit(Unit)
+            // Subsequent refresh succeeds
+            fakeChatRoomRepository.syncResult = Either.Right(Unit)
+            viewModel.onEvent(ChatListUiEvent.RefreshChats)
             testScheduler.advanceUntilIdle()
 
             val recoveredState = viewModel.uiState.value
@@ -267,8 +268,6 @@ private class FakeChatRoomRepository : ChatRoomRepository {
     var syncCallCount = 0
     var syncResult: Either<DataError, Unit> = Either.Right(Unit)
     var syncCompletable: CompletableDeferred<Either<DataError, Unit>>? = null
-    val syncSuccessEventsFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    override val syncSuccessEvents: Flow<Unit> = syncSuccessEventsFlow
 
     override fun getChats(): Flow<List<ChatRoom>> = roomsFlow
 

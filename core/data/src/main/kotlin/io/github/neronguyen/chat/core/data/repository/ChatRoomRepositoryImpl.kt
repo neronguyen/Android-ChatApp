@@ -60,18 +60,15 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
     override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
         val deferred = syncMutex.withLock {
             inFlightSync?.takeIf { it.isActive } ?: appScope.async(defaultDispatcher) {
-                executeSyncChatsWithChangedRooms()
-            }.also { newDeferred ->
-                inFlightSync = newDeferred
-                newDeferred.invokeOnCompletion {
-                    appScope.launch(defaultDispatcher) {
-                        syncMutex.withLock {
-                            if (inFlightSync == newDeferred) {
-                                inFlightSync = null
-                            }
-                        }
+                try {
+                    executeSyncChatsWithChangedRooms()
+                } finally {
+                    syncMutex.withLock {
+                        inFlightSync = null
                     }
                 }
+            }.also { newDeferred ->
+                inFlightSync = newDeferred
             }
         }
 

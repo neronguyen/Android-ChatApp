@@ -27,12 +27,9 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.concurrent.atomics.AtomicBoolean
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.random.Random
 import kotlin.time.Duration.Companion.milliseconds
 
-@OptIn(ExperimentalAtomicApi::class)
 @Singleton
 internal class RealtimeConnectionManagerImpl @Inject constructor(
     private val realtimeDataSource: ChatRealtimeDataSource,
@@ -47,8 +44,10 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
         .map { it.toDomain() }
 
     private val isForeground = MutableStateFlow(false)
-    private val initialized = AtomicBoolean(false)
-    private var retryAttempt = 0
+
+    init {
+        startSupervision()
+    }
 
     override fun initialize() {
         try {
@@ -56,11 +55,9 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
         } catch (_: Exception) {
             // ProcessLifecycleOwner may not be available in unit test environments
         }
-        startSupervisionIfNeeded()
     }
 
     override fun onStart(owner: LifecycleOwner) {
-        startSupervisionIfNeeded()
         isForeground.value = true
     }
 
@@ -68,32 +65,38 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
         isForeground.value = false
     }
 
-    private fun startSupervisionIfNeeded() {
-        if (!initialized.compareAndSet(expectedValue = false, newValue = true)) return
+    private sealed interface ConnectionPolicy {
+        data object DisconnectImmediate : ConnectionPolicy
+        data object DisconnectGracePeriod : ConnectionPolicy
+        data object ActiveSupervision : ConnectionPolicy
+    }
 
+    private fun startSupervision() {
         appScope.launch(ioDispatcher) {
             combine(
                 isForeground,
-                tokenDataSource.authState,
-                networkMonitor.isOnline
-            ) { foreground, authState, isOnline ->
-                Triple(foreground, authState is AuthState.Authenticated, isOnline)
+                tokenDataSource.authState.map { it is AuthState.Authenticated }.distinctUntilChanged(),
+                networkMonitor.isOnline.distinctUntilChanged()
+            ) { foreground, isAuthenticated, isOnline ->
+                when {
+                    !isAuthenticated || !isOnline -> ConnectionPolicy.DisconnectImmediate
+                    foreground -> ConnectionPolicy.ActiveSupervision
+                    else -> ConnectionPolicy.DisconnectGracePeriod
+                }
             }
                 .distinctUntilChanged()
-                .collectLatest { (foreground, isAuthenticated, isOnline) ->
+                .collectLatest { policy ->
                     try {
-                        when {
-                            !isAuthenticated -> {
-                                retryAttempt = 0
+                        when (policy) {
+                            ConnectionPolicy.DisconnectImmediate -> {
                                 realtimeDataSource.disconnect()
                             }
-                            !isOnline -> {
-                                realtimeDataSource.disconnect()
-                            }
-                            foreground -> superviseConnection()
-                            else -> {
+                            ConnectionPolicy.DisconnectGracePeriod -> {
                                 delay(DISCONNECT_DELAY_MS.milliseconds)
                                 realtimeDataSource.disconnect()
+                            }
+                            ConnectionPolicy.ActiveSupervision -> {
+                                superviseConnection()
                             }
                         }
                     } catch (e: CancellationException) {
@@ -106,6 +109,7 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
     }
 
     private suspend fun superviseConnection() {
+        var retryAttempt = 0
         var isImmediateAttempt = true
 
         realtimeDataSource.connectionState.collect { state ->

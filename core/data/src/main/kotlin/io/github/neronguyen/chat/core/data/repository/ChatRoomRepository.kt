@@ -12,9 +12,6 @@ interface ChatRoomRepository {
 
     suspend fun syncChats(): Either<DataError, Unit>
 
-    val syncSuccessEvents: Flow<Unit>
-        get() = kotlinx.coroutines.flow.emptyFlow()
-
     suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>>
 
     suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant>

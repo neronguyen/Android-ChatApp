@@ -79,9 +79,9 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
     override suspend fun sendMessage(
         roomId: String,
         content: String,
-    ): Either<ChatError.SendMessage, Unit> {
+    ): Either<DataError, Unit> {
         val auth = tokenDataSource.authState.firstOrNull() as? AuthState.Authenticated
-            ?: return Either.Left(ChatError.SendMessage.NotAuthenticated)
+            ?: return Either.Left(DataError.Local.NotAuthenticated)
 
         val messageId = Uuid.generateV7().toString()
         val now = System.currentTimeMillis()
@@ -110,12 +110,12 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         return Either.Right(Unit)
     }
 
-    override suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit> {
+    override suspend fun retryMessage(messageId: String): Either<DataError, Unit> {
         val auth = tokenDataSource.authState.firstOrNull() as? AuthState.Authenticated
-            ?: return Either.Left(ChatError.SendMessage.NotAuthenticated)
+            ?: return Either.Left(DataError.Local.NotAuthenticated)
 
         val entity = chatDao.getMessageById(messageId)
-            ?: return Either.Left(ChatError.SendMessage.MessageNotFound)
+            ?: return Either.Left(DataError.Local.NotFound)
 
         chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.SENDING)
 

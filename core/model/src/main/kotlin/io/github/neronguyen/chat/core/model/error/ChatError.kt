@@ -9,13 +9,6 @@ sealed interface ChatError {
     sealed interface LeaveRoom : ChatError
     sealed interface DeleteMessage : ChatError
 
-    sealed interface SendMessage : ChatError {
-        data object NotAuthenticated : SendMessage
-        data object RoomNotFound : SendMessage
-        data object MessageNotFound : SendMessage, DeleteMessage
-        data class Data(val error: DataError) : SendMessage
-    }
-
     data object ParticipantNotFound : FindParticipant, CreateRoom, AddParticipants, LeaveRoom
     data object RoomNotFound : SyncRoom, AddParticipants, LeaveRoom
     data object InvalidRoomSize : CreateRoom

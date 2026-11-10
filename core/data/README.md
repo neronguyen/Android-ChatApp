@@ -6,7 +6,7 @@ Offline-first data repositories, real-time sync coordinator (`ChatRealtimeSyncMa
 ## Interface
 - `[AuthRepository.kt:AuthRepository]`: Repository interface for registration, login, and logout returning `Either<AuthError, User>` and `getAuthState(): Flow<AuthState>`.
 - `[ChatRoomRepository.kt:ChatRoomRepository]`: Repository interface for observing rooms, fetching room metadata, creating direct/group chats, syncing rooms, atomic single-flight room reconciliation (`syncChatsAndGetChangedRooms()`), adding participants, and leaving rooms.
-- `[ChatMessageRepository.kt:ChatMessageRepository]`: Repository interface for observing messages, optimistic message dispatch (`sendMessage()`, `retryMessage()` returning `Either<ChatError.SendMessage, Unit>`), cursor pagination, and soft deletion.
+- `[ChatMessageRepository.kt:ChatMessageRepository]`: Repository interface for observing messages, optimistic message dispatch (`sendMessage()`, `retryMessage()` returning `Either<DataError, Unit>`), cursor pagination, and soft deletion.
 - `[RealtimeConnectionManager.kt:RealtimeConnectionManager]`: Real-time engine supervising WebSocket connections based on app lifecycle (`ProcessLifecycleOwner`), network reachability (`NetworkMonitor`), and `AuthState`.
 - `[ChatRealtimeSyncManager.kt:ChatRealtimeSyncManager]`: Reactive consumer processing incoming `WsServerEvent` frames and applying updates to `ChatDao` (with foreign-key buffering guard, disconnect sweep, and idempotent duplicate message reconciliation).
 - `[NetworkMonitor.kt:NetworkMonitor]`: Network reachability interface with cold-start seeding and asymmetric 300ms offline debounce.

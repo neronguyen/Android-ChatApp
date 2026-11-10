@@ -12,6 +12,7 @@ import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.ChatError
+import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
@@ -610,7 +611,7 @@ class ChatMessageRepositoryImplTest {
 
         val result = repository.sendMessage("room1", "Hello World")
 
-        assertEquals(Either.Left(ChatError.SendMessage.NotAuthenticated), result)
+        assertEquals(Either.Left(DataError.Local.NotAuthenticated), result)
         assertEquals(0, fakeDao.insertedMessages.size)
     }
 
@@ -656,7 +657,7 @@ class ChatMessageRepositoryImplTest {
 
         val result = repository.retryMessage("missing-id")
 
-        assertEquals(Either.Left(ChatError.SendMessage.MessageNotFound), result)
+        assertEquals(Either.Left(DataError.Local.NotFound), result)
         assertTrue(fakeDao.updatedStatuses.isEmpty())
     }
 

@@ -204,8 +204,8 @@ class ChatSyncManagerTest {
         }
 
         override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> = Either.Right(false)
-        override suspend fun sendMessage(roomId: String, content: String): Either<ChatError.SendMessage, Unit> = Either.Right(Unit)
-        override suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit> = Either.Right(Unit)
+        override suspend fun sendMessage(roomId: String, content: String): Either<DataError, Unit> = Either.Right(Unit)
+        override suspend fun retryMessage(messageId: String): Either<DataError, Unit> = Either.Right(Unit)
         override suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit> = Either.Right(Unit)
     }
 

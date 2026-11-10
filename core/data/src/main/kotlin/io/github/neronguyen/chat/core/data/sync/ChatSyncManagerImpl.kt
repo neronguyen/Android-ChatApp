@@ -15,6 +15,7 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +26,9 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,6 +48,8 @@ internal class ChatSyncManagerImpl @Inject constructor(
 ) : ChatSyncManager {
 
     private val initialized = AtomicBoolean(false)
+    private val catchUpSyncMutex = Mutex()
+    private var inFlightCatchUpSync: Deferred<Either<DataError, Unit>>? = null
     private val _syncState = MutableStateFlow<ChatSyncState>(ChatSyncState.Idle)
     override val syncState: StateFlow<ChatSyncState> = _syncState.asStateFlow()
 
@@ -114,6 +119,21 @@ internal class ChatSyncManagerImpl @Inject constructor(
     }
 
     override suspend fun performCatchUpSync(): Either<DataError, Unit> {
+        val deferred = catchUpSyncMutex.withLock {
+            inFlightCatchUpSync?.takeIf { it.isActive } ?: appScope.async(ioDispatcher) {
+                try {
+                    executeCatchUpSync()
+                } finally {
+                    catchUpSyncMutex.withLock {
+                        inFlightCatchUpSync = null
+                    }
+                }
+            }.also { inFlightCatchUpSync = it }
+        }
+        return deferred.await()
+    }
+
+    private suspend fun executeCatchUpSync(): Either<DataError, Unit> {
         _syncState.value = ChatSyncState.Syncing
         return when (val syncResult = chatRoomRepository.syncChatsAndGetChangedRooms()) {
             is Either.Left -> {

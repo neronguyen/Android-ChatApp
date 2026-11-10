@@ -391,12 +391,12 @@ class ConversationViewModelTest {
             return loadOlderMessagesResult
         }
 
-        override suspend fun sendMessage(roomId: String, content: String): Either<ChatError.SendMessage, Unit> {
+        override suspend fun sendMessage(roomId: String, content: String): Either<DataError, Unit> {
             sentMessages.add(roomId to content)
             return Either.Right(Unit)
         }
 
-        override suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit> {
+        override suspend fun retryMessage(messageId: String): Either<DataError, Unit> {
             retriedMessageIds.add(messageId)
             return Either.Right(Unit)
         }
