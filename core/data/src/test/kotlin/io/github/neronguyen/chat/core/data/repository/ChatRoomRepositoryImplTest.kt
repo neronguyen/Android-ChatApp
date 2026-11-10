@@ -149,7 +149,7 @@ class ChatRoomRepositoryImplTest {
         }
     }
 
-    private class FakeChatNetworkDataSource : ChatNetworkDataSource {
+    private open class FakeChatNetworkDataSource : ChatNetworkDataSource {
         var lastDirectTargetUserId: String? = null
         var lastDirectMessage: String? = null
         var lastGroupParticipantIds: List<String>? = null
@@ -218,34 +218,14 @@ class ChatRoomRepositoryImplTest {
             Either.Right(Unit)
     }
 
-    private class FakeSyncScheduler : ChatSyncScheduler {
-        var schedulePeriodicCallCount = 0
-        var enqueueOneTimeCallCount = 0
-        var cancelAllCallCount = 0
-
-        override fun schedulePeriodicSync() {
-            schedulePeriodicCallCount++
-        }
-
-        override fun enqueueOneTimeCatchUpSync() {
-            enqueueOneTimeCallCount++
-        }
-
-        override fun cancelAllSyncWork() {
-            cancelAllCallCount++
-        }
-    }
-
     private fun createRepository(
         fakeDao: FakeChatDao,
         fakeNetwork: FakeChatNetworkDataSource,
-        fakeScheduler: FakeSyncScheduler = FakeSyncScheduler(),
         scope: CoroutineScope = TestScope(testDispatcher)
     ): ChatRoomRepositoryImpl {
         return ChatRoomRepositoryImpl(
             chatDao = fakeDao,
             networkDataSource = fakeNetwork,
-            chatSyncScheduler = { fakeScheduler },
             appScope = scope,
             defaultDispatcher = testDispatcher
         )
@@ -440,36 +420,62 @@ class ChatRoomRepositoryImplTest {
         }
 
         val repository = createRepository(fakeDao, fakeNetwork)
-        val result = repository.syncChatsWithChangedRooms()
+        val result = repository.syncChatsAndGetChangedRooms()
 
         assertTrue(result.isRight())
         val changedRooms = (result as Either.Right).value
-        // Total changed = room-1 + 5 new rooms = 6 rooms. Bounded to MAX_PREFETCH_ROOMS = 5.
+        // Total changed = room-1 + 5 new rooms = 6 rooms (unbounded diff list).
         // Sorted by lastActivityAt DESC:
         // 1. new-1 (05:00)
         // 2. new-2 (04:00)
         // 3. new-3 (03:00)
         // 4. room-1 (02:00)
         // 5. new-4 (01:00)
-        assertEquals(5, changedRooms.size)
-        assertEquals(listOf("new-1", "new-2", "new-3", "room-1", "new-4"), changedRooms)
+        // 6. new-5 (00:30)
+        assertEquals(6, changedRooms.size)
+        assertEquals(listOf("new-1", "new-2", "new-3", "room-1", "new-4", "new-5"), changedRooms)
     }
 
     @Test
-    fun `syncChats on retryable network error enqueues one-time catch-up sync`() = runTest {
+    fun `syncChats on network error returns Left without side-effect background scheduling`() = runTest {
         val fakeDao = FakeChatDao()
         val fakeNetwork = FakeChatNetworkDataSource().apply {
             chatRoomsResponse = Either.Left(NetworkError.Transport.NoInternet)
         }
-        val fakeScheduler = FakeSyncScheduler()
-        val repository = createRepository(fakeDao, fakeNetwork, fakeScheduler)
+        val repository = createRepository(fakeDao, fakeNetwork)
 
         val result = repository.syncChats()
 
         assertTrue(result.isLeft())
         val error = (result as Either.Left).value
         assertEquals(io.github.neronguyen.chat.core.model.error.DataError.Connectivity.NoInternet, error)
-        assertEquals(1, fakeScheduler.enqueueOneTimeCallCount)
+    }
+
+    @Test
+    fun `syncChatsAndGetChangedRooms coalesces concurrent calls into single network request`() = runTest {
+        val fakeDao = FakeChatDao()
+        val fakeNetwork = FakeChatNetworkDataSource()
+        val completable = CompletableDeferred<Either<NetworkError<Nothing>, List<ChatRoomDto>>>()
+        fakeNetwork.chatRoomsCompletable = completable
+
+        val testScope = TestScope(testDispatcher)
+        val repository = createRepository(fakeDao, fakeNetwork, scope = testScope)
+
+        val call1 = async { repository.syncChatsAndGetChangedRooms() }
+        val call2 = async { repository.syncChatsAndGetChangedRooms() }
+
+        testScheduler.runCurrent()
+        assertEquals(1, fakeNetwork.getChatRoomsForUserCallCount)
+
+        completable.complete(Either.Right(emptyList()))
+        testScheduler.advanceUntilIdle()
+
+        val res1 = call1.await()
+        val res2 = call2.await()
+
+        assertTrue(res1.isRight())
+        assertTrue(res2.isRight())
+        assertEquals(1, fakeNetwork.getChatRoomsForUserCallCount)
     }
 }
 

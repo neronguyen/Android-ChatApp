@@ -11,6 +11,7 @@ import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
+import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
@@ -553,8 +554,9 @@ class ChatMessageRepositoryImplTest {
                 tokenDataSource = fakeToken
             )
 
-            repository.sendMessage("room1", "Hello World")
+            val result = repository.sendMessage("room1", "Hello World")
 
+            assertEquals(Either.Right(Unit), result)
             assertEquals(1, fakeDao.insertedMessages.size)
 
             val insertedMsg = fakeDao.insertedMessages.first()
@@ -583,8 +585,9 @@ class ChatMessageRepositoryImplTest {
             tokenDataSource = fakeToken
         )
 
-        repository.sendMessage("room1", "Hello World")
+        val result = repository.sendMessage("room1", "Hello World")
 
+        assertEquals(Either.Right(Unit), result)
         assertEquals(1, fakeDao.insertedMessages.size)
 
         val insertedMsg = fakeDao.insertedMessages.first()
@@ -605,8 +608,9 @@ class ChatMessageRepositoryImplTest {
             tokenDataSource = fakeToken
         )
 
-        repository.sendMessage("room1", "Hello World")
+        val result = repository.sendMessage("room1", "Hello World")
 
+        assertEquals(Either.Left(ChatError.SendMessage.NotAuthenticated), result)
         assertEquals(0, fakeDao.insertedMessages.size)
     }
 
@@ -635,12 +639,13 @@ class ChatMessageRepositoryImplTest {
             tokenDataSource = fakeToken
         )
 
-        repository.retryMessage("msg-123")
+        val result = repository.retryMessage("msg-123")
+        assertEquals(Either.Right(Unit), result)
         assertEquals(MessageDeliveryStatus.SENDING, fakeDao.updatedStatuses["msg-123"])
     }
 
     @Test
-    fun `retryMessage does nothing when message is missing locally`() = runTest {
+    fun `retryMessage returns MessageNotFound when message is missing locally`() = runTest {
         val fakeDao = FakeChatDao()
         val repository = createRepository(
             chatDao = fakeDao,
@@ -649,8 +654,9 @@ class ChatMessageRepositoryImplTest {
             tokenDataSource = FakeTokenDataSource()
         )
 
-        repository.retryMessage("missing-id")
+        val result = repository.retryMessage("missing-id")
 
+        assertEquals(Either.Left(ChatError.SendMessage.MessageNotFound), result)
         assertTrue(fakeDao.updatedStatuses.isEmpty())
     }
 

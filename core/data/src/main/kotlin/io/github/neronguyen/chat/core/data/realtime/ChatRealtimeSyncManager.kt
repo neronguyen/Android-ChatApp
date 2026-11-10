@@ -13,6 +13,7 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Failed
 import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageDto
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -49,7 +50,12 @@ class ChatRealtimeSyncManager @Inject constructor(
                     is WsServerEvent.ParticipantLeft -> handleParticipantLeft(event)
                     is WsServerEvent.Error -> {
                         event.messageId?.let { messageId ->
-                            chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
+                            val status = if (event.error == ChatServerError.DuplicateMessageId.code) {
+                                MessageDeliveryStatus.SENT
+                            } else {
+                                MessageDeliveryStatus.FAILED
+                            }
+                            chatDao.updateDeliveryStatus(messageId, status)
                         }
                     }
                 }

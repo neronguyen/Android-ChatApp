@@ -8,6 +8,7 @@ import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
@@ -15,7 +16,6 @@ import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -26,7 +26,6 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -65,6 +64,11 @@ class ChatSyncManagerTest {
     }
 
     @Test
+    fun `initial syncState is Idle`() {
+        assertEquals(ChatSyncState.Idle, chatSyncManager.syncState.value)
+    }
+
+    @Test
     fun `when authState transitions to Authenticated, periodic sync is scheduled`() = runTest(testDispatcher) {
         chatSyncManager.initialize()
         testScheduler.runCurrent()
@@ -79,7 +83,7 @@ class ChatSyncManagerTest {
     }
 
     @Test
-    fun `when authState transitions to Unauthenticated, sync work is cancelled`() = runTest(testDispatcher) {
+    fun `when authState transitions to Unauthenticated, sync work is cancelled and syncState becomes Idle`() = runTest(testDispatcher) {
         val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
         fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
 
@@ -91,6 +95,7 @@ class ChatSyncManagerTest {
         testScheduler.runCurrent()
 
         assertEquals(1, fakeSyncScheduler.cancelAllCallCount)
+        assertEquals(ChatSyncState.Idle, chatSyncManager.syncState.value)
     }
 
     @Test
@@ -105,7 +110,7 @@ class ChatSyncManagerTest {
         // Socket connects initially -> does not trigger catch-up yet
         fakeRealtimeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
         testScheduler.runCurrent()
-        assertEquals(0, fakeChatRoomRepository.syncChatsWithChangedRoomsCallCount)
+        assertEquals(0, fakeChatRoomRepository.syncChatsAndGetChangedRoomsCallCount)
 
         // Socket drops
         fakeRealtimeDataSource.connectionStateFlow.value = SocketConnectionState.Disconnected
@@ -115,33 +120,58 @@ class ChatSyncManagerTest {
         fakeRealtimeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
         testScheduler.runCurrent()
 
-        assertEquals(1, fakeChatRoomRepository.syncChatsWithChangedRoomsCallCount)
+        assertEquals(1, fakeChatRoomRepository.syncChatsAndGetChangedRoomsCallCount)
         assertEquals(listOf("room-1", "room-2"), fakeChatMessageRepository.syncedRoomIds)
+        assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
     }
 
     @Test
-    fun `isRetryable correctly identifies transient network and server errors`() {
-        assertTrue(DataError.Connectivity.NoInternet.isRetryable())
-        assertTrue(DataError.Connectivity.Timeout.isRetryable())
-        assertTrue(DataError.Remote.RateLimited().isRetryable())
-        assertTrue(DataError.Remote.Unavailable.isRetryable())
+    fun `performCatchUpSync succeeds and updates syncState to Synced`() = runTest(testDispatcher) {
+        fakeChatRoomRepository.changedRoomIdsResult = Either.Right(listOf("room-1", "room-2"))
 
-        assertFalse(DataError.Remote.Unauthorized.isRetryable())
-        assertFalse(DataError.Remote.Forbidden.isRetryable())
-        assertFalse(DataError.Unexpected.Serialization.isRetryable())
-        assertFalse(DataError.Unexpected.UnknownCode(500).isRetryable())
-        assertFalse(DataError.Local.NotAuthenticated.isRetryable())
+        val result = chatSyncManager.performCatchUpSync()
+
+        assertTrue(result.isRight())
+        assertEquals(listOf("room-1", "room-2"), fakeChatMessageRepository.syncedRoomIds)
+        assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `performCatchUpSync fails when room sync fails and updates syncState to Failed`() = runTest(testDispatcher) {
+        val networkError = DataError.Connectivity.NoInternet
+        fakeChatRoomRepository.changedRoomIdsResult = Either.Left(networkError)
+
+        val result = chatSyncManager.performCatchUpSync()
+
+        assertTrue(result.isLeft())
+        assertEquals(networkError, (result as Either.Left).value)
+        assertEquals(ChatSyncState.Failed(networkError), chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `performCatchUpSync fails when any room message prefetch fails`() = runTest(testDispatcher) {
+        fakeChatRoomRepository.changedRoomIdsResult = Either.Right(listOf("room-1", "room-2"))
+        val roomError = DataError.Connectivity.Timeout
+        fakeChatMessageRepository.syncResultForRoom = { roomId ->
+            if (roomId == "room-2") Either.Left(roomError) else Either.Right(false)
+        }
+
+        val result = chatSyncManager.performCatchUpSync()
+
+        assertTrue(result.isLeft())
+        assertEquals(roomError, (result as Either.Left).value)
+        assertEquals(ChatSyncState.Failed(roomError), chatSyncManager.syncState.value)
     }
 
     private class FakeChatRoomRepository : ChatRoomRepository {
-        var syncChatsWithChangedRoomsCallCount = 0
+        var syncChatsAndGetChangedRoomsCallCount = 0
         var changedRoomIdsResult: Either<DataError, List<String>> = Either.Right(emptyList())
 
         override fun getChats(): Flow<List<ChatRoom>> = emptyFlow()
         override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
 
-        override suspend fun syncChatsWithChangedRooms(): Either<DataError, List<String>> {
-            syncChatsWithChangedRoomsCallCount++
+        override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
+            syncChatsAndGetChangedRoomsCallCount++
             return changedRoomIdsResult
         }
 
@@ -164,17 +194,18 @@ class ChatSyncManagerTest {
 
     private class FakeChatMessageRepository : ChatMessageRepository {
         val syncedRoomIds = mutableListOf<String>()
+        var syncResultForRoom: (String) -> Either<DataError, Boolean> = { Either.Right(false) }
 
         override fun getMessages(roomId: String, limit: Int): Flow<List<ChatMessage>> = emptyFlow()
 
         override suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean> {
             syncedRoomIds.add(roomId)
-            return Either.Right(false)
+            return syncResultForRoom(roomId)
         }
 
         override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> = Either.Right(false)
-        override suspend fun sendMessage(roomId: String, message: String) {}
-        override suspend fun retryMessage(messageId: String) {}
+        override suspend fun sendMessage(roomId: String, content: String): Either<ChatError.SendMessage, Unit> = Either.Right(Unit)
+        override suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit> = Either.Right(Unit)
         override suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit> = Either.Right(Unit)
     }
 

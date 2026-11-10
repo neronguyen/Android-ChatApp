@@ -12,9 +12,6 @@ import io.github.neronguyen.chat.core.data.mapper.toEntity
 import io.github.neronguyen.chat.core.data.mapper.toFindParticipantError
 import io.github.neronguyen.chat.core.data.mapper.toLeaveRoomError
 import io.github.neronguyen.chat.core.data.mapper.toSyncRoomError
-import io.github.neronguyen.chat.core.data.sync.ChatSyncManagerImpl
-import io.github.neronguyen.chat.core.data.sync.ChatSyncScheduler
-import io.github.neronguyen.chat.core.data.sync.isRetryable
 import io.github.neronguyen.chat.core.database.dao.ChatDao
 import io.github.neronguyen.chat.core.database.entity.ChatRoomParticipantCrossRef
 import io.github.neronguyen.chat.core.model.ChatParticipant
@@ -30,31 +27,25 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.time.Instant
 
 @Singleton
 internal class ChatRoomRepositoryImpl @Inject constructor(
     private val chatDao: ChatDao,
     private val networkDataSource: ChatNetworkDataSource,
-    private val chatSyncScheduler: dagger.Lazy<ChatSyncScheduler>,
     @AppScope private val appScope: CoroutineScope,
     @Dispatcher(ChatDispatchers.Default) private val defaultDispatcher: CoroutineDispatcher
 ) : ChatRoomRepository {
 
     private val syncMutex = Mutex()
     private var inFlightSync: Deferred<Either<DataError, List<String>>>? = null
-
-    private val _syncSuccessEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    override val syncSuccessEvents: Flow<Unit> = _syncSuccessEvents.asSharedFlow()
 
     override fun getChats(): Flow<List<ChatRoom>> {
         return chatDao.getChatsWithDetails().map { relations ->
@@ -63,25 +54,28 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
     }
 
     override suspend fun syncChats(): Either<DataError, Unit> {
-        return syncChatsWithChangedRooms().map { }
+        return syncChatsAndGetChangedRooms().map { }
     }
 
-    override suspend fun syncChatsWithChangedRooms(): Either<DataError, List<String>> {
+    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> {
         val deferred = syncMutex.withLock {
-            inFlightSync ?: appScope.async(defaultDispatcher) {
+            inFlightSync?.takeIf { it.isActive } ?: appScope.async(defaultDispatcher) {
                 executeSyncChatsWithChangedRooms()
-            }.also { inFlightSync = it }
-        }
-
-        return try {
-            deferred.await()
-        } finally {
-            syncMutex.withLock {
-                if (inFlightSync == deferred) {
-                    inFlightSync = null
+            }.also { newDeferred ->
+                inFlightSync = newDeferred
+                newDeferred.invokeOnCompletion {
+                    appScope.launch(defaultDispatcher) {
+                        syncMutex.withLock {
+                            if (inFlightSync == newDeferred) {
+                                inFlightSync = null
+                            }
+                        }
+                    }
                 }
             }
         }
+
+        return deferred.await()
     }
 
     private suspend fun executeSyncChatsWithChangedRooms(): Either<DataError, List<String>> {
@@ -89,11 +83,7 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
             val response = networkDataSource.getChatRoomsForUser()
             response.fold(
                 ifLeft = { networkError ->
-                    val dataError = networkError.toDataError()
-                    if (dataError.isRetryable()) {
-                        chatSyncScheduler.get().enqueueOneTimeCatchUpSync()
-                    }
-                    Either.Left(dataError)
+                    Either.Left(networkError.toDataError())
                 },
                 ifRight = { roomDtos ->
                     val localSnapshot = chatDao.getAllRoomsSnapshot().associateBy { it.id }
@@ -115,7 +105,6 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
                     }
                         .sortedByDescending { it.lastActivityAt }
                         .map { it.id }
-                        .take(ChatSyncManagerImpl.MAX_PREFETCH_ROOMS)
 
                     val rooms = roomDtos.map { it.toEntity() }
 
@@ -143,7 +132,6 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
                         crossRefs = crossRefs
                     )
 
-                    _syncSuccessEvents.tryEmit(Unit)
                     Either.Right(changedRoomIds)
                 }
             )

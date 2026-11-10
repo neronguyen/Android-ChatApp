@@ -351,6 +351,7 @@ class ConversationViewModelTest {
 
         override fun getChats(): Flow<List<ChatRoom>> = MutableStateFlow(emptyList())
         override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
+        override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> = Either.Right(emptyList())
         override suspend fun createDirectChatRoom(
             targetUserId: String,
             message: String
@@ -390,12 +391,14 @@ class ConversationViewModelTest {
             return loadOlderMessagesResult
         }
 
-        override suspend fun sendMessage(roomId: String, message: String) {
-            sentMessages.add(roomId to message)
+        override suspend fun sendMessage(roomId: String, content: String): Either<ChatError.SendMessage, Unit> {
+            sentMessages.add(roomId to content)
+            return Either.Right(Unit)
         }
 
-        override suspend fun retryMessage(messageId: String) {
+        override suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit> {
             retriedMessageIds.add(messageId)
+            return Either.Right(Unit)
         }
 
         override suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit> {

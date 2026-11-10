@@ -1,4 +1,4 @@
-package io.github.neronguyen.chat.core.data.sync
+package io.github.neronguyen.chat.sync.work
 
 import android.content.Context
 import androidx.work.BackoffPolicy
@@ -10,6 +10,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import dagger.hilt.android.qualifiers.ApplicationContext
+import io.github.neronguyen.chat.core.data.sync.ChatSyncScheduler
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton

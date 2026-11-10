@@ -8,7 +8,7 @@ Android application entrypoint, composition root, splash screen, and top-level N
 - `[MainActivity.kt:MainActivity]`: Single activity hosting the Jetpack Compose content view and observing `AuthState` to switch between `AuthNavGraph` and `ChatNavGraph`.
 
 ## Invariants
-- Application module depending on all feature and core modules.
+- Application module depending on all feature, sync (`:sync:work`), and core modules.
 - Supervised by `ProcessLifecycleOwner` to drive real-time WebSocket connection state.
 
 ## Side Effects

@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Instant
@@ -67,22 +66,22 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
             roomId = roomId,
             before = before
         ).mapLeft { it.toDataError() }
-        .map { slice ->
-            if (slice.messages.isNotEmpty()) {
-                chatDao.upsertMessages(slice.messages.map { it.toEntity() })
-            }
+            .map { slice ->
+                if (slice.messages.isNotEmpty()) {
+                    chatDao.upsertMessages(slice.messages.map { it.toEntity() })
+                }
 
-            slice.hasMore
-        }
+                slice.hasMore
+            }
     }
 
     @OptIn(ExperimentalUuidApi::class)
     override suspend fun sendMessage(
         roomId: String,
-        message: String,
-    ) {
+        content: String,
+    ): Either<ChatError.SendMessage, Unit> {
         val auth = tokenDataSource.authState.firstOrNull() as? AuthState.Authenticated
-            ?: return
+            ?: return Either.Left(ChatError.SendMessage.NotAuthenticated)
 
         val messageId = Uuid.generateV7().toString()
         val now = System.currentTimeMillis()
@@ -91,7 +90,7 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
             id = messageId,
             roomId = roomId,
             senderId = auth.user.id,
-            content = message,
+            content = content,
             timestamp = now,
             deliveryStatus = MessageDeliveryStatus.SENDING,
         )
@@ -101,17 +100,22 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         val enqueued = realtimeDataSource.sendMessage(
             WsClientMessage.NewMessage(
                 roomId = roomId,
-                content = message,
+                content = content,
                 messageId = messageId,
             )
         )
         if (!enqueued) {
             chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
         }
+        return Either.Right(Unit)
     }
 
-    override suspend fun retryMessage(messageId: String) {
-        val entity = chatDao.getMessageById(messageId) ?: return
+    override suspend fun retryMessage(messageId: String): Either<ChatError.SendMessage, Unit> {
+        val auth = tokenDataSource.authState.firstOrNull() as? AuthState.Authenticated
+            ?: return Either.Left(ChatError.SendMessage.NotAuthenticated)
+
+        val entity = chatDao.getMessageById(messageId)
+            ?: return Either.Left(ChatError.SendMessage.MessageNotFound)
 
         chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.SENDING)
 
@@ -125,6 +129,7 @@ internal class ChatMessageRepositoryImpl @Inject constructor(
         if (!enqueued) {
             chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
         }
+        return Either.Right(Unit)
     }
 
     override suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit> {

@@ -272,6 +272,9 @@ private class FakeChatRoomRepository : ChatRoomRepository {
 
     override fun getChats(): Flow<List<ChatRoom>> = roomsFlow
 
+    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
+        Either.Right(emptyList())
+
     override suspend fun syncChats(): Either<DataError, Unit> {
         syncCallCount++
         val completable = syncCompletable

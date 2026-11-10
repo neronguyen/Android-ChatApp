@@ -15,8 +15,8 @@ import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepositoryImpl
 import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
 import io.github.neronguyen.chat.core.data.sync.ChatSyncManagerImpl
-import io.github.neronguyen.chat.core.data.sync.ChatSyncScheduler
-import io.github.neronguyen.chat.core.data.sync.WorkManagerSyncSchedulerImpl
+import io.github.neronguyen.chat.core.data.util.ConnectivityManagerNetworkMonitor
+import io.github.neronguyen.chat.core.data.util.NetworkMonitor
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.network.interceptor.TokenProvider
 import io.github.neronguyen.chat.core.network.interceptor.TokenRefresher
@@ -64,9 +64,9 @@ internal abstract class DataModule {
 
     @Binds
     @Singleton
-    internal abstract fun bindChatSyncScheduler(
-        impl: WorkManagerSyncSchedulerImpl
-    ): ChatSyncScheduler
+    internal abstract fun bindNetworkMonitor(
+        impl: ConnectivityManagerNetworkMonitor
+    ): NetworkMonitor
 
     companion object {
         @Provides

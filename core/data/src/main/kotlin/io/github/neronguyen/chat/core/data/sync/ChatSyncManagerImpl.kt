@@ -8,16 +8,25 @@ import io.github.neronguyen.chat.core.data.repository.ChatMessageRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.concurrent.atomics.AtomicBoolean
@@ -36,6 +45,8 @@ internal class ChatSyncManagerImpl @Inject constructor(
 ) : ChatSyncManager {
 
     private val initialized = AtomicBoolean(false)
+    private val _syncState = MutableStateFlow<ChatSyncState>(ChatSyncState.Idle)
+    override val syncState: StateFlow<ChatSyncState> = _syncState.asStateFlow()
 
     override fun initialize() {
         if (!initialized.compareAndSet(expectedValue = false, newValue = true)) return
@@ -51,6 +62,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                         }
                         is AuthState.Unauthenticated -> {
                             chatSyncScheduler.cancelAllSyncWork()
+                            _syncState.value = ChatSyncState.Idle
                         }
                     }
                 }
@@ -102,19 +114,35 @@ internal class ChatSyncManagerImpl @Inject constructor(
     }
 
     override suspend fun performCatchUpSync(): Either<DataError, Unit> {
-        return when (val syncResult = chatRoomRepository.syncChatsWithChangedRooms()) {
-            is Either.Left -> syncResult
+        _syncState.value = ChatSyncState.Syncing
+        return when (val syncResult = chatRoomRepository.syncChatsAndGetChangedRooms()) {
+            is Either.Left -> {
+                _syncState.value = ChatSyncState.Failed(syncResult.value)
+                syncResult
+            }
             is Either.Right -> {
                 val changedRoomIds = syncResult.value
-                for (roomId in changedRoomIds) {
-                    chatMessageRepository.syncRecentMessages(roomId)
+                val semaphore = Semaphore(3)
+                val prefetchResults = supervisorScope {
+                    changedRoomIds.map { roomId ->
+                        async {
+                            semaphore.withPermit {
+                                chatMessageRepository.syncRecentMessages(roomId)
+                            }
+                        }
+                    }.awaitAll()
                 }
-                Either.Right(Unit)
+
+                val errors = prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
+                if (errors.isNotEmpty()) {
+                    val firstError = errors.first()
+                    _syncState.value = ChatSyncState.Failed(firstError)
+                    Either.Left(firstError)
+                } else {
+                    _syncState.value = ChatSyncState.Synced
+                    Either.Right(Unit)
+                }
             }
         }
-    }
-
-    companion object {
-        const val MAX_PREFETCH_ROOMS = 5
     }
 }

@@ -2,7 +2,7 @@
   "schema_version": 1,
   "diagram_type": "sequence",
   "meta": {
-    "title": "[PLANNED] Android WorkManager Offline Catch-Up & Background Sync",
+    "title": "[AS-IS] Android WorkManager Offline Catch-Up & Background Sync",
     "output": "docs/architecture/interactive/flows/offline-catchup-sync.html",
     "column_fit": "spread",
     "animation": "trace",

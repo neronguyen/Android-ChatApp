@@ -1,4 +1,4 @@
-package io.github.neronguyen.chat.core.data.sync
+package io.github.neronguyen.chat.sync.work
 
 import android.content.Context
 import androidx.hilt.work.HiltWorker
@@ -7,25 +7,17 @@ import androidx.work.WorkerParameters
 import arrow.core.Either
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import io.github.neronguyen.chat.core.datastore.TokenDataSource
-import io.github.neronguyen.chat.core.model.AuthState
+import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
 import io.github.neronguyen.chat.core.model.error.DataError
-import kotlinx.coroutines.flow.firstOrNull
 
 @HiltWorker
 internal class ChatSyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val chatSyncManager: ChatSyncManager,
-    private val tokenDataSource: TokenDataSource,
 ) : CoroutineWorker(appContext, workerParams) {
 
     override suspend fun doWork(): Result {
-        val authState = tokenDataSource.authState.firstOrNull()
-        if (authState !is AuthState.Authenticated) {
-            return Result.failure()
-        }
-
         return when (val result = chatSyncManager.performCatchUpSync()) {
             is Either.Right -> Result.success()
             is Either.Left -> {
