@@ -7,7 +7,6 @@ import io.github.neronguyen.chat.core.common.coroutine.ExponentialBackoff
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
-import io.github.neronguyen.chat.core.data.mapper.toDomain
 import io.github.neronguyen.chat.core.data.util.NetworkMonitor
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
@@ -20,10 +19,14 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -41,9 +44,10 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
     private val backoff: ExponentialBackoff = ExponentialBackoff()
 ) : RealtimeConnectionManager, DefaultLifecycleObserver {
 
-    override val connectionState: Flow<RealtimeConnectionState> = realtimeDataSource.connectionState
-        .map { it.toDomain() }
+    private val _connectionState = MutableStateFlow(RealtimeConnectionState.DISCONNECTED)
+    override val connectionState: StateFlow<RealtimeConnectionState> = _connectionState.asStateFlow()
 
+    private val reconnectRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val isForeground = MutableStateFlow(false)
     private var retryAttempt = 0
 
@@ -65,6 +69,10 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
 
     override fun onStop(owner: LifecycleOwner) {
         isForeground.value = false
+    }
+
+    override fun reconnect() {
+        reconnectRequests.tryEmit(Unit)
     }
 
     private sealed interface ConnectionPolicy {
@@ -94,10 +102,12 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
                     try {
                         when (policy) {
                             ConnectionPolicy.DisconnectImmediate -> {
+                                _connectionState.value = RealtimeConnectionState.DISCONNECTED
                                 realtimeDataSource.disconnect()
                             }
                             ConnectionPolicy.DisconnectGracePeriod -> {
                                 delay(DISCONNECT_DELAY_MS.milliseconds)
+                                _connectionState.value = RealtimeConnectionState.DISCONNECTED
                                 realtimeDataSource.disconnect()
                             }
                             ConnectionPolicy.ActiveSupervision -> {
@@ -115,12 +125,14 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
 
     private suspend fun superviseConnection() {
         var isImmediateAttempt = true
+        _connectionState.value = RealtimeConnectionState.CONNECTING
 
         realtimeDataSource.connectionState.collect { state ->
             when (state) {
                 is SocketConnectionState.Connected -> {
                     retryAttempt = 0
                     isImmediateAttempt = false
+                    _connectionState.value = RealtimeConnectionState.CONNECTED
                 }
 
                 is SocketConnectionState.AuthenticationFailed -> {
@@ -135,18 +147,30 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
                     }
 
                     if (refreshedToken != null) {
+                        _connectionState.value = RealtimeConnectionState.CONNECTING
                         if (retryAttempt > 0) {
                             delay(backoff.calculateDelay(retryAttempt))
                         }
                         retryAttempt++
                         realtimeDataSource.connect()
                     } else {
+                        _connectionState.value = RealtimeConnectionState.DISCONNECTED
                         tokenDataSource.clearAuthData()
                     }
                 }
 
                 is SocketConnectionState.Failed,
                 is SocketConnectionState.Disconnected -> {
+                    if (retryAttempt >= MAX_RETRY_ATTEMPTS) {
+                        _connectionState.value = RealtimeConnectionState.FAILED
+                        reconnectRequests.first()
+                        _connectionState.value = RealtimeConnectionState.CONNECTING
+                        retryAttempt = 0
+                        isImmediateAttempt = true
+                    } else {
+                        _connectionState.value = RealtimeConnectionState.CONNECTING
+                    }
+
                     if (!isImmediateAttempt && retryAttempt > 0) {
                         delay(backoff.calculateDelay(retryAttempt))
                     }
@@ -156,12 +180,15 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
                     realtimeDataSource.connect()
                 }
 
-                is SocketConnectionState.Connecting -> Unit
+                is SocketConnectionState.Connecting -> {
+                    _connectionState.value = RealtimeConnectionState.CONNECTING
+                }
             }
         }
     }
 
     companion object {
         private const val DISCONNECT_DELAY_MS = 30_000L
+        private const val MAX_RETRY_ATTEMPTS = 5
     }
 }
