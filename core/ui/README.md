@@ -21,20 +21,24 @@ persistent bottom navigation. Chats is the home screen. Light theme only for the
 
 All UI components use these semantic color tokens; never introduce component-specific ad-hoc colors:
 
-| Token                           | Hex       | Role & Usage                                                               |
-|---------------------------------|-----------|----------------------------------------------------------------------------|
-| `background` (`ChatBackground`) | `#FFFFFF` | Screen background and app bar container                                    |
-| `surface` (`ChatSurface`)       | `#F3F4F6` | Incoming message bubbles, composer input bar, avatar fallback background   |
-| `text` (`ChatText`)             | `#111827` | Primary high-contrast text and headings                                    |
-| `text-muted` (`ChatTextMuted`)  | `#4B5563` | Timestamps, metadata, hints, secondary labels                              |
-| `border` (`ChatBorder`)         | `#D1D5DB` | Inputs, text field outlines, essential dividers                            |
-| `primary` (`ChatPrimary`)       | `#0F766E` | Outgoing message bubbles, primary action buttons, active focus outlines    |
-| `on-primary` (`ChatOnPrimary`)  | `#FFFFFF` | Text and icons placed on primary-colored containers                        |
-| `error` (`ChatError`)           | `#B91C1C` | Failed message delivery indicators, error status text, destructive actions |
+| Token                                         | Hex       | Role & Usage                                                               |
+|-----------------------------------------------|-----------|----------------------------------------------------------------------------|
+| `background` (`ChatBackground`)               | `#FFFFFF` | Screen background and app bar container                                    |
+| `surface` (`ChatSurface`)                     | `#F3F4F6` | Incoming message bubbles, composer input bar, avatar fallback background   |
+| `text` (`ChatText`)                           | `#111827` | Primary high-contrast text and headings                                    |
+| `text-muted` (`ChatTextMuted`)                | `#4B5563` | Timestamps, metadata, hints, secondary labels                              |
+| `border` (`ChatBorder`)                       | `#D1D5DB` | Inputs, text field outlines, essential dividers                            |
+| `primary` (`ChatPrimary`)                     | `#0F766E` | Outgoing message bubbles, primary action buttons, active focus outlines    |
+| `on-primary` (`ChatOnPrimary`)                | `#FFFFFF` | Text and icons placed on primary-colored containers                        |
+| `error` (`ChatError`)                         | `#B91C1C` | Failed message delivery indicators, error status text, destructive actions |
+| `on-error` (`ChatOnError`)                    | `#FFFFFF` | Text and icons placed on error-colored containers                          |
+| `error-container` (`ChatErrorContainer`)      | `#FFDAD6` | Background container for subtle error banners                              |
+| `on-error-container` (`ChatOnErrorContainer`) | `#93000A` | High-contrast text on error containers                                     |
 
 - **Quiet Connected State**: Connected state stays quiet (no green presence dots or persistent
   connection banners).
-- **Surface Elevation**: Flat elevation (`0.dp`) across all custom components.
+- **Surface Elevation**: Flat elevation (`0.dp`) across all custom components
+  (`surfaceTint = Color.Transparent`).
 
 ### 2.3 Geometry, Shapes & Typography
 
@@ -42,7 +46,8 @@ All UI components use these semantic color tokens; never introduce component-spe
 |----------------------------|--------------------------|---------------------------------------------------------------------|
 | `radius.control` (`small`) | `12.dp`                  | Buttons, text inputs, search bar, card containers                   |
 | `radius.bubble` (`medium`) | `16.dp`                  | Message bubbles (rounded rectangular, no tails)                     |
-| `radius.avatar` (`large`)  | `CircleShape`            | Circular avatars (40dp in list, 32dp in conversation headers/items) |
+| `radius.surface` (`large`) | `16.dp`                  | Standard surface containers (dialogs, bottom sheets)                |
+| `AvatarShape`              | `CircleShape`            | Circular avatars (40dp in list, 32dp in conversation headers/items) |
 | `touch target`             | `48 × 48 dp`             | Minimum interactive touch target for all buttons and icon buttons   |
 | `stroke`                   | `1.dp`                   | Outlines and essential borders                                      |
 | `typeface`                 | `Roboto` / Platform Sans | Medium for headers/titles, Regular for body/captions                |
@@ -59,11 +64,13 @@ All UI components use these semantic color tokens; never introduce component-spe
 ### 3.1 Theme & Design Tokens
 
 - `[Theme.kt:ChatTheme]`: Root Compose theme wrapper mapping `QuietMessagingLightColorScheme`,
-  `QuietMessagingShapes`, and `Typography` into Material 3.
+  `QuietMessagingShapes`, and `Typography` into Material 3 with edge-to-edge light system bars
+  controller.
 - `[Color.kt]`: Canonical definitions for `ChatBackground`, `ChatSurface`, `ChatText`,
-  `ChatTextMuted`, `ChatBorder`, `ChatPrimary`, `ChatOnPrimary`, `ChatError`.
+  `ChatTextMuted`, `ChatBorder`, `ChatPrimary`, `ChatOnPrimary`, `ChatError`, `ChatOnError`,
+  `ChatErrorContainer`, and `ChatOnErrorContainer`.
 - `[Shape.kt:QuietMessagingShapes]`: Material 3 `Shapes` specification defining `small` (12dp),
-  `medium` (16dp), and `large` (CircleShape).
+  `medium` (16dp), and `large` (16dp), alongside standalone `AvatarShape = CircleShape`.
 - `[Type.kt:Typography]`: Material 3 typography scale matching platform sans-serif.
 
 ### 3.2 Common UI Components & Helpers

@@ -1,8 +1,8 @@
-package io.github.neronguyen.chat.ui.theme
+package io.github.neronguyen.chat.core.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// NeroChat "Quiet Messaging" Semantic Color Tokens (design.md)
+// NeroChat "Quiet Messaging" Semantic Color Tokens (docs/designs/design-system.md)
 val ChatBackground = Color(0xFFFFFFFF)
 val ChatSurface = Color(0xFFF3F4F6)
 val ChatText = Color(0xFF111827)

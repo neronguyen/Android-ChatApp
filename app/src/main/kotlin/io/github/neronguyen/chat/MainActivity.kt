@@ -14,9 +14,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dagger.hilt.android.AndroidEntryPoint
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
 import io.github.neronguyen.chat.core.model.AuthState
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.presentation.navigation.AuthNavGraph
 import io.github.neronguyen.chat.feature.chat.presentation.navigation.ChatNavGraph
-import io.github.neronguyen.chat.ui.theme.ChatTheme
 import javax.inject.Inject
 
 @AndroidEntryPoint
