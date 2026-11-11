@@ -1,22 +1,28 @@
 package io.github.neronguyen.chat.feature.chat.presentation.list
 
 import io.github.neronguyen.chat.core.model.ChatRoomType
-import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import kotlin.time.Instant
 
 data class ChatListUiState(
     val chats: List<ChatRoomUiModel> = emptyList(),
     val searchQuery: String = "",
-    val isSyncing: Boolean = false,
+    val syncState: ChatSyncState = ChatSyncState.Idle,
     val isInitialLoadComplete: Boolean = false,
-    val syncError: DataError? = null,
     val isBannerDismissed: Boolean = false,
 ) {
     val isInitialLoading: Boolean
-        get() = isSyncing && !isInitialLoadComplete && chats.isEmpty()
+        get() = (syncState is ChatSyncState.Syncing || syncState is ChatSyncState.Connecting) &&
+                !isInitialLoadComplete &&
+                chats.isEmpty()
 
     val showSyncBanner: Boolean
-        get() = !isBannerDismissed && (isSyncing || syncError != null)
+        get() = !isBannerDismissed && !isInitialLoading && (
+            syncState is ChatSyncState.Offline ||
+            syncState is ChatSyncState.Connecting ||
+            syncState is ChatSyncState.Syncing ||
+            syncState is ChatSyncState.Failed
+        )
 }
 
 data class ChatRoomUiModel(

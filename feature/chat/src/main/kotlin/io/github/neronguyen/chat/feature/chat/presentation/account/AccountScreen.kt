@@ -55,7 +55,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.neronguyen.chat.core.model.RealtimeConnectionState
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.ui.asUiText
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
 import io.github.neronguyen.chat.feature.chat.R
@@ -142,7 +142,7 @@ fun AccountScreen(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            RealtimeSyncBanner(connectionState = uiState.connectionState)
+            RealtimeSyncBanner(syncState = uiState.syncState)
 
             ProfileIdentityCard(
                 displayName = uiState.displayName,
@@ -230,7 +230,7 @@ private fun AccountTopBar(
 
 @Composable
 private fun RealtimeSyncBanner(
-    connectionState: RealtimeConnectionState,
+    syncState: ChatSyncState,
     modifier: Modifier = Modifier,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "PulseTransition")
@@ -244,29 +244,32 @@ private fun RealtimeSyncBanner(
         label = "PulseAlpha",
     )
 
-    val (dotColor, bannerText, badgeText) = when (connectionState) {
-        RealtimeConnectionState.CONNECTED -> Triple(
+    val (dotColor, bannerText, badgeText) = when (syncState) {
+        is ChatSyncState.Synced -> Triple(
             MaterialTheme.colorScheme.primary,
             stringResource(R.string.account_realtime_operational),
             stringResource(R.string.account_realtime_synced),
         )
 
-        RealtimeConnectionState.CONNECTING -> Triple(
+        is ChatSyncState.Connecting,
+        is ChatSyncState.Syncing -> Triple(
             MaterialTheme.colorScheme.primary,
             stringResource(R.string.account_realtime_connecting),
             null,
         )
 
-        RealtimeConnectionState.DISCONNECTED,
-        RealtimeConnectionState.FAILED -> Triple(
+        is ChatSyncState.Offline,
+        is ChatSyncState.Failed,
+        is ChatSyncState.Idle -> Triple(
             MaterialTheme.colorScheme.onSurfaceVariant,
             stringResource(R.string.account_realtime_offline),
             null,
         )
     }
 
-    val isPulsing = connectionState == RealtimeConnectionState.CONNECTED ||
-            connectionState == RealtimeConnectionState.CONNECTING
+    val isPulsing = syncState is ChatSyncState.Synced ||
+            syncState is ChatSyncState.Connecting ||
+            syncState is ChatSyncState.Syncing
 
     Row(
         modifier = modifier
@@ -570,7 +573,7 @@ private fun AccountScreenPreview_VerifiedConnected() {
                 email = "alex.lin@example.com",
                 initials = "AL",
                 isEmailVerified = true,
-                connectionState = RealtimeConnectionState.CONNECTED,
+                syncState = ChatSyncState.Synced,
             ),
             onEvent = {},
             onBackClick = {},
@@ -588,7 +591,7 @@ private fun AccountScreenPreview_UnverifiedOffline() {
                 email = "elena@example.com",
                 initials = "ER",
                 isEmailVerified = false,
-                connectionState = RealtimeConnectionState.DISCONNECTED,
+                syncState = ChatSyncState.Offline,
             ),
             onEvent = {},
             onBackClick = {},

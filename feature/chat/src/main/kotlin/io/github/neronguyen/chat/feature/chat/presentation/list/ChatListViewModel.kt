@@ -9,16 +9,18 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
+import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatRoom
-import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.model.ChatSyncState
+import io.github.neronguyen.chat.feature.chat.presentation.util.SyncCategory
+import io.github.neronguyen.chat.feature.chat.presentation.util.toCategory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.util.Locale
@@ -30,6 +32,7 @@ import kotlin.time.Instant
 class ChatListViewModel @Inject constructor(
     private val chatRoomRepository: ChatRoomRepository,
     private val authRepository: AuthRepository,
+    private val chatSyncManager: ChatSyncManager,
 ) : ViewModel() {
 
     internal var nowProvider: () -> Instant = { Clock.System.now() }
@@ -38,20 +41,22 @@ class ChatListViewModel @Inject constructor(
     val searchState = TextFieldState()
 
     private val searchQueryFlow = MutableStateFlow("")
-    private val syncStatusFlow = MutableStateFlow(SyncStatus())
+    private val isBannerDismissedFlow = MutableStateFlow(false)
+    private val isInitialLoadCompleteFlow = MutableStateFlow(false)
+    private var lastSyncCategory: SyncCategory? = null
 
-    private val _uiState = MutableStateFlow(ChatListUiState(isSyncing = true))
+    private val _uiState = MutableStateFlow(ChatListUiState())
     val uiState: StateFlow<ChatListUiState> = _uiState.asStateFlow()
 
     init {
         observeSearchField()
+        observeSyncState()
         observeChats()
-        syncChats()
     }
 
     fun onEvent(event: ChatListUiEvent) {
         when (event) {
-            ChatListUiEvent.RefreshChats -> syncChats()
+            ChatListUiEvent.RefreshChats -> refreshChats()
             ChatListUiEvent.DismissSyncBanner -> dismissSyncBanner()
             ChatListUiEvent.ClearSearch -> clearSearch()
         }
@@ -74,6 +79,31 @@ class ChatListViewModel @Inject constructor(
         }
     }
 
+    private fun observeSyncState() {
+        viewModelScope.launch {
+            chatSyncManager.syncState.collect { syncState ->
+                val newCategory = syncState.toCategory()
+                val prevCategory = lastSyncCategory
+                if (prevCategory != null) {
+                    if (newCategory == SyncCategory.ERROR ||
+                        (newCategory == SyncCategory.OFFLINE && prevCategory != SyncCategory.OFFLINE)
+                    ) {
+                        isBannerDismissedFlow.value = false
+                    }
+                }
+                lastSyncCategory = newCategory
+
+                if (syncState is ChatSyncState.Synced ||
+                    syncState is ChatSyncState.Failed ||
+                    syncState is ChatSyncState.Offline ||
+                    syncState is ChatSyncState.Idle
+                ) {
+                    isInitialLoadCompleteFlow.value = true
+                }
+            }
+        }
+    }
+
     private fun observeChats() {
         val currentUserIdFlow = authRepository.getAuthState()
             .map { authState ->
@@ -82,17 +112,35 @@ class ChatListViewModel @Inject constructor(
             .distinctUntilChanged()
 
         viewModelScope.launch {
+            chatRoomRepository.getChats().collect { rooms ->
+                if (rooms.isNotEmpty()) {
+                    isInitialLoadCompleteFlow.value = true
+                }
+            }
+        }
+
+        val syncUiFlow = combine(
+            chatSyncManager.syncState,
+            isBannerDismissedFlow,
+            isInitialLoadCompleteFlow,
+        ) { syncState, isBannerDismissed, isInitialLoadComplete ->
+            Triple(syncState, isBannerDismissed, isInitialLoadComplete)
+        }
+
+        viewModelScope.launch {
             combine(
                 chatRoomRepository.getChats(),
                 currentUserIdFlow,
                 searchQueryFlow,
-                syncStatusFlow,
-            ) { rooms, currentUserId, searchQuery, syncStatus ->
+                syncUiFlow,
+            ) { rooms, currentUserId, searchQuery, (syncState, isBannerDismissed, isInitialLoadComplete) ->
                 buildUiState(
                     rooms = rooms,
                     currentUserId = currentUserId,
                     searchQuery = searchQuery,
-                    syncStatus = syncStatus,
+                    syncState = syncState,
+                    isBannerDismissed = isBannerDismissed,
+                    isInitialLoadComplete = isInitialLoadComplete,
                 )
             }.collect { newState ->
                 _uiState.value = newState
@@ -104,7 +152,9 @@ class ChatListViewModel @Inject constructor(
         rooms: List<ChatRoom>,
         currentUserId: String?,
         searchQuery: String,
-        syncStatus: SyncStatus,
+        syncState: ChatSyncState,
+        isBannerDismissed: Boolean,
+        isInitialLoadComplete: Boolean,
     ): ChatListUiState {
         val mappedRooms = rooms.toChatRoomUiModels(
             currentUserId = currentUserId,
@@ -123,66 +173,24 @@ class ChatListViewModel @Inject constructor(
         return ChatListUiState(
             chats = filteredRooms,
             searchQuery = searchQuery,
-            isSyncing = syncStatus.isSyncing,
-            isInitialLoadComplete = syncStatus.isInitialLoadComplete,
-            syncError = syncStatus.syncError,
-            isBannerDismissed = syncStatus.isBannerDismissed,
+            syncState = syncState,
+            isInitialLoadComplete = isInitialLoadComplete,
+            isBannerDismissed = isBannerDismissed,
         )
     }
 
-    private fun syncChats() {
-        if (syncStatusFlow.value.isSyncing && syncStatusFlow.value.isSyncJobActive) return
-
-        syncStatusFlow.update {
-            it.copy(
-                isSyncing = true,
-                isSyncJobActive = true,
-                syncError = null,
-                isBannerDismissed = false,
-            )
-        }
-
+    private fun refreshChats() {
         viewModelScope.launch {
-            chatRoomRepository.syncChats()
-                .onLeft { networkError ->
-                    syncStatusFlow.update {
-                        it.copy(
-                            isSyncing = false,
-                            isSyncJobActive = false,
-                            isInitialLoadComplete = true,
-                            syncError = networkError,
-                        )
-                    }
-                }
-                .onRight {
-                    syncStatusFlow.update {
-                        it.copy(
-                            isSyncing = false,
-                            isSyncJobActive = false,
-                            isInitialLoadComplete = true,
-                            syncError = null,
-                        )
-                    }
-                }
+            chatSyncManager.retry()
         }
     }
 
     private fun dismissSyncBanner() {
-        syncStatusFlow.update {
-            it.copy(isBannerDismissed = true)
-        }
+        isBannerDismissedFlow.value = true
     }
 
     private fun clearSearch() {
         searchState.clearText()
         searchQueryFlow.value = ""
     }
-
-    private data class SyncStatus(
-        val isSyncing: Boolean = true,
-        val isSyncJobActive: Boolean = false,
-        val isInitialLoadComplete: Boolean = false,
-        val syncError: DataError? = null,
-        val isBannerDismissed: Boolean = false,
-    )
 }

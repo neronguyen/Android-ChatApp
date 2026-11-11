@@ -2,8 +2,8 @@ package io.github.neronguyen.chat.feature.chat.presentation.conversation
 
 import androidx.compose.runtime.Immutable
 import io.github.neronguyen.chat.core.model.ChatRoomType
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
-import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.feature.chat.presentation.newchat.ParticipantUiModel
@@ -18,7 +18,7 @@ data class ConversationUiState(
     val initials: String = "?",
     val avatarUrl: String? = null,
     val items: List<ConversationListItem> = emptyList(),
-    val connectionState: RealtimeConnectionState = RealtimeConnectionState.CONNECTED,
+    val syncState: ChatSyncState = ChatSyncState.Idle,
     val isInitialLoading: Boolean = false,
     val isSyncing: Boolean = false,
     val syncError: ChatError.SyncRoom? = null,
@@ -31,12 +31,16 @@ data class ConversationUiState(
     val isBannerDismissed: Boolean = false,
     val addParticipantDialogState: AddParticipantDialogState? = null,
 ) {
-    val showConnectionBanner: Boolean
+    val canSendMessage: Boolean
+        get() = syncState is ChatSyncState.Synced || syncState is ChatSyncState.Syncing
+
+    val showSyncBanner: Boolean
         get() = !isBannerDismissed && (
-                connectionState != RealtimeConnectionState.CONNECTED ||
-                        syncError != null ||
-                        loadOlderError != null
-                )
+            syncState is ChatSyncState.Offline ||
+            syncState is ChatSyncState.Connecting ||
+            syncState is ChatSyncState.Syncing ||
+            syncState is ChatSyncState.Failed
+        )
 
     val isEmptyState: Boolean
         get() = !isInitialLoading && items.none { it is ConversationListItem.MessageItem }

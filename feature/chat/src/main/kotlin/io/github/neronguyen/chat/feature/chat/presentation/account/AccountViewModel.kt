@@ -3,8 +3,8 @@ package io.github.neronguyen.chat.feature.chat.presentation.account
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.neronguyen.chat.core.data.realtime.RealtimeConnectionManager
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
+import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.feature.chat.presentation.list.deriveInitials
@@ -19,7 +19,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AccountViewModel @Inject constructor(
     private val authRepository: AuthRepository,
-    private val realtimeConnectionManager: RealtimeConnectionManager,
+    private val chatSyncManager: ChatSyncManager,
 ) : ViewModel() {
 
     private val isSigningOutFlow = MutableStateFlow(false)
@@ -46,11 +46,11 @@ class AccountViewModel @Inject constructor(
         viewModelScope.launch {
             combine(
                 authRepository.getAuthState().distinctUntilChanged(),
-                realtimeConnectionManager.connectionState.distinctUntilChanged(),
+                chatSyncManager.syncState,
                 isSigningOutFlow,
                 showConfirmationFlow,
                 signOutErrorFlow,
-            ) { authState, connectionState, isSigningOut, showConfirmation, signOutError ->
+            ) { authState, syncState, isSigningOut, showConfirmation, signOutError ->
                 val authenticatedUser = (authState as? AuthState.Authenticated)?.user
                 val displayName = authenticatedUser?.displayName.orEmpty()
                 val email = authenticatedUser?.email.orEmpty()
@@ -62,7 +62,7 @@ class AccountViewModel @Inject constructor(
                     email = email,
                     initials = initials,
                     isEmailVerified = authenticatedUser?.isEmailVerified ?: false,
-                    connectionState = connectionState,
+                    syncState = syncState,
                     isSigningOut = isSigningOut,
                     showSignOutConfirmation = showConfirmation,
                     signOutError = signOutError,
