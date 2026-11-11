@@ -62,7 +62,16 @@ fi
 if [ "$IS_CI" = "true" ] || [ "${1:-}" = "clean" ]; then
   if [ "${1:-}" = "clean" ]; then shift; fi
   echo "==> [CLEAN GATE] Running clean unit tests & lintDebug on Android-ChatApp (CI=${IS_CI})..."
-  exec "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" testDebugUnitTest lintDebug --rerun-tasks "$@"
+  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" testDebugUnitTest lintDebug --rerun-tasks "$@"
+
+  if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
+    echo "ERROR: Clean verification produced uncommitted or untracked changes (drift detected):" >&2
+    git -C "$REPO_DIR" status --short >&2
+    git -C "$REPO_DIR" diff >&2
+    exit 1
+  fi
+  echo "==> [CLEAN GATE] Verification passed and working tree is clean."
+  exit 0
 fi
 
 # If specific gradle tasks/flags were passed, execute them directly
