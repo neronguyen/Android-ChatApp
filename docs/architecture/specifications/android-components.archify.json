@@ -8,10 +8,37 @@
     "repository": {
       "url": "git@github.com:neronguyen/Android-NeroChatApp.git",
       "link_mode": "local-only",
-      "revision": "8eaad7bef26b966bc0a6556f7df61e9f365c11b7"
+      "revision": "464bda668624fc229ba0d832bb13af536733bd79"
     }
   },
   "components": [
+    {
+      "id": "sync_work",
+      "type": "backend",
+      "label": "Sync Work",
+      "sublabel": "ChatSyncWorker · SyncScheduler",
+      "tag": ":sync:work",
+      "pos": [
+        390,
+        640
+      ],
+      "size": [
+        185,
+        68
+      ],
+      "sources": [
+        {
+          "path": "sync/work/src/main/kotlin/io/github/neronguyen/chat/sync/work/ChatSyncWorker.kt",
+          "line": 15,
+          "end_line": 44
+        },
+        {
+          "path": "sync/work/src/main/kotlin/io/github/neronguyen/chat/sync/work/WorkManagerSyncSchedulerImpl.kt",
+          "line": 18,
+          "end_line": 76
+        }
+      ]
+    },
     {
       "id": "app_host",
       "type": "frontend",
@@ -281,7 +308,7 @@
       "id": "retrofit_network",
       "type": "security",
       "label": "REST & Auth Pipeline",
-      "sublabel": "Retrofit · AuthInterceptor · 401 Auth",
+      "sublabel": "Retrofit · AuthInterceptor",
       "tag": ":core:network",
       "pos": [
         765,
@@ -313,7 +340,7 @@
       "id": "ws_client",
       "type": "messagebus",
       "label": "WebSocket Client",
-      "sublabel": "ChatWebSocketClient (@RealtimeOkHttp)",
+      "sublabel": "ChatWebSocketClient",
       "tag": ":core:network",
       "pos": [
         765,
@@ -366,6 +393,13 @@
   "boundaries": [
     {
       "kind": "region",
+      "label": "Sync Layer (:sync:work)",
+      "wraps": [
+        "sync_work"
+      ]
+    },
+    {
+      "kind": "region",
       "label": "Presentation Layer (:app, :feature:*)",
       "wraps": [
         "app_host",
@@ -401,6 +435,20 @@
     }
   ],
   "connections": [
+    {
+      "id": "app_to_sync_work",
+      "from": "app_host",
+      "to": "sync_work",
+      "fromSide": "bottom",
+      "toSide": "left"
+    },
+    {
+      "id": "sync_work_to_realtime",
+      "from": "sync_work",
+      "to": "realtime_managers",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
     {
       "id": "app_to_auth_repo",
       "from": "app_host",

@@ -17,6 +17,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -151,6 +152,35 @@ class ChatListViewModelTest {
         }
 
     @Test
+    fun `when sync fails offline and subsequent sync succeeds on refresh, syncError is cleared`() =
+        runTest {
+            val cachedRoom = ChatRoom(
+                id = "room-1",
+                type = ChatRoomType.DIRECT,
+                creator = meParticipant,
+                participants = listOf(meParticipant, elenaParticipant),
+            )
+            fakeChatRoomRepository.roomsFlow.value = listOf(cachedRoom)
+            fakeChatRoomRepository.syncResult = Either.Left(DataError.Connectivity.NoInternet)
+
+            viewModel = createViewModel()
+            testScheduler.advanceUntilIdle()
+
+            val stateWithError = viewModel.uiState.value
+            assertEquals(DataError.Connectivity.NoInternet, stateWithError.syncError)
+            assertTrue(stateWithError.showSyncBanner)
+
+            // Subsequent refresh succeeds
+            fakeChatRoomRepository.syncResult = Either.Right(Unit)
+            viewModel.onEvent(ChatListUiEvent.RefreshChats)
+            testScheduler.advanceUntilIdle()
+
+            val recoveredState = viewModel.uiState.value
+            assertNull(recoveredState.syncError)
+            assertFalse(recoveredState.showSyncBanner)
+        }
+
+    @Test
     fun `search query filters conversations by title or preview and ClearSearch restores full list`() =
         runTest {
             val room1 = ChatRoom(
@@ -240,6 +270,9 @@ private class FakeChatRoomRepository : ChatRoomRepository {
     var syncCompletable: CompletableDeferred<Either<DataError, Unit>>? = null
 
     override fun getChats(): Flow<List<ChatRoom>> = roomsFlow
+
+    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
+        Either.Right(emptyList())
 
     override suspend fun syncChats(): Either<DataError, Unit> {
         syncCallCount++

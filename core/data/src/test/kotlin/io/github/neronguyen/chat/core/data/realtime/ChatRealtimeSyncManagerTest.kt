@@ -88,6 +88,8 @@ class ChatRealtimeSyncManagerTest {
             emptyFlow()
 
         override suspend fun roomExists(roomId: String): Boolean = roomId in existingRooms
+        override suspend fun getAllRoomsSnapshot(): List<ChatRoomEntity> = emptyList()
+        override suspend fun deleteRoomsByIds(roomIds: List<String>) {}
 
         override fun getRecentMessages(
             roomId: String,
@@ -210,6 +212,7 @@ class ChatRealtimeSyncManagerTest {
 
         override fun getChats(): Flow<List<ChatRoom>> = emptyFlow()
         override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
+        override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> = Either.Right(emptyList())
         override suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant> =
             Either.Left(ChatError.ParticipantNotFound)
         override suspend fun createDirectChatRoom(targetUserId: String, message: String): Either<ChatError.CreateRoom, ChatRoom> =
@@ -604,7 +607,7 @@ class ChatRealtimeSyncManagerTest {
         }
 
     @Test
-    fun `WsServerEvent Error with messageId marks message delivery status as FAILED`() = runTest {
+    fun `WsServerEvent Error with DuplicateMessageId reconciles delivery status as SENT`() = runTest {
         val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeDao = FakeChatDao()
@@ -623,8 +626,38 @@ class ChatRealtimeSyncManagerTest {
 
         fakeDataSource.incomingEventsFlow.emit(
             WsServerEvent.Error(
-                error = ChatServerError.DuplicateMessageId,
-                message = "Message already processed",
+                error = ChatServerError.DuplicateMessageId.code,
+                message = "Duplicate message",
+                messageId = "msg-123"
+            )
+        )
+
+        testScheduler.advanceUntilIdle()
+        assertEquals(MessageDeliveryStatus.SENT, fakeDao.updatedStatuses["msg-123"])
+    }
+
+    @Test
+    fun `WsServerEvent Error with other error marks message delivery status as FAILED`() = runTest {
+        val externalScope = TestScope(testDispatcher)
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val fakeDao = FakeChatDao()
+        val fakeRoomRepo = FakeChatRoomRepository()
+
+        val syncManager = ChatRealtimeSyncManager(
+            realtimeDataSource = fakeDataSource,
+            chatDao = fakeDao,
+            chatRoomRepository = fakeRoomRepo,
+            appScope = externalScope,
+            ioDispatcher = testDispatcher
+        )
+
+        syncManager.initialize()
+        testScheduler.advanceUntilIdle()
+
+        fakeDataSource.incomingEventsFlow.emit(
+            WsServerEvent.Error(
+                error = ChatServerError.ParticipantNotInRoom.code,
+                message = "Not in room",
                 messageId = "msg-123"
             )
         )

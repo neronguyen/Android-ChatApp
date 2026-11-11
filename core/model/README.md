@@ -10,10 +10,13 @@ Pure Kotlin client domain models and typed domain error hierarchies.
 - `[ChatMessage.kt:ChatMessage]`: Client message domain model (`id`, `roomId`, `senderId`, `content`, `timestamp: Instant`, `deliveryStatus: MessageDeliveryStatus`, `deletedAt`).
 - `[ChatParticipant.kt:ChatParticipant]`: Room participant domain model (`userId`, `email`, `displayName`, `profilePictureUrl`).
 - `[MessageDeliveryStatus.kt:MessageDeliveryStatus]`: Message lifecycle enum (`SENDING`, `SENT`, `FAILED`, `DELETED`).
-- `[RealtimeConnectionState.kt:RealtimeConnectionState]`: Connection lifecycle states (`Disconnected`, `Connecting`, `Connected`).
+- `[ChatSyncState.kt:ChatSyncState]`: Data-layer catch-up sync lifecycle state machine (`Idle`, `Syncing`, `Synced`, `Failed`).
+- `[RealtimeConnectionState.kt:RealtimeConnectionState]`: Connection lifecycle states
+  (`DISCONNECTED`, `CONNECTING`, `CONNECTED`, `FAILED`).
 - `[AuthError.kt:AuthError]`: Sealed hierarchy of client authentication errors.
 - `[ChatError.kt:ChatError]`: Sealed hierarchy of client chat errors.
-- `[DataError.kt:DataError]`: Sealed hierarchy of data storage and network failures.
+- `[DataError.kt:DataError]`: Sealed hierarchy of data storage and network failures, with
+  `DataError.isRetryable()` transient failure classification.
 
 ## Invariants
 - Zero Android framework or persistence dependencies (pure Kotlin JVM module).

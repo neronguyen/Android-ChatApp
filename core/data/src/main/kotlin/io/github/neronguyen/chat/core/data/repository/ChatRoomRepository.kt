@@ -12,6 +12,8 @@ interface ChatRoomRepository {
 
     suspend fun syncChats(): Either<DataError, Unit>
 
+    suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>>
+
     suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant>
 
     suspend fun createDirectChatRoom(

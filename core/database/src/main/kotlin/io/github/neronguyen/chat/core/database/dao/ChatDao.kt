@@ -29,6 +29,12 @@ interface ChatDao {
     @Query("SELECT EXISTS(SELECT 1 FROM chat_rooms WHERE id = :roomId)")
     suspend fun roomExists(roomId: String): Boolean
 
+    @Query("SELECT * FROM chat_rooms")
+    suspend fun getAllRoomsSnapshot(): List<ChatRoomEntity>
+
+    @Query("DELETE FROM chat_rooms WHERE id IN (:roomIds)")
+    suspend fun deleteRoomsByIds(roomIds: List<String>)
+
     @Query(
         """
         SELECT * FROM chat_messages
@@ -248,7 +254,23 @@ interface ChatDao {
             ChatRoomParticipantCrossRef(roomId = room.id, userId = participant.userId)
         }
 
+        val existingCrossRefs = getCrossRefsForRooms(listOf(room.id))
+        val newCrossRefSet = crossRefs.toSet()
+        val staleCrossRefs = existingCrossRefs.filter { it !in newCrossRefSet }
+        if (staleCrossRefs.isNotEmpty()) {
+            deleteCrossRefs(staleCrossRefs)
+        }
+
         upsertCrossRefs(crossRefs)
+
+        val newestLocalMessage = getNewestMessageForRoom(room.id)
+        if (newestLocalMessage != null && (room.lastActivityAt == null || newestLocalMessage.timestamp >= room.lastActivityAt)) {
+            updateRoomLastActivity(
+                roomId = room.id,
+                messageId = newestLocalMessage.id,
+                timestamp = newestLocalMessage.timestamp
+            )
+        }
     }
 
     @Transaction
@@ -258,7 +280,21 @@ interface ChatDao {
         lastMessages: List<ChatMessageEntity>,
         crossRefs: List<ChatRoomParticipantCrossRef>
     ) {
-        if (rooms.isEmpty()) return
+        if (rooms.isEmpty()) {
+            clearCrossRefs()
+            clearMessages()
+            clearRooms()
+            return
+        }
+
+        val existingRoomIds = getAllRoomsSnapshot().map { it.id }.toSet()
+        val newRoomIdSet = rooms.map { it.id }.toSet()
+        val staleRoomIds = (existingRoomIds - newRoomIdSet).toList()
+        if (staleRoomIds.isNotEmpty()) {
+            staleRoomIds.chunked(500).forEach { chunk ->
+                deleteRoomsByIds(chunk)
+            }
+        }
 
         upsertParticipants(participants)
         upsertRooms(rooms)
@@ -279,6 +315,17 @@ interface ChatDao {
 
         crossRefs.chunked(500).forEach { chunk ->
             upsertCrossRefs(chunk)
+        }
+
+        rooms.forEach { room ->
+            val newestLocalMessage = getNewestMessageForRoom(room.id)
+            if (newestLocalMessage != null && (room.lastActivityAt == null || newestLocalMessage.timestamp >= room.lastActivityAt)) {
+                updateRoomLastActivity(
+                    roomId = room.id,
+                    messageId = newestLocalMessage.id,
+                    timestamp = newestLocalMessage.timestamp
+                )
+            }
         }
     }
 

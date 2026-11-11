@@ -357,6 +357,9 @@ class NewChatViewModelTest {
 
         override fun getChats(): Flow<List<ChatRoom>> = MutableStateFlow(emptyList())
 
+        override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
+            Either.Right(emptyList())
+
         override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
 
         override suspend fun findChatParticipantByEmail(

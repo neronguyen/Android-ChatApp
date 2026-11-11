@@ -56,6 +56,8 @@ dependencies {
     implementation(projects.feature.auth)
     implementation(projects.feature.chat)
 
+    implementation(projects.sync.work)
+
     implementation(projects.core.model)
     implementation(projects.core.data)
     implementation(projects.core.network)

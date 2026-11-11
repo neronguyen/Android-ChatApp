@@ -1,6 +1,7 @@
 package io.github.neronguyen.chat.core.data.realtime
 
 import android.database.sqlite.SQLiteConstraintException
+import io.github.neronguyen.chat.core.common.coroutine.KeyedSingleFlight
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
@@ -13,6 +14,7 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Failed
 import io.github.neronguyenvn.nerochat.contract.chat.ChatMessageDto
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
+import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -35,7 +37,10 @@ class ChatRealtimeSyncManager @Inject constructor(
     private val initialized = AtomicBoolean(false)
     private val pendingMutex = Mutex()
     private val pendingMessages = mutableMapOf<String, MutableList<ChatMessageDto>>()
-    private val fetchingRooms = mutableSetOf<String>()
+    private val roomResolutionFlight = KeyedSingleFlight<String, Unit>(
+        scope = appScope,
+        dispatcher = ioDispatcher,
+    )
 
     fun initialize() {
         if (!initialized.compareAndSet(expectedValue = false, newValue = true)) return
@@ -49,7 +54,12 @@ class ChatRealtimeSyncManager @Inject constructor(
                     is WsServerEvent.ParticipantLeft -> handleParticipantLeft(event)
                     is WsServerEvent.Error -> {
                         event.messageId?.let { messageId ->
-                            chatDao.updateDeliveryStatus(messageId, MessageDeliveryStatus.FAILED)
+                            val status = if (event.error == ChatServerError.DuplicateMessageId.code) {
+                                MessageDeliveryStatus.SENT
+                            } else {
+                                MessageDeliveryStatus.FAILED
+                            }
+                            chatDao.updateDeliveryStatus(messageId, status)
                         }
                     }
                 }
@@ -69,31 +79,28 @@ class ChatRealtimeSyncManager @Inject constructor(
         val message = event.message
         val roomId = message.roomId
 
-        if (chatDao.roomExists(roomId)) {
-            upsertMessageSafely(message)
-            return
-        }
-
-        // Room is not yet cached locally in SQLite. Buffer message and single-flight fetch metadata.
-        val shouldTriggerFetch = pendingMutex.withLock {
-            if (chatDao.roomExists(roomId)) {
-                null
+        // Room is not cached locally or has pending buffered messages being drained.
+        // Checking both under pendingMutex guarantees strict FIFO ordering when a new message
+        // arrives after syncChatRoom inserts the room into SQLite but before the queue finishes draining.
+        val buffered = pendingMutex.withLock {
+            if (chatDao.roomExists(roomId) && !pendingMessages.containsKey(roomId)) {
+                false
             } else {
                 val queue = pendingMessages.getOrPut(roomId) { mutableListOf() }
                 if (queue.size < MAX_PENDING_MESSAGES_PER_ROOM) {
                     queue.add(message)
                 }
-                fetchingRooms.add(roomId)
+                true
             }
         }
 
-        if (shouldTriggerFetch == null) {
+        if (!buffered) {
             upsertMessageSafely(message)
             return
         }
 
-        if (shouldTriggerFetch) {
-            appScope.launch(ioDispatcher) {
+        appScope.launch(ioDispatcher) {
+            roomResolutionFlight.execute(roomId) {
                 fetchRoomAndDrainQueue(roomId)
             }
         }
@@ -101,14 +108,27 @@ class ChatRealtimeSyncManager @Inject constructor(
 
     private suspend fun fetchRoomAndDrainQueue(roomId: String) {
         val result = chatRoomRepository.syncChatRoom(roomId)
-
-        val queuedMessages = pendingMutex.withLock {
-            fetchingRooms.remove(roomId)
-            pendingMessages.remove(roomId).orEmpty()
+        if (result.isLeft()) {
+            pendingMutex.withLock {
+                pendingMessages.remove(roomId)
+            }
+            return
         }
 
-        if (result.isRight()) {
-            for (msg in queuedMessages) {
+        while (true) {
+            val batch = pendingMutex.withLock {
+                val queue = pendingMessages[roomId]
+                if (queue.isNullOrEmpty()) {
+                    pendingMessages.remove(roomId)
+                    emptyList()
+                } else {
+                    val snapshot = queue.toList()
+                    queue.clear()
+                    snapshot
+                }
+            }
+            if (batch.isEmpty()) break
+            for (msg in batch) {
                 upsertMessageSafely(msg)
             }
         }

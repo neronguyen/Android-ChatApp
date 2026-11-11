@@ -10,7 +10,7 @@ interface ChatMessageRepository {
     fun getMessages(roomId: String, limit: Int): Flow<List<ChatMessage>>
     suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean>
     suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean>
-    suspend fun sendMessage(roomId: String, message: String)
-    suspend fun retryMessage(messageId: String)
+    suspend fun sendMessage(roomId: String, content: String): Either<DataError, Unit>
+    suspend fun retryMessage(messageId: String): Either<DataError, Unit>
     suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit>
 }

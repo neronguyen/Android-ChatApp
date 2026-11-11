@@ -487,14 +487,99 @@ class ChatDaoTest {
     }
 
     @Test
-    fun insertFullChats_emptyRoomsList_isNoOp() = runTest {
+    fun insertFullChats_emptyRoomsList_prunesAllLocalRooms() = runTest {
         createRoom("r1")
-        val before = chatDao.getChatsWithDetails().first()
+        createParticipant("u1")
+        chatDao.upsertCrossRefs(listOf(ChatRoomParticipantCrossRef("r1", "u1")))
+        chatDao.upsertMessage(createMessage("m1", roomId = "r1"))
 
         chatDao.insertFullChats(emptyList(), emptyList(), emptyList(), emptyList())
 
         val after = chatDao.getChatsWithDetails().first()
-        assertEquals(before.size, after.size)
+        assertTrue(after.isEmpty())
+        assertNull(chatDao.getMessageById("m1"))
+        assertTrue(chatDao.getCrossRefsForRooms(listOf("r1")).isEmpty())
+    }
+
+    @Test
+    fun insertFullChats_prunesStaleRooms_andCascadesMessagesAndCrossRefs() = runTest {
+        val r1 = ChatRoomEntity(id = "r1", creatorId = "u1")
+        val r2 = ChatRoomEntity(id = "r2", creatorId = "u1")
+        val p1 = ChatParticipantEntity("u1", "u1@test.com", "U1")
+        val m1 = createMessage("m1", roomId = "r1")
+        val m2 = createMessage("m2", roomId = "r2")
+
+        chatDao.insertFullChats(
+            rooms = listOf(r1, r2),
+            participants = listOf(p1),
+            lastMessages = listOf(m1, m2),
+            crossRefs = listOf(ChatRoomParticipantCrossRef("r1", "u1"), ChatRoomParticipantCrossRef("r2", "u1"))
+        )
+        assertEquals(2, chatDao.getChatsWithDetails().first().size)
+
+        // Sync returns only r2 (r1 is stale / user left on another device)
+        chatDao.insertFullChats(
+            rooms = listOf(r2),
+            participants = listOf(p1),
+            lastMessages = listOf(m2),
+            crossRefs = listOf(ChatRoomParticipantCrossRef("r2", "u1"))
+        )
+
+        val remainingRooms = chatDao.getChatsWithDetails().first()
+        assertEquals(1, remainingRooms.size)
+        assertEquals("r2", remainingRooms.single().room.id)
+        assertNull(chatDao.getMessageById("m1"))
+        assertTrue(chatDao.getCrossRefsForRooms(listOf("r1")).isEmpty())
+    }
+
+    @Test
+    fun insertFullChats_preservesNewerLocalSendingOrFailedMessageAsPreview() = runTest {
+        val room = ChatRoomEntity(id = "r1", creatorId = "u1", lastMessageId = "m-server", lastActivityAt = 1000L)
+        val serverMsg = createMessage("m-server", roomId = "r1", timestamp = 1000L, deliveryStatus = MessageDeliveryStatus.SENT)
+        val p1 = ChatParticipantEntity("u1", "u1@test.com", "U1")
+
+        // First insert server state
+        chatDao.insertFullChat(room, listOf(p1), serverMsg)
+
+        // Local unsent sending message arrived at 2000L
+        val sendingMsg = createMessage("m-sending", roomId = "r1", timestamp = 2000L, deliveryStatus = MessageDeliveryStatus.SENDING)
+        chatDao.insertSendingMessage(sendingMsg)
+
+        // Subsequent sync arrives with older lastMessage (1000L)
+        chatDao.insertFullChats(
+            rooms = listOf(room),
+            participants = listOf(p1),
+            lastMessages = listOf(serverMsg),
+            crossRefs = listOf(ChatRoomParticipantCrossRef("r1", "u1"))
+        )
+
+        val updated = chatDao.getChatWithDetails("r1").first()
+        assertNotNull(updated)
+        // Preview preserved as the newer sending message
+        assertEquals("m-sending", updated.room.lastMessageId)
+        assertEquals(2000L, updated.room.lastActivityAt)
+    }
+
+    @Test
+    fun insertFullChat_preservesNewerLocalSendingOrFailedMessageAsPreview() = runTest {
+        val room = ChatRoomEntity(id = "r1", creatorId = "u1", lastMessageId = "m-server", lastActivityAt = 1000L)
+        val serverMsg = createMessage("m-server", roomId = "r1", timestamp = 1000L, deliveryStatus = MessageDeliveryStatus.SENT)
+        val p1 = ChatParticipantEntity("u1", "u1@test.com", "U1")
+
+        // First insert server state
+        chatDao.insertFullChat(room, listOf(p1), serverMsg)
+
+        // Local failed message at 2500L
+        val failedMsg = createMessage("m-failed", roomId = "r1", timestamp = 2500L, deliveryStatus = MessageDeliveryStatus.FAILED)
+        chatDao.upsertMessage(failedMsg)
+
+        // Call insertFullChat with server data at 1000L
+        chatDao.insertFullChat(room, listOf(p1), serverMsg)
+
+        val updated = chatDao.getChatWithDetails("r1").first()
+        assertNotNull(updated)
+        assertEquals("m-failed", updated.room.lastMessageId)
+        assertEquals(2500L, updated.room.lastActivityAt)
     }
 
     @Test

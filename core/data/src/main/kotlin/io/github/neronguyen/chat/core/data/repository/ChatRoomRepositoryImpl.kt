@@ -1,6 +1,9 @@
 package io.github.neronguyen.chat.core.data.repository
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.common.coroutine.KeyedSingleFlight
+import io.github.neronguyen.chat.core.common.coroutine.SingleFlight
+import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
 import io.github.neronguyen.chat.core.data.mapper.toAddParticipantsError
@@ -22,10 +25,10 @@ import io.github.neronguyen.chat.core.network.ChatNetworkDataSource
 import io.github.neronguyenvn.nerochat.contract.chat.ChatParticipantDto
 import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,8 +36,18 @@ import javax.inject.Singleton
 internal class ChatRoomRepositoryImpl @Inject constructor(
     private val chatDao: ChatDao,
     private val networkDataSource: ChatNetworkDataSource,
+    @AppScope private val appScope: CoroutineScope,
     @Dispatcher(ChatDispatchers.Default) private val defaultDispatcher: CoroutineDispatcher
 ) : ChatRoomRepository {
+
+    private val syncChatsFlight = SingleFlight<Either<DataError, List<String>>>(
+        scope = appScope,
+        dispatcher = defaultDispatcher
+    )
+    private val syncRoomFlight = KeyedSingleFlight<String, Either<ChatError.SyncRoom, Unit>>(
+        scope = appScope,
+        dispatcher = defaultDispatcher
+    )
 
     override fun getChats(): Flow<List<ChatRoom>> {
         return chatDao.getChatsWithDetails().map { relations ->
@@ -43,37 +56,75 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
     }
 
     override suspend fun syncChats(): Either<DataError, Unit> {
-        return withContext(context = defaultDispatcher) {
-            networkDataSource.getChatRoomsForUser()
-                .mapLeft { it.toDataError() }
-                .map { roomDtos ->
-                    val rooms = roomDtos.map { it.toEntity() }
+        return syncChatsAndGetChangedRooms().void()
+    }
 
-                    val participants = mutableSetOf<ChatParticipantDto>()
-                    roomDtos.forEach { participants.addAll(it.participants + it.creator) }
-                    val participantEntities = participants.map { it.toEntity() }
-
-                    val lastMessages = roomDtos.mapNotNull {
-                        it.lastMessage?.toEntity(MessageDeliveryStatus.SENT)
-                    }
-
-                    val crossRefs = roomDtos.flatMap { dto ->
-                        val allParticipantIds =
-                            (dto.participants.map { it.userId } + dto.creator.userId).distinct()
-
-                        allParticipantIds.map { userId ->
-                            ChatRoomParticipantCrossRef(roomId = dto.id, userId = userId)
-                        }
-                    }
-
-                    chatDao.insertFullChats(
-                        rooms = rooms,
-                        participants = participantEntities,
-                        lastMessages = lastMessages,
-                        crossRefs = crossRefs
-                    )
-                }
+    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
+        syncChatsFlight.execute {
+            executeSyncChatsWithChangedRooms()
         }
+
+    private suspend fun executeSyncChatsWithChangedRooms(): Either<DataError, List<String>> {
+        val response = networkDataSource.getChatRoomsForUser()
+        return response.fold(
+            ifLeft = { networkError ->
+                Either.Left(networkError.toDataError())
+            },
+            ifRight = { roomDtos ->
+                val localSnapshot = chatDao.getAllRoomsSnapshot().associateBy { it.id }
+
+                val changedRoomIds = roomDtos.filter { dto ->
+                    val local = localSnapshot[dto.id]
+                    if (local == null) {
+                        true
+                    } else {
+                        val serverActivity = dto.lastActivityAt.toEpochMilliseconds()
+                        val localActivity = local.lastActivityAt
+                        val activityAdvanced =
+                            localActivity == null || serverActivity > localActivity
+                        val serverLastMessageId = dto.lastMessage?.id
+                        val messageChanged =
+                            serverLastMessageId != null && serverLastMessageId != local.lastMessageId
+                        activityAdvanced || messageChanged
+                    }
+                }
+                    .sortedByDescending { it.lastActivityAt }
+                    .map { it.id }
+
+                val rooms = roomDtos.map { it.toEntity() }
+
+                val participants = mutableSetOf<ChatParticipantDto>()
+                roomDtos.forEach { dto ->
+                    participants.addAll(dto.participants)
+                    participants.add(dto.creator)
+                }
+                val participantEntities = participants.map { it.toEntity() }
+
+                val lastMessages = roomDtos.mapNotNull {
+                    it.lastMessage?.toEntity(MessageDeliveryStatus.SENT)
+                }
+
+                val crossRefs = roomDtos.flatMap { dto ->
+                    val allParticipantIds = buildSet {
+                        dto.participants.forEach { add(it.userId) }
+                        add(dto.creator.userId)
+                    }
+
+                    allParticipantIds.map { userId ->
+                        ChatRoomParticipantCrossRef(roomId = dto.id, userId = userId)
+                    }
+                }
+
+                chatDao.insertFullChats(
+                    rooms = rooms,
+                    participants = participantEntities,
+                    lastMessages = lastMessages,
+                    crossRefs = crossRefs
+                )
+
+                Either.Right(changedRoomIds)
+            }
+        )
     }
 
     override suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant> {
@@ -111,13 +162,14 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
         return chatDao.getChatWithDetails(roomId).map { it?.toDomain() }.flowOn(defaultDispatcher)
     }
 
-    override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> {
-        return networkDataSource.getChatRoom(roomId)
-            .mapLeft { it.toSyncRoomError() }
-            .map { dto ->
-                saveChatRoomDto(dto)
-            }
-    }
+    override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> =
+        syncRoomFlight.execute(roomId) {
+            networkDataSource.getChatRoom(roomId)
+                .mapLeft { it.toSyncRoomError() }
+                .map { dto ->
+                    saveChatRoomDto(dto)
+                }
+        }
 
     override suspend fun addParticipantsToGroup(
         roomId: String,
@@ -151,3 +203,5 @@ internal class ChatRoomRepositoryImpl @Inject constructor(
         )
     }
 }
+
+private fun <A, B> Either<A, B>.void(): Either<A, Unit> = map { }

@@ -1,16 +1,18 @@
 package io.github.neronguyen.chat.core.data.realtime
 
 import androidx.lifecycle.LifecycleOwner
-import arrow.core.Either
+import io.github.neronguyen.chat.core.data.testing.TestNetworkMonitor
+import io.github.neronguyen.chat.core.data.util.NetworkMonitor
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
 import io.github.neronguyen.chat.core.network.interceptor.TokenRefresher
+import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
-import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -18,7 +20,6 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -45,7 +46,7 @@ class RealtimeConnectionManagerTest {
         Dispatchers.resetMain()
     }
 
-    private class FakeChatRealtimeDataSource : ChatRealtimeDataSource {
+    private open class FakeChatRealtimeDataSource : ChatRealtimeDataSource {
         val incomingEventsFlow = MutableSharedFlow<WsServerEvent>()
         val connectionStateFlow = MutableStateFlow<SocketConnectionState>(SocketConnectionState.Disconnected)
 
@@ -111,20 +112,27 @@ class RealtimeConnectionManagerTest {
         override val lifecycle get() = error("Not needed for unit tests")
     }
 
-    @Test
-    fun `onStart triggers connection supervision and connects realtime data source`() = runTest {
-        val externalScope = TestScope(testDispatcher)
-        val fakeDataSource = FakeChatRealtimeDataSource()
-        val fakeToken = FakeTokenDataSource()
-        val fakeRefresher = FakeTokenRefresher()
-
-        val manager = RealtimeConnectionManagerImpl(
+    private fun createManager(
+        fakeDataSource: FakeChatRealtimeDataSource,
+        fakeToken: FakeTokenDataSource = FakeTokenDataSource(),
+        fakeRefresher: FakeTokenRefresher = FakeTokenRefresher(),
+        networkMonitor: NetworkMonitor = TestNetworkMonitor(),
+        scope: CoroutineScope = TestScope(testDispatcher)
+    ): RealtimeConnectionManagerImpl {
+        return RealtimeConnectionManagerImpl(
             realtimeDataSource = fakeDataSource,
             tokenDataSource = fakeToken,
             tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
+            networkMonitor = networkMonitor,
+            appScope = scope,
             ioDispatcher = testDispatcher
         )
+    }
+
+    @Test
+    fun `onStart triggers connection supervision and connects realtime data source`() = runTest {
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val manager = createManager(fakeDataSource)
 
         val owner = FakeLifecycleOwner()
         manager.onStart(owner)
@@ -135,18 +143,8 @@ class RealtimeConnectionManagerTest {
 
     @Test
     fun `onStart retries connection on Failed state with backoff`() = runTest {
-        val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
-        val fakeToken = FakeTokenDataSource()
-        val fakeRefresher = FakeTokenRefresher()
-
-        val manager = RealtimeConnectionManagerImpl(
-            realtimeDataSource = fakeDataSource,
-            tokenDataSource = fakeToken,
-            tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+        val manager = createManager(fakeDataSource)
 
         val owner = FakeLifecycleOwner()
         manager.onStart(owner)
@@ -164,18 +162,9 @@ class RealtimeConnectionManagerTest {
 
     @Test
     fun `onStart intercepts AuthenticationFailed, calls TokenRefresher, and reconnects`() = runTest {
-        val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
-        val fakeToken = FakeTokenDataSource()
         val fakeRefresher = FakeTokenRefresher()
-
-        val manager = RealtimeConnectionManagerImpl(
-            realtimeDataSource = fakeDataSource,
-            tokenDataSource = fakeToken,
-            tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+        val manager = createManager(fakeDataSource, fakeRefresher = fakeRefresher)
 
         val owner = FakeLifecycleOwner()
         manager.onStart(owner)
@@ -195,18 +184,10 @@ class RealtimeConnectionManagerTest {
 
     @Test
     fun `onStart clears auth data when TokenRefresher returns null on AuthenticationFailed`() = runTest {
-        val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource()
         val fakeRefresher = FakeTokenRefresher().apply { tokenToReturn = null }
-
-        val manager = RealtimeConnectionManagerImpl(
-            realtimeDataSource = fakeDataSource,
-            tokenDataSource = fakeToken,
-            tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+        val manager = createManager(fakeDataSource, fakeToken = fakeToken, fakeRefresher = fakeRefresher)
 
         val owner = FakeLifecycleOwner()
         manager.onStart(owner)
@@ -225,18 +206,8 @@ class RealtimeConnectionManagerTest {
 
     @Test
     fun `onStop disconnects realtime data source`() = runTest {
-        val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
-        val fakeToken = FakeTokenDataSource()
-        val fakeRefresher = FakeTokenRefresher()
-
-        val manager = RealtimeConnectionManagerImpl(
-            realtimeDataSource = fakeDataSource,
-            tokenDataSource = fakeToken,
-            tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+        val manager = createManager(fakeDataSource)
 
         val owner = FakeLifecycleOwner()
         manager.onStart(owner)
@@ -248,18 +219,9 @@ class RealtimeConnectionManagerTest {
 
     @Test
     fun `onStart disconnects realtime data source when unauthenticated`() = runTest {
-        val externalScope = TestScope(testDispatcher)
         val fakeDataSource = FakeChatRealtimeDataSource()
         val fakeToken = FakeTokenDataSource(initialAuthState = AuthState.Unauthenticated)
-        val fakeRefresher = FakeTokenRefresher()
-
-        val manager = RealtimeConnectionManagerImpl(
-            realtimeDataSource = fakeDataSource,
-            tokenDataSource = fakeToken,
-            tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+        val manager = createManager(fakeDataSource, fakeToken = fakeToken)
 
         val owner = FakeLifecycleOwner()
         manager.onStart(owner)
@@ -270,49 +232,121 @@ class RealtimeConnectionManagerTest {
     }
 
     @Test
-    fun `connectionState maps socket states to domain RealtimeConnectionState`() = runTest {
-        val externalScope = TestScope(testDispatcher)
+    fun `network offline pauses reconnection and calls disconnect`() = runTest {
         val fakeDataSource = FakeChatRealtimeDataSource()
-        val fakeToken = FakeTokenDataSource()
-        val fakeRefresher = FakeTokenRefresher()
+        val networkMonitor = TestNetworkMonitor(initialOnline = true)
+        val manager = createManager(fakeDataSource, networkMonitor = networkMonitor)
 
-        val manager = RealtimeConnectionManagerImpl(
-            realtimeDataSource = fakeDataSource,
-            tokenDataSource = fakeToken,
-            tokenRefresher = { fakeRefresher },
-            appScope = externalScope,
-            ioDispatcher = testDispatcher
-        )
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, fakeDataSource.connectCalledCount)
+
+        // Enter airplane mode / disconnect
+        networkMonitor.setConnected(false)
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(fakeDataSource.disconnectCalledCount >= 1)
+    }
+
+    @Test
+    fun `network recovery triggers immediate 0ms reconnection attempt`() = runTest {
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val networkMonitor = TestNetworkMonitor(initialOnline = false)
+        val manager = createManager(fakeDataSource, networkMonitor = networkMonitor)
+
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.advanceUntilIdle()
+        assertEquals(0, fakeDataSource.connectCalledCount)
+
+        // Network returns online
+        networkMonitor.setConnected(true)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, fakeDataSource.connectCalledCount)
+    }
+
+    @Test
+    fun `network flapping before Connected preserves retryAttempt backoff and resets only after Connected`() =
+        runTest {
+            var shouldSucceedConnect = false
+            val fakeDataSource = object : FakeChatRealtimeDataSource() {
+                override suspend fun connect() {
+                    connectCalledCount++
+                    connectionStateFlow.value = if (shouldSucceedConnect) {
+                        SocketConnectionState.Connected
+                    } else {
+                        SocketConnectionState.Failed(RuntimeException("Handshake failed #$connectCalledCount"))
+                    }
+                }
+            }
+            val networkMonitor = TestNetworkMonitor(initialOnline = true)
+            val manager = createManager(fakeDataSource, networkMonitor = networkMonitor)
+
+            val owner = FakeLifecycleOwner()
+            manager.onStart(owner)
+            testScheduler.runCurrent()
+
+            // 1st attempt runs immediately (0ms) and fails; retryAttempt is now 1 (backoff ~1600..2400ms)
+            assertEquals(1, fakeDataSource.connectCalledCount)
+
+            // Flap network offline -> online before backoff completes
+            networkMonitor.setConnected(false)
+            testScheduler.runCurrent()
+            networkMonitor.setConnected(true)
+            testScheduler.runCurrent()
+
+            // Online recovery triggers immediate attempt #2 (0ms), which also fails; retryAttempt is now 2 (backoff ~3200..4800ms)
+            assertEquals(2, fakeDataSource.connectCalledCount)
+
+            // Because retryAttempt was NOT reset to 0 by the online flap (it is 2, not 1),
+            // advancing 2500ms (enough for attempt 1's max 2400ms backoff, but less than attempt 2's min 3200ms backoff)
+            // must NOT trigger attempt #3 yet!
+            testScheduler.advanceTimeBy(2_500)
+            testScheduler.runCurrent()
+            assertEquals(2, fakeDataSource.connectCalledCount)
+
+            // Advancing past attempt 2's max backoff (4800ms total) triggers attempt #3, which succeeds -> resets retryAttempt = 0
+            shouldSucceedConnect = true
+            testScheduler.advanceTimeBy(2_500)
+            testScheduler.runCurrent()
+            assertEquals(3, fakeDataSource.connectCalledCount)
+            assertEquals(SocketConnectionState.Connected, fakeDataSource.connectionStateFlow.value)
+        }
+
+    @Test
+    fun `connectionState maps socket states to domain RealtimeConnectionState`() = runTest {
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val manager = createManager(fakeDataSource)
 
         assertEquals(
-            io.github.neronguyen.chat.core.model.RealtimeConnectionState.DISCONNECTED,
+            RealtimeConnectionState.DISCONNECTED,
             manager.connectionState.first()
         )
 
         fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connecting
         assertEquals(
-            io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTING,
+            RealtimeConnectionState.CONNECTING,
             manager.connectionState.first()
         )
 
         fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
         assertEquals(
-            io.github.neronguyen.chat.core.model.RealtimeConnectionState.CONNECTED,
+            RealtimeConnectionState.CONNECTED,
             manager.connectionState.first()
         )
 
         fakeDataSource.connectionStateFlow.value = SocketConnectionState.AuthenticationFailed()
         assertEquals(
-            io.github.neronguyen.chat.core.model.RealtimeConnectionState.FAILED,
+            RealtimeConnectionState.FAILED,
             manager.connectionState.first()
         )
 
         fakeDataSource.connectionStateFlow.value = SocketConnectionState.Failed()
         assertEquals(
-            io.github.neronguyen.chat.core.model.RealtimeConnectionState.FAILED,
+            RealtimeConnectionState.FAILED,
             manager.connectionState.first()
         )
     }
 }
-
-

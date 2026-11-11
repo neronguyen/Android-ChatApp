@@ -9,6 +9,7 @@ fun DataError.asUiText(): String = when (this) {
     DataError.Connectivity.NoInternet -> stringResource(R.string.error_no_internet)
     DataError.Connectivity.Timeout -> stringResource(R.string.error_timeout)
     DataError.Remote.Unauthorized, DataError.Local.NotAuthenticated -> stringResource(R.string.error_unauthorized)
+    DataError.Local.NotFound -> stringResource(R.string.error_unknown)
     DataError.Remote.Forbidden -> stringResource(R.string.error_forbidden)
     is DataError.Remote.RateLimited -> stringResource(R.string.error_rate_limited)
     DataError.Remote.Unavailable -> stringResource(R.string.error_server_unavailable)

@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "diagram_type": "sequence",
+  "meta": {
+    "title": "[AS-IS] Android WorkManager Offline Catch-Up & Background Sync",
+    "output": "docs/architecture/interactive/flows/offline-catchup-sync.html",
+    "column_fit": "spread",
+    "animation": "trace",
+    "quality_profile": "showcase"
+  },
+  "participants": [
+    { "id": "net", "type": "frontend", "label": "NetworkMonitor", "sublabel": "Android OS" },
+    { "id": "ws", "type": "frontend", "label": "WsConnection", "sublabel": "OkHttp WS" },
+    { "id": "worker", "type": "frontend", "label": "SyncWorker", "sublabel": ":sync:work" },
+    { "id": "sync", "type": "frontend", "label": "SyncManager", "sublabel": ":core:data" },
+    { "id": "repo", "type": "frontend", "label": "RoomRepo", "sublabel": "Single-Flight" },
+    { "id": "msgRepo", "type": "frontend", "label": "MessageRepo", "sublabel": "Parallel" },
+    { "id": "dao", "type": "database", "label": "ChatDao", "sublabel": "Room SQLite" },
+    { "id": "api", "type": "backend", "label": "REST API", "sublabel": "/api/chat" }
+  ],
+  "segments": [
+    { "from": 150, "to": 260, "label": "1. Proactive Reachability & 0ms Reconnect Delay Cancel" },
+    { "from": 270, "to": 410, "label": "2. Background Worker Delegation & Single-Flight Coalescing" },
+    { "from": 420, "to": 630, "label": "3. Authoritative Room Reconcile & Dirty Room Diff" },
+    { "from": 640, "to": 830, "label": "4. Bounded Parallel Catch-Up Prefetching (Semaphore 3)" }
+  ],
+  "messages": [
+    { "id": "net-online", "from": "net", "to": "ws", "y": 165, "label": "isOnline = true (0ms instant trigger)", "variant": "emphasis" },
+    { "id": "ws-reconnect", "from": "ws", "to": "api", "y": 200, "label": "CONNECT /ws/chat (cancels active backoff delay)", "variant": "emphasis" },
+    { "id": "ws-connected", "from": "api", "to": "ws", "y": 235, "label": "101 Switching Protocols -> reset retryAttempt = 0", "variant": "return" },
+    { "id": "worker-trigger", "from": "worker", "to": "sync", "y": 295, "label": "performCatchUpSync() (transitions state to Syncing)", "variant": "emphasis" },
+    { "id": "repo-sync", "from": "sync", "to": "repo", "y": 345, "label": "syncChatsAndGetChangedRooms() [inFlightSync?.takeIf { it.isActive }]", "variant": "emphasis" },
+    { "id": "snap-req", "from": "repo", "to": "dao", "y": 445, "label": "getAllRoomsSnapshot()", "variant": "default" },
+    { "id": "snap-resp", "from": "dao", "to": "repo", "y": 480, "label": "List<ChatRoomEntity> (pre-sync snapshot)", "variant": "return" },
+    { "id": "api-rooms-req", "from": "repo", "to": "api", "y": 515, "label": "GET /api/chat/rooms", "variant": "emphasis" },
+    { "id": "api-rooms-resp", "from": "api", "to": "repo", "y": 550, "label": "200 OK (List<ChatRoomDto>)", "variant": "return" },
+    { "id": "insert-reconcile", "from": "repo", "to": "dao", "y": 585, "label": "insertFullChats(rooms, participants, lastMessages)", "variant": "emphasis" },
+    { "id": "changed-rooms", "from": "repo", "to": "sync", "y": 615, "label": "Either.Right(changedRoomIds [unbounded diff list])", "variant": "return" },
+    { "id": "parallel-prefetch", "from": "sync", "to": "msgRepo", "y": 660, "label": "async { semaphore(3).withPermit { syncRecentMessages(id) } }", "variant": "emphasis" },
+    { "id": "api-msg-req", "from": "msgRepo", "to": "api", "y": 695, "label": "GET /api/chat/rooms/{id}/messages?limit=20 (concurrent)", "variant": "emphasis" },
+    { "id": "api-msg-resp", "from": "api", "to": "msgRepo", "y": 730, "label": "200 OK (ChatMessageSliceDto)", "variant": "return" },
+    { "id": "save-msgs", "from": "msgRepo", "to": "dao", "y": 765, "label": "syncRecentMessagesTransaction(roomId, remoteMessages)", "variant": "emphasis" },
+    { "id": "worker-result", "from": "sync", "to": "worker", "y": 805, "label": "Either.Right(Unit) -> Result.success() (state: Synced / Failed)", "variant": "return" }
+  ],
+  "activations": [
+    { "participant": "net", "from": 165, "to": 175 },
+    { "participant": "ws", "from": 165, "to": 245 },
+    { "participant": "api", "from": 200, "to": 240 },
+    { "participant": "worker", "from": 295, "to": 815 },
+    { "participant": "sync", "from": 295, "to": 815 },
+    { "participant": "repo", "from": 345, "to": 625 },
+    { "participant": "dao", "from": 445, "to": 485 },
+    { "participant": "api", "from": 515, "to": 555 },
+    { "participant": "dao", "from": 585, "to": 595 },
+    { "participant": "msgRepo", "from": 660, "to": 775 },
+    { "participant": "api", "from": 695, "to": 735 },
+    { "participant": "dao", "from": 765, "to": 775 }
+  ],
+  "cards": [
+    {
+      "dot": "emerald",
+      "title": "Decoupled Edge Scheduling & Instant Recovery",
+      "items": [
+        "Modular WorkManager: ChatSyncWorker resides in :sync:work and delegates to ChatSyncManager without coupling to :core:datastore",
+        "Proactive Reachability: NetworkMonitor cancels reconnect backoff with 0ms delay upon network recovery, avoiding 32s ping timeouts",
+        "Anti-Flapping Backoff: retryAttempt counter resets strictly upon WebSocket CONNECTED, preserving exponential backoff on flaky networks"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Consistency & Parallel Prefetch Invariants",
+      "items": [
+        "Bounded Parallel Prefetch: Semaphore(3) limits concurrent message requests across dirty rooms, eliminating sequential waterfall latency",
+        "Fail-Fast Error Propagation: If any room prefetch fails (errors.isNotEmpty()), catch-up returns Either.Left to prompt WorkManager retry",
+        "Single-Flight Mutex: inFlightSync?.takeIf { it.isActive } prevents duplicate concurrent GET /api/chat/rooms network requests"
+      ]
+    }
+  ]
+}

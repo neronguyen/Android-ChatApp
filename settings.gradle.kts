@@ -85,3 +85,5 @@ include(":core:database")
 include(":core:security")
 include(":core:datastore")
 include(":core:ui")
+
+include(":sync:work")
