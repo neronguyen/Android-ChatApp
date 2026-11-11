@@ -43,12 +43,21 @@ internal class ChatSyncManagerImpl @Inject constructor(
 ) : ChatSyncManager {
 
     private val initialized = AtomicBoolean(false)
+    private val isOnline = AtomicBoolean(true)
     private val catchUpSyncFlight = SingleFlight<Either<DataError, Unit>>(
         scope = appScope,
         dispatcher = ioDispatcher,
     )
     private val _syncState = MutableStateFlow<ChatSyncState>(ChatSyncState.Idle)
     override val syncState: StateFlow<ChatSyncState> = _syncState.asStateFlow()
+
+    init {
+        appScope.launch(ioDispatcher) {
+            networkMonitor.isOnline.collect { online ->
+                isOnline.store(online)
+            }
+        }
+    }
 
     override fun initialize() {
         if (!initialized.compareAndSet(expectedValue = false, newValue = true)) return
@@ -76,6 +85,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
         networkMonitor.isOnline
             .distinctUntilChanged()
             .collectLatest { isOnline ->
+                this@ChatSyncManagerImpl.isOnline.store(isOnline)
                 if (!isOnline) {
                     _syncState.value = ChatSyncState.Offline
                 } else {
@@ -120,12 +130,23 @@ internal class ChatSyncManagerImpl @Inject constructor(
             executeCatchUpSync()
         }
 
+    override suspend fun retry(): Either<DataError, Unit> {
+        if (realtimeConnectionManager.connectionState.value == RealtimeConnectionState.FAILED) {
+            realtimeConnectionManager.reconnect()
+        }
+        return performCatchUpSync()
+    }
+
     private suspend fun executeCatchUpSync(): Either<DataError, Unit> {
         _syncState.value = ChatSyncState.Syncing
         try {
             return when (val syncResult = chatRoomRepository.syncChatsAndGetChangedRooms()) {
                 is Either.Left -> {
-                    _syncState.value = ChatSyncState.Failed(syncResult.value)
+                    if (!isOnline.load()) {
+                        _syncState.value = ChatSyncState.Offline
+                    } else {
+                        _syncState.value = ChatSyncState.Failed(syncResult.value)
+                    }
                     syncResult
                 }
 
@@ -140,17 +161,29 @@ internal class ChatSyncManagerImpl @Inject constructor(
                         prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }
                     if (errors.isNotEmpty()) {
                         val firstError = errors.first()
-                        _syncState.value = ChatSyncState.Failed(firstError)
+                        if (!isOnline.load()) {
+                            _syncState.value = ChatSyncState.Offline
+                        } else {
+                            _syncState.value = ChatSyncState.Failed(firstError)
+                        }
                         Either.Left(firstError)
                     } else {
-                        _syncState.value = ChatSyncState.Synced
+                        if (!isOnline.load()) {
+                            _syncState.value = ChatSyncState.Offline
+                        } else {
+                            _syncState.value = ChatSyncState.Synced
+                        }
                         Either.Right(Unit)
                     }
                 }
             }
         } finally {
             if (_syncState.value is ChatSyncState.Syncing) {
-                _syncState.value = ChatSyncState.Idle
+                _syncState.value = if (!isOnline.load()) {
+                    ChatSyncState.Offline
+                } else {
+                    ChatSyncState.Connecting
+                }
             }
         }
     }
