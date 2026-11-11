@@ -31,6 +31,8 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 ## Subdirectories & System Boundaries
 
 - [app](./app/README.md) - Application bootstrap, `MainActivity`, splash screen, and Navigation 3 root switcher.
+- [sync:work](./sync/work/README.md) - Edge Android WorkManager consumer (`ChatSyncWorker`,
+  `WorkManagerSyncSchedulerImpl`).
 - [feature](./feature/README.md) - Root blueprint for presentation UI features.
   - [feature:auth](./feature/auth/README.md) - Login and registration UI flows (Jetpack Compose).
   - [feature:chat](./feature/chat/README.md) - Conversation, chat list, new chat, and account settings UI flows.
@@ -43,8 +45,8 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
   - [core:model](./core/model/README.md) - Pure Kotlin domain models and sealed error hierarchies.
   - [core:ui](./core/ui/README.md) - Shared design system, theme, and common Compose components.
   - [core:common](./core/common/README.md) - Coroutine dispatchers and application-scoped task management.
-- [docs/architecture/flows](./docs/architecture/flows/README.md) - Android-specific flow specifications and status registry.
-- [docs/designs](./docs/designs/SITEMAP.md) - Design document index.
+- [docs](./docs/README.md) - Unified C4 architecture, sequence/lifecycle/dataflow specifications,
+  and EGM technical design registry.
 
 ## Global Invariants
 

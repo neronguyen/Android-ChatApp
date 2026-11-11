@@ -81,33 +81,14 @@ While the app is in the background, Android OS triggers `ChatSyncWorker`. The wo
 
 ### 1. High-Level Modular Topology
 
-```mermaid
-graph TD
-    subgraph App Layer
-        APP[":app (Composition Root)"]
-    end
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../architecture/assets/AndroidComponents.png">
+  <source media="(prefers-color-scheme: light)" srcset="../architecture/assets/AndroidComponents.light.png">
+  <img alt="Android App Components (C4 Level 3)" src="../architecture/assets/AndroidComponents.png">
+</picture>
 
-    subgraph Sync Layer
-        SYNC_WORK[":sync:work (Worker & Scheduler)"]
-    end
-
-    subgraph Core Layer
-        CORE_DATA[":core:data (Coordination & Repositories)"]
-        CORE_NET[":core:network (Retrofit & OkHttp WS)"]
-        CORE_DB[":core:database (Room SQLite)"]
-        CORE_MODEL[":core:model (Domain Models & Errors)"]
-    end
-
-    APP --> SYNC_WORK
-    APP --> CORE_DATA
-    SYNC_WORK --> CORE_DATA
-    SYNC_WORK --> CORE_MODEL
-    CORE_DATA --> CORE_NET
-    CORE_DATA --> CORE_DB
-    CORE_DATA --> CORE_MODEL
-```
-
-- **`:sync:work`**: Android library edge consumer. Hosts `ChatSyncWorker` (`@HiltWorker`) and `WorkManagerSyncSchedulerImpl`. Depends on `:core:data` and `:core:model`.
+- **`:sync:work`**: Android library edge consumer (`ChatSyncWorker` `@HiltWorker` and
+  `WorkManagerSyncSchedulerImpl`). Depends on `:core:data` and `:core:model`.
 - **`:core:data`**: Defines the `ChatSyncScheduler` SPI interface. Implements `ChatSyncManagerImpl`, `RealtimeConnectionManagerImpl`, and `ChatRealtimeSyncManager`.
 - **FK Guard Invariant**: `ChatRealtimeSyncManager` enforces Foreign Key guarding: before inserting
   incoming message entities into SQLite, it verifies the parent room entity exists in Room SQLite to
@@ -116,36 +97,35 @@ graph TD
   safely dropped without throwing `SQLiteConstraintException`, and authoritative room/message state
   is reconciled on subsequent catch-up syncs.
 
-#### 1.1 Architecture Diagrams & Living Specifications (Archify Integration)
-To comply with `AGENTS.md` Section 1 (Level 3 Architecture Governance) and Section 1.1 (Design-First Flow Gate):
-1. **Level 3 Android Components Diagram (`docs/architecture/specifications/android-components.archify.json`)**:
-    - Add new component node for `:sync:work` (`tag: ":sync:work"`, type: `backend`, label:
-      `Sync Work`, sublabel: `ChatSyncWorker · SyncScheduler`).
-    - Wire dependencies: `:app` -> `:sync:work`, `:sync:work` -> `:core:data`.
-   - Update `:core:data` component node by removing WorkManager responsibilities and dependencies, leaving only SPI interface `ChatSyncScheduler`.
-2. **Offline Catch-Up Sequence Diagram (`docs/architecture/specifications/flows/offline-catchup-sync.sequence.archify.json`)**:
-   - **Transition from Obsolete AS-IS to To-Be Flow**: The existing AS-IS diagram depicts the obsolete pattern where `ChatRoomRepository` directly enqueues WorkManager background jobs on network failure. The To-Be sequence replaces this with the decoupled architecture:
-       - **Participants**: `NetworkMonitor`, `WsConnection` (`OkHttp WS`), `SyncWorker`
-         (`:sync:work`), `SyncManager` (`:core:data`), `RoomRepo` (`Single-Flight`), `MessageRepo`
-         (`Parallel`), `ChatDao` (`Room SQLite`), `REST API` (`/api/chat`).
-       - **Segment 1 (Proactive Reachability & 0ms Reconnect Delay Cancel)**: `NetworkMonitor`
-         detects network restoration and emits `isOnline == true`, immediately cancelling backoff
-         delays in `RealtimeConnectionManagerImpl` (0ms delay), resetting `retryAttempt = 0`
-         strictly upon `101 Switching Protocols`.
-       - **Segment 2 (Background Worker Delegation & Single-Flight Coalescing)**: `ChatSyncWorker`
-         delegates to `chatSyncManager.performCatchUpSync()`, which calls
-         `chatRoomRepository.syncChatsAndGetChangedRooms()` guarded by
-         `inFlightSync?.takeIf { it.isActive }`.
-       - **Segment 3 (Authoritative Room Reconcile & Dirty Room Diff)**: `ChatRoomRepository`
-         compares pre-sync `getAllRoomsSnapshot()` against `GET /api/chat/rooms`, reconciles via
-         `insertFullChats(rooms, participants, lastMessages)`, and returns the unbounded diff list
-         of `changedRoomIds`.
-       - **Segment 4 (Bounded Parallel Catch-Up Prefetching)**: `ChatSyncManager` executes
-         concurrent prefetching across dirty rooms using `Semaphore(3)` within `supervisorScope`,
-         returning `Either.Left` if any room fails (`if (errors.isNotEmpty())`). (Disconnect sweep
-         and idempotent `DuplicateMessageId` transitions are tracked in
-         `message-delivery-status.lifecycle.archify.json`).
-   - **Lifecycle State Gate**: Mark `meta.title` and registry row in `docs/architecture/flows/README.md` as `[PLANNED]` prior to code modification. After passing Tier 2 `./scripts/verify.sh clean`, flip to `[AS-IS]` and re-render visual assets.
+#### 1.1 Offline Catch-Up & Background Sync Sequence (`offline-catchup-sync`)
+
+> **Interactive Viewer**: [
+`docs/architecture/interactive/flows/offline-catchup-sync.html`](../architecture/interactive/flows/offline-catchup-sync.html) ·
+> **Spec**: [
+`offline-catchup-sync.sequence.archify.json`](../architecture/specifications/flows/offline-catchup-sync.sequence.archify.json)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../architecture/assets/offline-catchup-sync.png">
+  <source media="(prefers-color-scheme: light)" srcset="../architecture/assets/offline-catchup-sync.light.png">
+  <img alt="Offline Catch-Up & Background Sync Sequence" src="../architecture/assets/offline-catchup-sync.png">
+</picture>
+
+- **Segment 1 (Proactive Reachability & 0ms Reconnect Delay Cancel)**: `NetworkMonitor` detects
+  network restoration and emits `isOnline == true`, immediately cancelling backoff delays in
+  `RealtimeConnectionManagerImpl` (0ms delay) and resetting `retryAttempt = 0` strictly upon
+  `101 Switching Protocols`.
+- **Segment 2 (Background Worker Delegation & Single-Flight Coalescing)**: `ChatSyncWorker`
+  delegates to `chatSyncManager.performCatchUpSync()`, which calls
+  `chatRoomRepository.syncChatsAndGetChangedRooms()` guarded by `SingleFlight`.
+- **Segment 3 (Authoritative Room Reconcile & Dirty Room Diff)**: `ChatRoomRepository` compares
+  pre-sync `getAllRoomsSnapshot()` against `GET /api/chat/rooms`, reconciles via
+  `insertFullChats(rooms, participants, lastMessages)`, and returns the diff list of
+  `changedRoomIds`.
+- **Segment 4 (Bounded Parallel Catch-Up Prefetching)**: `ChatSyncManager` executes concurrent
+  prefetching across dirty rooms using `mapConcurrent(concurrency = 3)` (`Semaphore(3)` inside
+  `supervisorScope`), propagating `Either.Left` if any room fails. (Disconnect sweep and idempotent
+  `DuplicateMessageId` transitions are tracked in [
+  `message-delivery-status.lifecycle.archify.json`](../architecture/specifications/flows/message-delivery-status.lifecycle.archify.json)).
 
 ---
 
