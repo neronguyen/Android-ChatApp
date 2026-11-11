@@ -38,8 +38,15 @@ Before proposing any plan or writing code, read and follow:
    visual states (e.g. `SyncStatusBar`) must be prototyped on MCP Stitch (or inspect existing screen
    variants) before writing Compose code. Composable components in `:core:ui` must expose `@Preview`
    functions for all visual states, verified via `android preview render` against Stitch mockups
-   before
-   integration into feature screens.
+   before integration into feature screens.
+5. **Screenshot Regression Policy & Verification Gate**: Preview screenshot tests in `:core:ui` run
+   host-side via `com.android.compose.screenshot` (`0.0.1-alpha16`). Reference images are committed
+   to version control under `<module>/src/screenshotTest*/reference/`. Never update screenshot golden
+   images to bypass validation errors; golden re-baselining is strictly reserved for approved,
+   intentional visual changes. Any PR touching UI tokens, layouts, or `@Preview` functions must
+   include visual validation against Stitch mockups. Validation command:
+   `./gradlew :core:ui:validateDebugScreenshotTest` (enforced in `./scripts/verify.sh`); re-baselining
+   command: `./gradlew :core:ui:updateDebugScreenshotTest`.
 
 ---
 

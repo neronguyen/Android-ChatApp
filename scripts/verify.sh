@@ -62,7 +62,7 @@ fi
 if [ "$IS_CI" = "true" ] || [ "${1:-}" = "clean" ]; then
   if [ "${1:-}" = "clean" ]; then shift; fi
   echo "==> [CLEAN GATE] Running clean unit tests & lintDebug on Android-ChatApp (CI=${IS_CI})..."
-  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" testDebugUnitTest lintDebug --rerun-tasks "$@"
+  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" testDebugUnitTest lintDebug :core:ui:validateDebugScreenshotTest --rerun-tasks "$@"
 
   if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
     echo "ERROR: Clean verification produced uncommitted or untracked changes (drift detected):" >&2
