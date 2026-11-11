@@ -75,6 +75,7 @@ All UI components use these semantic color tokens; never introduce component-spe
 
 ### 3.2 Common UI Components & Helpers
 
+- `[SyncStatusBar.kt:SyncStatusBar]`: Reusable banner indicating connectivity and synchronization state (Offline, Connecting, Syncing, Failed) with retry and dismiss actions conforming to Quiet Messaging.
 - `[DataErrorToString.kt:asUiText]`: Extension function mapping domain `DataError` models to
   localized UI text.
 - `[rememberMinLoading.kt:rememberMinLoading]`: Compose state utility ensuring minimum loading indicator duration to prevent UI flickering.
@@ -99,3 +100,5 @@ All UI components use these semantic color tokens; never introduce component-spe
 ## 6. Verification
 
 - Fast inner-loop unit tests: `./gradlew :core:ui:testDebugUnitTest --rerun-tasks`
+- Update screenshot reference images: `./gradlew :core:ui:updateDebugScreenshotTest`
+- Validate screenshots against references: `./gradlew :core:ui:validateDebugScreenshotTest`

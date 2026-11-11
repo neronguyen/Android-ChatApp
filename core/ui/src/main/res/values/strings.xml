@@ -9,4 +9,11 @@
     <string name="error_server_unavailable">Server is temporarily unavailable. Please try again later.</string>
     <string name="error_fields_rejected">Please check the following fields: %s</string>
     <string name="error_unknown">An unknown error occurred. Please try again.</string>
+
+    <!-- Sync Status Bar -->
+    <string name="sync_status_offline">Waiting for network…</string>
+    <string name="sync_status_connecting">Connecting…</string>
+    <string name="sync_status_syncing">Syncing messages…</string>
+    <string name="sync_status_retry">Retry</string>
+    <string name="sync_status_dismiss_cd">Dismiss</string>
 </resources>
