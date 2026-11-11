@@ -5614,7 +5614,9 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <h3>Failure Modes &amp; Characterized Gaps</h3>
         </div>
         <ul>
-          <li>Foreign Key Hazard (Q1): upsertIncomingOrAckedMessage throws SQLiteConstraintException if room is not yet cached locally</li>
+          <li>Foreign Key Hazard (Q1): upsertIncomingOrAckedMessage guarded in
+            ChatRealtimeSyncManager via single-flight room buffering
+          </li>
           <li>Tombstone Reconciliation (Q2): Remote sync delivers deletedAt != null, updating local SENT to DELETED tombstone (No Ghost!)</li>
           <li>Cascade Deletion: Room deletion cascades to messages and cross-references via SQLite foreign keys</li>
         </ul>

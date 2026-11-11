@@ -6,4 +6,5 @@ import kotlinx.coroutines.flow.Flow
 interface RealtimeConnectionManager {
     val connectionState: Flow<RealtimeConnectionState>
     fun initialize()
+    fun reconnect()
 }

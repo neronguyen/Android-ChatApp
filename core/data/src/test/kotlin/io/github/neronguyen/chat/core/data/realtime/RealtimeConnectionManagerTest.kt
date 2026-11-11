@@ -316,7 +316,7 @@ class RealtimeConnectionManagerTest {
         }
 
     @Test
-    fun `connectionState maps socket states to domain RealtimeConnectionState`() = runTest {
+    fun `connectionState reflects lifecycle and smoothed connection states`() = runTest {
         val fakeDataSource = FakeChatRealtimeDataSource()
         val manager = createManager(fakeDataSource)
 
@@ -325,27 +325,48 @@ class RealtimeConnectionManagerTest {
             manager.connectionState.first()
         )
 
-        fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connecting
-        assertEquals(
-            RealtimeConnectionState.CONNECTING,
-            manager.connectionState.first()
-        )
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.advanceUntilIdle()
 
-        fakeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
         assertEquals(
             RealtimeConnectionState.CONNECTED,
             manager.connectionState.first()
         )
+    }
 
-        fakeDataSource.connectionStateFlow.value = SocketConnectionState.AuthenticationFailed()
+    @Test
+    fun `after MAX_RETRY_ATTEMPTS failures, connectionState transitions to FAILED and reconnect resumes`() = runTest {
+        var shouldFail = true
+        val fakeDataSource = object : FakeChatRealtimeDataSource() {
+            override suspend fun connect() {
+                connectCalledCount++
+                connectionStateFlow.value = if (shouldFail) {
+                    SocketConnectionState.Failed(RuntimeException("Cannot connect"))
+                } else {
+                    SocketConnectionState.Connected
+                }
+            }
+        }
+        val manager = createManager(fakeDataSource)
+
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(fakeDataSource.connectCalledCount >= 5)
         assertEquals(
             RealtimeConnectionState.FAILED,
             manager.connectionState.first()
         )
 
-        fakeDataSource.connectionStateFlow.value = SocketConnectionState.Failed()
+        // Trigger manual reconnect
+        shouldFail = false
+        manager.reconnect()
+        testScheduler.advanceUntilIdle()
+
         assertEquals(
-            RealtimeConnectionState.FAILED,
+            RealtimeConnectionState.CONNECTED,
             manager.connectionState.first()
         )
     }

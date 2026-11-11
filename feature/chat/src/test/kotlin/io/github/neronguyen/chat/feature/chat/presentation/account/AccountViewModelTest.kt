@@ -153,6 +153,7 @@ class AccountViewModelTest {
         val connectionStateFlow = MutableStateFlow(initialState)
         override val connectionState: Flow<RealtimeConnectionState> = connectionStateFlow
         override fun initialize() {}
+        override fun reconnect() {}
     }
 
     private class FakeAuthRepository(

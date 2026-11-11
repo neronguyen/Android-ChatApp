@@ -6,14 +6,15 @@ import io.github.neronguyen.chat.core.common.coroutine.mapConcurrent
 import io.github.neronguyen.chat.core.common.network.AppScope
 import io.github.neronguyen.chat.core.common.network.ChatDispatchers
 import io.github.neronguyen.chat.core.common.network.Dispatcher
+import io.github.neronguyen.chat.core.data.realtime.RealtimeConnectionManager
 import io.github.neronguyen.chat.core.data.repository.ChatMessageRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
+import io.github.neronguyen.chat.core.data.util.NetworkMonitor
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatSyncState
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.model.error.DataError
-import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
-import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -36,7 +36,8 @@ internal class ChatSyncManagerImpl @Inject constructor(
     private val chatMessageRepository: ChatMessageRepository,
     private val chatSyncScheduler: ChatSyncScheduler,
     private val tokenDataSource: TokenDataSource,
-    private val realtimeDataSource: ChatRealtimeDataSource,
+    private val realtimeConnectionManager: RealtimeConnectionManager,
+    private val networkMonitor: NetworkMonitor,
     @AppScope private val appScope: CoroutineScope,
     @Dispatcher(ChatDispatchers.IO) private val ioDispatcher: CoroutineDispatcher,
 ) : ChatSyncManager {
@@ -59,7 +60,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                     when (authState) {
                         is AuthState.Authenticated -> {
                             chatSyncScheduler.schedulePeriodicSync()
-                            observeReconnectTransitions()
+                            observeSyncCoordination()
                         }
 
                         is AuthState.Unauthenticated -> {
@@ -71,50 +72,47 @@ internal class ChatSyncManagerImpl @Inject constructor(
         }
     }
 
-    private suspend fun observeReconnectTransitions() {
-        realtimeDataSource.connectionState
-            .runningFold<SocketConnectionState, Pair<ReconnectState, Boolean>>(ReconnectState.Initial to false) { (state, _), current ->
-                when (current) {
-                    is SocketConnectionState.Connected -> {
-                        if (state is ReconnectState.Dropped) {
-                            ReconnectState.ConnectedOnce to true
-                        } else {
-                            ReconnectState.ConnectedOnce to false
-                        }
-                    }
+    private suspend fun observeSyncCoordination() {
+        networkMonitor.isOnline
+            .distinctUntilChanged()
+            .collectLatest { isOnline ->
+                if (!isOnline) {
+                    _syncState.value = ChatSyncState.Offline
+                } else {
+                    realtimeConnectionManager.connectionState
+                        .collectLatest { connState ->
+                            when (connState) {
+                                RealtimeConnectionState.CONNECTED -> {
+                                    try {
+                                        performCatchUpSync()
+                                    } catch (e: CancellationException) {
+                                        throw e
+                                    } catch (_: Throwable) {
+                                        // Ignore non-cancellation errors
+                                    }
+                                }
 
-                    is SocketConnectionState.Disconnected,
-                    is SocketConnectionState.Failed -> {
-                        if (state is ReconnectState.ConnectedOnce) {
-                            ReconnectState.Dropped to false
-                        } else {
-                            state to false
-                        }
-                    }
+                                RealtimeConnectionState.CONNECTING -> {
+                                    if (_syncState.value !is ChatSyncState.Syncing) {
+                                        _syncState.value = ChatSyncState.Connecting
+                                    }
+                                }
 
-                    is SocketConnectionState.Connecting,
-                    is SocketConnectionState.AuthenticationFailed -> {
-                        state to false
-                    }
+                                RealtimeConnectionState.DISCONNECTED -> {
+                                    if (_syncState.value !is ChatSyncState.Failed && _syncState.value !is ChatSyncState.Syncing) {
+                                        _syncState.value = ChatSyncState.Connecting
+                                    }
+                                }
+
+                                RealtimeConnectionState.FAILED -> {
+                                    if (_syncState.value !is ChatSyncState.Syncing) {
+                                        _syncState.value = ChatSyncState.Failed(DataError.Remote.Unavailable)
+                                    }
+                                }
+                            }
+                        }
                 }
             }
-            .collectLatest { (_, triggerCatchUp) ->
-                if (triggerCatchUp) {
-                    try {
-                        performCatchUpSync()
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (_: Throwable) {
-                        // Ignore non-cancellation errors
-                    }
-                }
-            }
-    }
-
-    private sealed interface ReconnectState {
-        data object Initial : ReconnectState
-        data object ConnectedOnce : ReconnectState
-        data object Dropped : ReconnectState
     }
 
     override suspend fun performCatchUpSync(): Either<DataError, Unit> =
@@ -136,7 +134,7 @@ internal class ChatSyncManagerImpl @Inject constructor(
                     val prefetchResults =
                         changedRoomIds.mapConcurrent(MAX_CONCURRENT_PREFETCH) { roomId ->
                             chatMessageRepository.syncRecentMessages(roomId)
-                    }
+                        }
 
                     val errors =
                         prefetchResults.filterIsInstance<Either.Left<DataError>>().map { it.value }

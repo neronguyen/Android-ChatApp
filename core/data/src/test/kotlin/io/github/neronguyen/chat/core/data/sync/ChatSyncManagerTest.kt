@@ -1,26 +1,24 @@
 package io.github.neronguyen.chat.core.data.sync
 
 import arrow.core.Either
+import io.github.neronguyen.chat.core.data.realtime.RealtimeConnectionManager
 import io.github.neronguyen.chat.core.data.repository.ChatMessageRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
+import io.github.neronguyen.chat.core.data.testing.TestNetworkMonitor
 import io.github.neronguyen.chat.core.datastore.TokenDataSource
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
 import io.github.neronguyen.chat.core.model.ChatSyncState
+import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
-import io.github.neronguyen.chat.core.network.ChatRealtimeDataSource
-import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState
-import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
-import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emptyFlow
@@ -43,7 +41,8 @@ class ChatSyncManagerTest {
     private lateinit var fakeChatMessageRepository: FakeChatMessageRepository
     private lateinit var fakeSyncScheduler: FakeSyncScheduler
     private lateinit var fakeTokenDataSource: FakeTokenDataSource
-    private lateinit var fakeRealtimeDataSource: FakeRealtimeDataSource
+    private lateinit var fakeRealtimeConnectionManager: FakeRealtimeConnectionManager
+    private lateinit var fakeNetworkMonitor: TestNetworkMonitor
     private lateinit var chatSyncManager: ChatSyncManagerImpl
 
     @Before
@@ -53,14 +52,16 @@ class ChatSyncManagerTest {
         fakeChatMessageRepository = FakeChatMessageRepository()
         fakeSyncScheduler = FakeSyncScheduler()
         fakeTokenDataSource = FakeTokenDataSource()
-        fakeRealtimeDataSource = FakeRealtimeDataSource()
+        fakeRealtimeConnectionManager = FakeRealtimeConnectionManager()
+        fakeNetworkMonitor = TestNetworkMonitor(initialOnline = true)
 
         chatSyncManager = ChatSyncManagerImpl(
             chatRoomRepository = fakeChatRoomRepository,
             chatMessageRepository = fakeChatMessageRepository,
             chatSyncScheduler = fakeSyncScheduler,
             tokenDataSource = fakeTokenDataSource,
-            realtimeDataSource = fakeRealtimeDataSource,
+            realtimeConnectionManager = fakeRealtimeConnectionManager,
+            networkMonitor = fakeNetworkMonitor,
             appScope = testScope,
             ioDispatcher = testDispatcher,
         )
@@ -102,7 +103,36 @@ class ChatSyncManagerTest {
     }
 
     @Test
-    fun `websocket reconnect from Disconnected to Connected triggers catch-up sync and prefetches messages`() = runTest(testDispatcher) {
+    fun `when networkMonitor emits isOnline false, syncState transitions to Offline`() = runTest(testDispatcher) {
+        val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
+        fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
+
+        chatSyncManager.initialize()
+        testScheduler.runCurrent()
+
+        fakeNetworkMonitor.setConnected(false)
+        testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Offline, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `when isOnline is true and connection is CONNECTING, syncState transitions to Connecting`() = runTest(testDispatcher) {
+        val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
+        fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
+
+        chatSyncManager.initialize()
+        testScheduler.runCurrent()
+
+        fakeNetworkMonitor.setConnected(true)
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.CONNECTING
+        testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Connecting, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `when connection transitions to CONNECTED, triggers catch-up sync and prefetches messages`() = runTest(testDispatcher) {
         val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
         fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
         fakeChatRoomRepository.changedRoomIdsResult = Either.Right(listOf("room-1", "room-2"))
@@ -110,22 +140,43 @@ class ChatSyncManagerTest {
         chatSyncManager.initialize()
         testScheduler.runCurrent()
 
-        // Socket connects initially -> does not trigger catch-up yet
-        fakeRealtimeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
-        testScheduler.runCurrent()
-        assertEquals(0, fakeChatRoomRepository.syncChatsAndGetChangedRoomsCallCount)
-
-        // Socket drops
-        fakeRealtimeDataSource.connectionStateFlow.value = SocketConnectionState.Disconnected
-        testScheduler.runCurrent()
-
-        // Socket reconnects
-        fakeRealtimeDataSource.connectionStateFlow.value = SocketConnectionState.Connected
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.CONNECTED
         testScheduler.runCurrent()
 
         assertEquals(1, fakeChatRoomRepository.syncChatsAndGetChangedRoomsCallCount)
         assertEquals(listOf("room-1", "room-2"), fakeChatMessageRepository.syncedRoomIds)
         assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `when connection is FAILED, syncState transitions to Failed`() = runTest(testDispatcher) {
+        val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
+        fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
+
+        chatSyncManager.initialize()
+        testScheduler.runCurrent()
+
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.FAILED
+        testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Failed(DataError.Remote.Unavailable), chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `when syncState is Failed and connection transitions to CONNECTING, syncState transitions to Connecting`() = runTest(testDispatcher) {
+        val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
+        fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")
+
+        chatSyncManager.initialize()
+        testScheduler.runCurrent()
+
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.FAILED
+        testScheduler.runCurrent()
+        assertEquals(ChatSyncState.Failed(DataError.Remote.Unavailable), chatSyncManager.syncState.value)
+
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.CONNECTING
+        testScheduler.runCurrent()
+        assertEquals(ChatSyncState.Connecting, chatSyncManager.syncState.value)
     }
 
     @Test
@@ -336,14 +387,14 @@ class ChatSyncManagerTest {
         override suspend fun clearAuthData() {}
     }
 
-    private class FakeRealtimeDataSource : ChatRealtimeDataSource {
-        val connectionStateFlow = MutableStateFlow<SocketConnectionState>(SocketConnectionState.Disconnected)
-        val incomingEventsFlow = MutableSharedFlow<WsServerEvent>()
+    private class FakeRealtimeConnectionManager : RealtimeConnectionManager {
+        val connectionStateFlow = MutableStateFlow<RealtimeConnectionState>(RealtimeConnectionState.DISCONNECTED)
+        override val connectionState: StateFlow<RealtimeConnectionState> = connectionStateFlow
+        var reconnectCalledCount = 0
 
-        override val connectionState: StateFlow<SocketConnectionState> = connectionStateFlow
-        override val incomingEvents: Flow<WsServerEvent> = incomingEventsFlow
-        override suspend fun connect() {}
-        override suspend fun disconnect() {}
-        override suspend fun sendMessage(message: WsClientMessage): Boolean = true
+        override fun initialize() {}
+        override fun reconnect() {
+            reconnectCalledCount++
+        }
     }
 }
