@@ -485,7 +485,7 @@
       "id": "chat_ui_to_realtime",
       "from": "feature_chat",
       "to": "realtime_managers",
-      "label": "Observes connectionState",
+      "label": "Observes ChatSyncState & retry",
       "fromSide": "right",
       "toSide": "left"
     },

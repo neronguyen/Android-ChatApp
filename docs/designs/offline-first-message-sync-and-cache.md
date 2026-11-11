@@ -1,13 +1,13 @@
 # Offline-First Data Synchronization & Repository Coordination (Unified Sync State & Smoothed Backoff)
 
-| Metadata | Value |
-|---|---|
-| **Author** | Nero Nguyen |
-| **Status** | Implemented |
-| **Created** | 2026-11-10 |
-| **Updated** | 2026-11-11 |
-| **Target Modules** | `:sync:work`, `:core:data`, `:core:database`, `:core:model`, `:app` |
-| **Living Flow Specs** | `docs/architecture/specifications/flows/offline-catchup-sync.sequence.archify.json` · `docs/architecture/specifications/flows/unknown-room-fk-guard.sequence.archify.json` · `docs/architecture/specifications/android-components.archify.json` |
+| Metadata              | Value                                                                                                                                                    |
+|-----------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Author**            | Nero Nguyen                                                                                                                                              |
+| **Status**            | Implemented                                                                                                                                              |
+| **Created**           | 2026-11-10                                                                                                                                               |
+| **Updated**           | 2026-11-11                                                                                                                                               |
+| **Target Modules**    | `:sync:work`, `:core:data`, `:core:database`, `:core:model`, `:app`                                                                                      |
+| **Living Flow Specs** | `docs/architecture/specifications/flows/offline-catchup-sync.sequence.archify.json` · `docs/architecture/specifications/android-components.archify.json` |
 
 ---
 

@@ -34,6 +34,12 @@ Before proposing any plan or writing code, read and follow:
    MCP `stitch` (`get_project`, `list_screens`, `get_screen`, `download_file`). Upon completing
    implementation, cross-check implemented tokens, component states, and copy against Stitch
    specifications alongside headless Robolectric `testTag` verification.
+4. **Visual Component Prototype & Preview Verification Loop**: Reusable UI components with discrete
+   visual states (e.g. `SyncStatusBar`) must be prototyped on MCP Stitch (or inspect existing screen
+   variants) before writing Compose code. Composable components in `:core:ui` must expose `@Preview`
+   functions for all visual states, verified via `android preview render` against Stitch mockups
+   before
+   integration into feature screens.
 
 ---
 
