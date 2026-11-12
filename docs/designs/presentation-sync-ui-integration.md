@@ -325,9 +325,13 @@ tests pass `false` so that rendered images are deterministic.
   `0.dp` elevation, `1.dp` bottom border in `outlineVariant` (`#D1D5DB`, matching Stitch `border-b border-border`),
   padding `12.dp horizontal, 8.dp vertical`, text `MaterialTheme.typography.bodySmall` (`12sp`).
 - **Authoritative Stitch Screens (Project `10647833259558812227`)**:
-  - `Chats (Connecting / Syncing)`: `screens/9512792d8a1949a28b9d6960191b5623`
-  - `Chats (Offline)`: `screens/dcd52691192642fd877cec56d3688453`
-  - `Chats (Sync Error)`: `screens/21000258ec54445c9697ac1771170f81`
+  - `Component: SyncStatusBar` (Authoritative Isolated Component Spec): `screens/32684811740844638bd8c04c6a04983b`
+    - Direct URL: https://stitch.withgoogle.com/projects/10647833259558812227/screens/32684811740844638bd8c04c6a04983b
+    - Showcases all 5 component states independently (`Offline`, `Connecting`, `Syncing`, `Failed with Retry`, `Quiet/Synced 0dp`) alongside design token specifications and 48dp minimum touch target bounds.
+  - Screen Integration Variants (Contextual reference):
+    - `Chats (Connecting / Syncing)`: `screens/9512792d8a1949a28b9d6960191b5623`
+    - `Chats (Offline)`: `screens/dcd52691192642fd877cec56d3688453`
+    - `Chats (Sync Error)`: `screens/21000258ec54445c9697ac1771170f81`
 - **Animation Ownership**: When `syncState` is `Synced` or `Idle`, `SyncStatusBar` returns
   immediately without composing nodes. Exit animations are driven by screen-level
   `AnimatedVisibility(visible = uiState.showSyncBanner)`.
