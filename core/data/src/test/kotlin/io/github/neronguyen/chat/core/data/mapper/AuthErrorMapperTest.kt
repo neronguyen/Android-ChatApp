@@ -89,4 +89,42 @@ class AuthErrorMapperTest {
         )
         assertEquals(DataError.Remote.Unauthorized, invalidToken.toDataError())
     }
+
+    @Test
+    fun `Auth verifyEmail domain mapping maps business errors correctly`() {
+        val invalidCode: NetworkError<AuthServerError.VerifyEmail> = NetworkError.Business(
+            error = AuthServerError.InvalidCode,
+            message = "Invalid code"
+        )
+        assertEquals(AuthError.InvalidCode, invalidCode.toVerifyEmailError())
+
+        val codeExpired: NetworkError<AuthServerError.VerifyEmail> = NetworkError.Business(
+            error = AuthServerError.CodeExpired,
+            message = "Code expired"
+        )
+        assertEquals(AuthError.CodeExpired, codeExpired.toVerifyEmailError())
+
+        val maxAttempts: NetworkError<AuthServerError.VerifyEmail> = NetworkError.Business(
+            error = AuthServerError.MaxAttemptsExceeded,
+            message = "Max attempts exceeded",
+            retryAfterSeconds = 300L
+        )
+        assertEquals(AuthError.MaxAttemptsExceeded(300L), maxAttempts.toVerifyEmailError())
+    }
+
+    @Test
+    fun `Auth resetPassword domain mapping maps business errors correctly`() {
+        val samePassword: NetworkError<AuthServerError.ResetPassword> = NetworkError.Business(
+            error = AuthServerError.SamePassword,
+            message = "Same password"
+        )
+        assertEquals(AuthError.SamePassword, samePassword.toResetPasswordError())
+
+        val maxAttempts: NetworkError<AuthServerError.ResetPassword> = NetworkError.Business(
+            error = AuthServerError.MaxAttemptsExceeded,
+            message = "Max attempts exceeded",
+            retryAfterSeconds = 180L
+        )
+        assertEquals(AuthError.MaxAttemptsExceeded(180L), maxAttempts.toResetPasswordError())
+    }
 }

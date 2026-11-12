@@ -23,11 +23,38 @@ internal fun AuthServerError.Logout.toDataError(): DataError = when (this) {
     AuthServerError.InvalidToken -> DataError.Remote.Unauthorized
 }
 
+internal fun AuthServerError.VerifyEmail.toDomain(retryAfterSeconds: Long? = null): AuthError.VerifyEmail = when (this) {
+    AuthServerError.InvalidCode -> AuthError.InvalidCode
+    AuthServerError.CodeExpired -> AuthError.CodeExpired
+    AuthServerError.MaxAttemptsExceeded -> AuthError.MaxAttemptsExceeded(retryAfterSeconds)
+}
+
+internal fun AuthServerError.ResetPassword.toDomain(retryAfterSeconds: Long? = null): AuthError.ResetPassword = when (this) {
+    AuthServerError.InvalidCode -> AuthError.InvalidCode
+    AuthServerError.CodeExpired -> AuthError.CodeExpired
+    AuthServerError.MaxAttemptsExceeded -> AuthError.MaxAttemptsExceeded(retryAfterSeconds)
+    AuthServerError.SamePassword -> AuthError.SamePassword
+}
+
 internal fun NetworkError<AuthServerError.Login>.toLoginError(): AuthError.Login =
     toDomainError(AuthError::Data, AuthServerError.Login::toDomain)
 
 internal fun NetworkError<AuthServerError.Register>.toRegisterError(): AuthError.Register =
     toDomainError(AuthError::Data, AuthServerError.Register::toDomain)
+
+internal fun NetworkError<AuthServerError.VerifyEmail>.toVerifyEmailError(): AuthError.VerifyEmail = when (this) {
+    is NetworkError.Business -> error.toDomain(retryAfterSeconds)
+    is NetworkError.Common -> AuthError.Data(toDataError())
+    is NetworkError.Transport -> AuthError.Data(toDataError())
+    is NetworkError.Unknown -> AuthError.Data(toDataError())
+}
+
+internal fun NetworkError<AuthServerError.ResetPassword>.toResetPasswordError(): AuthError.ResetPassword = when (this) {
+    is NetworkError.Business -> error.toDomain(retryAfterSeconds)
+    is NetworkError.Common -> AuthError.Data(toDataError())
+    is NetworkError.Transport -> AuthError.Data(toDataError())
+    is NetworkError.Unknown -> AuthError.Data(toDataError())
+}
 
 @JvmName("toRefreshTokenDataError")
 internal fun NetworkError<AuthServerError.RefreshToken>.toDataError(): DataError =

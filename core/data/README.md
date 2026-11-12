@@ -4,7 +4,7 @@
 Offline-first data repositories, real-time sync coordinator (`ChatRealtimeSyncManager`), WebSocket lifecycle manager (`RealtimeConnectionManagerImpl`), network reachability monitor (`ConnectivityManagerNetworkMonitor`), catch-up sync coordinator (`ChatSyncManagerImpl`), and domain mappers.
 
 ## Interface
-- `[AuthRepository.kt:AuthRepository]`: Repository interface for registration, login, and logout returning `Either<AuthError, User>` and `getAuthState(): Flow<AuthState>`.
+- `[AuthRepository.kt:AuthRepository]`: Repository interface for registration, login, logout, 6-digit OTP email verification, and password reset (`verifyEmail()`, `resendVerification()`, `forgotPassword()`, `resetPassword()`) returning Arrow `Either` domain errors and `getAuthState(): Flow<AuthState>`.
 - `[ChatRoomRepository.kt:ChatRoomRepository]`: Repository interface for observing rooms, fetching room metadata, creating direct/group chats, syncing rooms, atomic single-flight room reconciliation (`syncChatsAndGetChangedRooms()`), adding participants, and leaving rooms.
 - `[ChatMessageRepository.kt:ChatMessageRepository]`: Repository interface for observing messages, optimistic message dispatch (`sendMessage()`, `retryMessage()` returning `Either<DataError, Unit>`), cursor pagination, and soft deletion.
 - `[RealtimeConnectionManager.kt:RealtimeConnectionManager]`: Real-time engine supervising WebSocket connections with smoothed backoff, app lifecycle (`ProcessLifecycleOwner`), internal network reachability (`NetworkMonitor`), and `reconnect()` trigger.

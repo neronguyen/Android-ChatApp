@@ -8,4 +8,5 @@ data class RegisterUiState(
     val validationError: AuthValidationError.Register? = null,
     val authError: AuthError.Register? = null,
     val isSuccess: Boolean = false,
+    val registeredEmail: String? = null,
 )

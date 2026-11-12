@@ -38,14 +38,15 @@ import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
 fun RegisterRoute(
     viewModel: RegisterViewModel,
     onNavigateToLogin: () -> Unit,
-    onRegisterSuccess: () -> Unit,
+    onRegisterSuccess: (email: String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
-            onRegisterSuccess()
+            val email = uiState.registeredEmail.orEmpty()
+            onRegisterSuccess(email)
             viewModel.onRegisterSuccessHandled()
         }
     }

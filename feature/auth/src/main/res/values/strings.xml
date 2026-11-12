@@ -9,6 +9,27 @@
     <string name="register">Register</string>
     <string name="dont_have_account">Don\'t have an account? Register</string>
     <string name="already_have_account">Already have an account? Login</string>
+    <string name="forgot_password">Forgot password?</string>
+    <string name="forgot_password_title">Forgot Password</string>
+    <string name="forgot_password_instructions">Enter your email address and we\'ll send you a 6-digit code to reset your password.</string>
+    <string name="send_reset_code">Send Reset Code</string>
+
+    <string name="verify_email">Verify Email</string>
+    <string name="verify_email_prompt">Verify Email</string>
+    <string name="enter_verification_code">We\'ve sent a 6-digit verification code to %1$s</string>
+    <string name="enter_reset_code">We\'ve sent a 6-digit reset code to %1$s</string>
+    <string name="reset_password">Reset Password</string>
+    <string name="new_password">New Password</string>
+    <string name="confirm_new_password">Confirm New Password</string>
+    <string name="otp_code">Verification Code</string>
+    <string name="verify">Verify</string>
+    <string name="retry">Retry</string>
+    <string name="resend_code">Resend Code</string>
+    <string name="resend_cooldown">Resend Code (%1$ds)</string>
+    <string name="verification_code_resent">Verification code resent</string>
+    <string name="reset_code_resent">Reset code resent</string>
+    <string name="email_verified_banner">Email verified successfully. Please log in.</string>
+    <string name="password_reset_banner">Password reset successfully. Please log in.</string>
 
     <string name="error_empty_email">Email cannot be empty</string>
     <string name="error_invalid_email">Please enter a valid email address</string>
@@ -16,12 +37,20 @@
     <string name="error_invalid_password">Password must be at least 10 characters and contain at least 1 digit and 1 letter</string>
     <string name="error_empty_display_name">Display name cannot be empty</string>
     <string name="error_empty_refresh_token">Refresh token cannot be empty</string>
-    <string name="error_empty_reset_token">Reset token cannot be empty</string>
+    <string name="error_empty_otp_code">Verification code cannot be empty</string>
+    <string name="error_invalid_otp_length">Verification code must be exactly 6 digits</string>
+    <string name="error_non_numeric_otp">Verification code must contain only numbers</string>
     <string name="error_empty_old_password">Old password cannot be empty</string>
     <string name="error_empty_new_password">New password cannot be empty</string>
     <string name="error_invalid_new_password">New password must be at least 10 characters and contain at least 1 digit and 1 letter</string>
+    <string name="error_passwords_do_not_match">Passwords do not match</string>
 
     <string name="error_invalid_credentials">Invalid email or password</string>
     <string name="error_email_not_verified">Please verify your email address before logging in</string>
     <string name="error_email_already_in_use">An account with this email already exists</string>
+    <string name="error_invalid_otp_code">Invalid verification code</string>
+    <string name="error_otp_expired">Verification code has expired. Please request a new one</string>
+    <string name="error_max_attempts_exceeded">Too many failed attempts. Please try again later</string>
+    <string name="error_max_attempts_exceeded_with_cooldown">Too many failed attempts. Please try again in %1$d seconds</string>
+    <string name="error_same_password">New password must be different from your current password</string>
 </resources>

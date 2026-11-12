@@ -76,6 +76,7 @@ All UI components use these semantic color tokens; never introduce component-spe
 ### 3.2 Common UI Components & Helpers
 
 - `[SyncStatusBar.kt:SyncStatusBar]`: Reusable banner indicating connectivity and synchronization state (Offline, Connecting, Syncing, Failed) with retry and dismiss actions conforming to Quiet Messaging.
+- `[OtpInputField.kt:OtpInputField]`: Segmented 6-digit numeric OTP input component with 48x56dp discrete cells, animated cursor indicators, TalkBack semantics, and non-numeric filtering.
 - `[DataErrorToString.kt:asUiText]`: Extension function mapping domain `DataError` models to
   localized UI text.
 - `[rememberMinLoading.kt:rememberMinLoading]`: Compose state utility ensuring minimum loading indicator duration to prevent UI flickering.
