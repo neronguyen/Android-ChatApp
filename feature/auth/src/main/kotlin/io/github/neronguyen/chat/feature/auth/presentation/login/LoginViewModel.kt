@@ -35,6 +35,15 @@ class LoginViewModel @Inject constructor(
         _uiState.update { it.copy(isSuccess = false) }
     }
 
+    fun setInitialState(email: String?, bannerMessage: String?) {
+        if (!email.isNullOrBlank() && emailState.text.isEmpty()) {
+            emailState.edit { replace(0, length, email) }
+        }
+        if (!bannerMessage.isNullOrBlank()) {
+            _uiState.update { it.copy(bannerMessage = bannerMessage) }
+        }
+    }
+
     private fun login() {
         if (_uiState.value.isLoading) return
 

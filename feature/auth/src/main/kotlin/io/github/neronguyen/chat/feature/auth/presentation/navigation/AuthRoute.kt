@@ -7,8 +7,24 @@ import kotlinx.serialization.Serializable
 sealed interface AuthRoute : NavKey {
 
     @Serializable
-    data object Login : AuthRoute
+    data class Login(
+        val email: String? = null,
+        val bannerMessage: String? = null,
+    ) : AuthRoute
 
     @Serializable
     data object Register : AuthRoute
+
+    @Serializable
+    data class VerifyEmail(
+        val email: String,
+    ) : AuthRoute
+
+    @Serializable
+    data object ForgotPassword : AuthRoute
+
+    @Serializable
+    data class ResetPassword(
+        val email: String,
+    ) : AuthRoute
 }

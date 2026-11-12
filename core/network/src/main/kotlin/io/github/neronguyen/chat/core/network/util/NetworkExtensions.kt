@@ -27,6 +27,7 @@ internal fun <S : ServerError> ApiErrorDto.toNetworkError(
             return NetworkError.Business(
                 error = businessError,
                 message = message,
+                retryAfterSeconds = effectiveRetryAfter,
             )
         }
     }

@@ -8,11 +8,15 @@ import io.github.neronguyen.chat.core.network.di.BaseUrl
 import io.github.neronguyen.chat.core.network.di.RefreshOkHttp
 import io.github.neronguyen.chat.core.network.util.NetworkError
 import io.github.neronguyen.chat.core.network.util.safeCall
+import io.github.neronguyen.chat.core.network.util.safeCallCommon
 import io.github.neronguyenvn.nerochat.contract.auth.AuthenticatedUserDto
+import io.github.neronguyenvn.nerochat.contract.auth.EmailRequest
 import io.github.neronguyenvn.nerochat.contract.auth.LoginRequest
 import io.github.neronguyenvn.nerochat.contract.auth.RefreshTokenRequest
 import io.github.neronguyenvn.nerochat.contract.auth.RegisterRequest
+import io.github.neronguyenvn.nerochat.contract.auth.ResetPasswordRequest
 import io.github.neronguyenvn.nerochat.contract.auth.UserDto
+import io.github.neronguyenvn.nerochat.contract.auth.VerifyEmailRequest
 import io.github.neronguyenvn.nerochat.contract.auth.error.AuthServerError
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
@@ -46,6 +50,26 @@ private interface RetrofitAuthNetworkApi {
     suspend fun logout(
         @Body request: RefreshTokenRequest
     ): Response<Unit>
+
+    @POST("api/auth/verify-email")
+    suspend fun verifyEmail(
+        @Body request: VerifyEmailRequest
+    ): Response<Unit>
+
+    @POST("api/auth/resend-verification")
+    suspend fun resendVerification(
+        @Body request: EmailRequest
+    ): Response<Unit>
+
+    @POST("api/auth/forgot-password")
+    suspend fun forgotPassword(
+        @Body request: EmailRequest
+    ): Response<Unit>
+
+    @POST("api/auth/reset-password")
+    suspend fun resetPassword(
+        @Body request: ResetPasswordRequest
+    ): Response<Unit>
 }
 
 @Singleton
@@ -70,6 +94,18 @@ internal class RetrofitAuthNetwork @Inject constructor(
 
     override suspend fun logout(request: RefreshTokenRequest): Either<NetworkError<AuthServerError.Logout>, Unit> =
         safeCall(networkJson, AuthServerError.Logout) { publicApi.logout(request) }
+
+    override suspend fun verifyEmail(request: VerifyEmailRequest): Either<NetworkError<AuthServerError.VerifyEmail>, Unit> =
+        safeCall(networkJson, AuthServerError.VerifyEmail) { publicApi.verifyEmail(request) }
+
+    override suspend fun resendVerification(request: EmailRequest): Either<NetworkError<Nothing>, Unit> =
+        safeCallCommon(networkJson) { publicApi.resendVerification(request) }
+
+    override suspend fun forgotPassword(request: EmailRequest): Either<NetworkError<Nothing>, Unit> =
+        safeCallCommon(networkJson) { publicApi.forgotPassword(request) }
+
+    override suspend fun resetPassword(request: ResetPasswordRequest): Either<NetworkError<AuthServerError.ResetPassword>, Unit> =
+        safeCall(networkJson, AuthServerError.ResetPassword) { publicApi.resetPassword(request) }
 
     private fun createApi(client: OkHttpClient): RetrofitAuthNetworkApi {
         val contentType = "application/json".toMediaType()

@@ -1,6 +1,9 @@
 package io.github.neronguyen.chat.feature.auth.presentation.login
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
@@ -24,13 +28,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.neronguyen.chat.core.ui.asUiText
+import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
+import io.github.neronguyen.chat.core.ui.theme.ChatBorder
+import io.github.neronguyen.chat.core.ui.theme.ChatPrimary
+import io.github.neronguyen.chat.core.ui.theme.ChatSurface
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
 
@@ -39,9 +48,17 @@ fun LoginRoute(
     viewModel: LoginViewModel,
     onNavigateToRegister: () -> Unit,
     onLoginSuccess: () -> Unit,
-    modifier: Modifier = Modifier
+    onNavigateToVerifyEmail: (email: String) -> Unit = {},
+    onNavigateToForgotPassword: () -> Unit = {},
+    prefilledEmail: String? = null,
+    bannerMessage: String? = null,
+    modifier: Modifier = Modifier,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(prefilledEmail, bannerMessage) {
+        viewModel.setInitialState(prefilledEmail, bannerMessage)
+    }
 
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
@@ -56,7 +73,9 @@ fun LoginRoute(
         uiState = uiState,
         onEvent = viewModel::onEvent,
         onNavigateToRegister = onNavigateToRegister,
-        modifier = modifier
+        onNavigateToVerifyEmail = onNavigateToVerifyEmail,
+        onNavigateToForgotPassword = onNavigateToForgotPassword,
+        modifier = modifier,
     )
 }
 
@@ -67,21 +86,44 @@ fun LoginScreen(
     uiState: LoginUiState,
     onEvent: (LoginUiEvent) -> Unit,
     onNavigateToRegister: () -> Unit,
-    modifier: Modifier = Modifier
+    onNavigateToVerifyEmail: (email: String) -> Unit = {},
+    onNavigateToForgotPassword: () -> Unit = {},
+    modifier: Modifier = Modifier,
 ) {
     val showLoading by rememberMinLoading(isLoading = uiState.isLoading)
 
     Column(
         modifier = modifier
             .fillMaxSize()
+            .testTag("login_screen")
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Center,
     ) {
         Text(
             text = stringResource(R.string.welcome_back),
-            style = MaterialTheme.typography.headlineMedium
+            style = MaterialTheme.typography.headlineMedium,
         )
+
+        if (uiState.bannerMessage != null) {
+            Spacer(modifier = Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("confirmation_banner")
+                    .background(ChatSurface, RoundedCornerShape(12.dp))
+                    .border(1.dp, ChatBorder, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = uiState.bannerMessage,
+                    color = ChatPrimary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center,
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(24.dp))
 
@@ -91,9 +133,11 @@ fun LoginScreen(
             lineLimits = TextFieldLineLimits.SingleLine,
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Email,
-                imeAction = ImeAction.Next
+                imeAction = ImeAction.Next,
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("email_field"),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -103,9 +147,11 @@ fun LoginScreen(
             label = { Text(stringResource(R.string.password)) },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Password,
-                imeAction = ImeAction.Done
+                imeAction = ImeAction.Done,
             ),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("password_field"),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -115,15 +161,27 @@ fun LoginScreen(
             text = activeErrorText.orEmpty(),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f)
+            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f),
         )
+
+        if (uiState.authError == AuthError.EmailNotVerified) {
+            Spacer(modifier = Modifier.height(4.dp))
+            TextButton(
+                onClick = { onNavigateToVerifyEmail(emailState.text.toString().trim()) },
+                modifier = Modifier.testTag("verify_email_prompt_button"),
+            ) {
+                Text(stringResource(R.string.verify_email_prompt))
+            }
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = { onEvent(LoginUiEvent.Login) },
-            modifier = Modifier.fillMaxWidth(),
-            enabled = !uiState.isLoading
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("login_button"),
+            enabled = !uiState.isLoading,
         ) {
             if (showLoading) {
                 CircularProgressIndicator(
@@ -137,7 +195,19 @@ fun LoginScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        TextButton(onClick = onNavigateToRegister) {
+        TextButton(
+            onClick = onNavigateToForgotPassword,
+            modifier = Modifier.testTag("forgot_password_button"),
+        ) {
+            Text(stringResource(R.string.forgot_password))
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        TextButton(
+            onClick = onNavigateToRegister,
+            modifier = Modifier.testTag("register_button"),
+        ) {
             Text(stringResource(R.string.dont_have_account))
         }
     }

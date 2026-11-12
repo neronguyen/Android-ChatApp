@@ -4,10 +4,16 @@
 Authentication and onboarding user experience built with Jetpack Compose, executing client-side pre-validation and managing login/registration UI flows.
 
 ## Interface
-- `[LoginScreen.kt:LoginScreen]`: Jetpack Compose screen for user login.
+- `[LoginScreen.kt:LoginScreen]`: Jetpack Compose screen for user login with contextual banners.
 - `[LoginViewModel.kt:LoginViewModel]`: ViewModel managing login state, pre-validation, and submission.
 - `[RegisterScreen.kt:RegisterScreen]`: Jetpack Compose screen for user registration.
 - `[RegisterViewModel.kt:RegisterViewModel]`: ViewModel managing registration state and credential validation.
+- `[VerifyEmailScreen.kt:VerifyEmailScreen]`: Jetpack Compose screen for 6-digit OTP email verification with `OtpInputField`.
+- `[VerifyEmailViewModel.kt:VerifyEmailViewModel]`: ViewModel managing email verification, auto-submission on 6th digit, and declarative `SavedStateHandle` cooldown timer.
+- `[ForgotPasswordScreen.kt:ForgotPasswordScreen]`: Jetpack Compose screen for password recovery email submission.
+- `[ForgotPasswordViewModel.kt:ForgotPasswordViewModel]`: ViewModel managing password reset code dispatch.
+- `[ResetPasswordScreen.kt:ResetPasswordScreen]`: Jetpack Compose screen for entering 6-digit OTP and new password with validation gates.
+- `[ResetPasswordViewModel.kt:ResetPasswordViewModel]`: ViewModel managing OTP reset validation, mismatch protection, and cooldown timers.
 - `[AuthNavigation.kt:AuthNavGraph]`: Navigation 3 entrypoint integrating authentication routes into the app navigation host.
 
 ## Invariants

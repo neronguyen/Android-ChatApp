@@ -31,5 +31,6 @@ sealed interface NetworkError<out S : ServerError> {
     data class Business<out S : ServerError>(
         val error: S,
         val message: String,
+        val retryAfterSeconds: Long? = null,
     ) : NetworkError<S>
 }

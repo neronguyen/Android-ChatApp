@@ -86,6 +86,7 @@ class RegisterViewModel @Inject constructor(
                         it.copy(
                             isLoading = false,
                             isSuccess = true,
+                            registeredEmail = emailText,
                         )
                     }
                 }

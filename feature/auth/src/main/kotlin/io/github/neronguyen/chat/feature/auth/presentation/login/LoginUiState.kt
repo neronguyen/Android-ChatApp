@@ -8,4 +8,5 @@ data class LoginUiState(
     val validationError: AuthValidationError.Login? = null,
     val authError: AuthError.Login? = null,
     val isSuccess: Boolean = false,
+    val bannerMessage: String? = null,
 )

@@ -1,0 +1,237 @@
+package io.github.neronguyen.chat.feature.auth.presentation.reset
+
+import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedFactory
+import dagger.assisted.AssistedInject
+import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.neronguyen.chat.core.data.repository.AuthRepository
+import io.github.neronguyen.chat.core.model.error.AuthError
+import io.github.neronguyenvn.nerochat.contract.validation.EmailValidator
+import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidator
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlin.math.max
+import kotlin.time.Duration.Companion.seconds
+
+private const val KEY_COOLDOWN_END_EPOCH = "cooldown_end_epoch"
+private const val KEY_CODE = "otp_code"
+
+@HiltViewModel(assistedFactory = ResetPasswordViewModel.Factory::class)
+class ResetPasswordViewModel @AssistedInject constructor(
+    @Assisted val email: String,
+    private val authRepository: AuthRepository,
+    private val savedStateHandle: SavedStateHandle,
+) : ViewModel() {
+
+    internal constructor(
+        email: String,
+        authRepository: AuthRepository,
+    ) : this(email, authRepository, SavedStateHandle())
+
+    @AssistedFactory
+    interface Factory {
+        fun create(email: String): ResetPasswordViewModel
+    }
+
+    internal var timeProvider: () -> Long = { System.currentTimeMillis() }
+        set(value) {
+            field = value
+            restoreCooldownFromSavedState()
+        }
+
+    private val initialCode: String = savedStateHandle.get<String>(KEY_CODE).orEmpty()
+    private val _uiState = MutableStateFlow(
+        ResetPasswordUiState(
+            email = email,
+            code = initialCode,
+        ),
+    )
+    val uiState: StateFlow<ResetPasswordUiState> = _uiState.asStateFlow()
+
+    private var cooldownJob: Job? = null
+
+    init {
+        restoreCooldownFromSavedState()
+    }
+
+    fun onEvent(event: ResetPasswordUiEvent) {
+        when (event) {
+            is ResetPasswordUiEvent.CodeChanged -> onCodeChanged(event.code)
+            is ResetPasswordUiEvent.NewPasswordChanged -> onNewPasswordChanged(event.password)
+            is ResetPasswordUiEvent.ConfirmPasswordChanged -> onConfirmPasswordChanged(event.password)
+            ResetPasswordUiEvent.Reset -> reset()
+            ResetPasswordUiEvent.ResendCode -> resendCode()
+            ResetPasswordUiEvent.DismissInfo -> dismissInfo()
+        }
+    }
+
+    fun onResetSuccessHandled() {
+        _uiState.update { it.copy(isSuccess = false) }
+    }
+
+    private fun onCodeChanged(newCode: String) {
+        val sanitized = newCode.filter { it.isDigit() }.take(6)
+        savedStateHandle[KEY_CODE] = sanitized
+        _uiState.update {
+            it.copy(
+                code = sanitized,
+                validationError = null,
+                authError = null,
+            )
+        }
+    }
+
+    private fun onNewPasswordChanged(password: String) {
+        _uiState.update {
+            it.copy(
+                newPassword = password,
+                passwordsMismatch = false,
+                validationError = null,
+                authError = null,
+            )
+        }
+    }
+
+    private fun onConfirmPasswordChanged(password: String) {
+        _uiState.update {
+            it.copy(
+                confirmPassword = password,
+                passwordsMismatch = false,
+                validationError = null,
+                authError = null,
+            )
+        }
+    }
+
+    private fun reset() {
+        if (_uiState.value.isLoading) return
+
+        val state = _uiState.value
+        if (state.newPassword != state.confirmPassword) {
+            _uiState.update { it.copy(passwordsMismatch = true) }
+            return
+        }
+
+        val normalizedEmail = EmailValidator.normalize(email)
+        val codeText = state.code.trim()
+        val newPasswordText = state.newPassword
+
+        val validationError = AuthValidator.validateResetPassword(
+            email = normalizedEmail,
+            code = codeText,
+            newPassword = newPasswordText,
+        ).firstOrNull()
+
+        if (validationError != null) {
+            _uiState.update {
+                it.copy(
+                    validationError = validationError,
+                    authError = null,
+                )
+            }
+            return
+        }
+
+        _uiState.update {
+            it.copy(
+                isLoading = true,
+                validationError = null,
+                passwordsMismatch = false,
+                authError = null,
+            )
+        }
+
+        viewModelScope.launch {
+            authRepository.resetPassword(
+                email = normalizedEmail,
+                code = codeText,
+                newPassword = newPasswordText,
+            )
+                .onLeft { error ->
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            authError = error,
+                        )
+                    }
+                }
+                .onRight {
+                    _uiState.update {
+                        it.copy(
+                            isLoading = false,
+                            isSuccess = true,
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun resendCode() {
+        if (_uiState.value.resendCooldownSeconds > 0 || _uiState.value.isResending) return
+
+        _uiState.update { it.copy(isResending = true, authError = null, validationError = null) }
+
+        viewModelScope.launch {
+            val normalizedEmail = EmailValidator.normalize(email)
+            authRepository.forgotPassword(normalizedEmail)
+                .onLeft { error ->
+                    _uiState.update {
+                        it.copy(
+                            isResending = false,
+                            authError = AuthError.Data(error),
+                        )
+                    }
+                }
+                .onRight {
+                    _uiState.update {
+                        it.copy(
+                            isResending = false,
+                            infoMessage = "Reset code resent",
+                        )
+                    }
+                    startCooldown(60)
+                }
+        }
+    }
+
+    fun startCooldown(seconds: Int) {
+        val targetEpoch = timeProvider() + seconds * 1000L
+        savedStateHandle[KEY_COOLDOWN_END_EPOCH] = targetEpoch
+        _uiState.update { it.copy(resendCooldownSeconds = seconds) }
+        launchCooldownTicker()
+    }
+
+    private fun restoreCooldownFromSavedState() {
+        val targetEpoch = savedStateHandle.get<Long>(KEY_COOLDOWN_END_EPOCH) ?: 0L
+        val remaining = max(0L, (targetEpoch - timeProvider() + 999L) / 1000L).toInt()
+        if (remaining > 0) {
+            _uiState.update { it.copy(resendCooldownSeconds = remaining) }
+            launchCooldownTicker()
+        }
+    }
+
+    private fun launchCooldownTicker() {
+        cooldownJob?.cancel()
+        cooldownJob = viewModelScope.launch {
+            while (true) {
+                val targetEpoch = savedStateHandle.get<Long>(KEY_COOLDOWN_END_EPOCH) ?: 0L
+                val remaining = max(0L, (targetEpoch - timeProvider() + 999L) / 1000L).toInt()
+                _uiState.update { it.copy(resendCooldownSeconds = remaining) }
+                if (remaining <= 0) break
+                delay(1.seconds)
+            }
+        }
+    }
+
+    private fun dismissInfo() {
+        _uiState.update { it.copy(infoMessage = null) }
+    }
+}
