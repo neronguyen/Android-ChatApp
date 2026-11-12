@@ -11,9 +11,9 @@
     <string name="error_unknown">An unknown error occurred. Please try again.</string>
 
     <!-- Sync Status Bar -->
-    <string name="sync_status_offline">Waiting for network…</string>
-    <string name="sync_status_connecting">Connecting…</string>
-    <string name="sync_status_syncing">Syncing messages…</string>
+    <string name="sync_status_offline">Offline — Waiting for connection</string>
+    <string name="sync_status_connecting">Connecting… syncing messages</string>
+    <string name="sync_status_syncing">Connecting… syncing messages</string>
     <string name="sync_status_retry">Retry</string>
     <string name="sync_status_dismiss_cd">Dismiss</string>
 </resources>

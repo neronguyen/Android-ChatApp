@@ -27,9 +27,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -51,10 +54,21 @@ fun SyncStatusBar(
         return
     }
 
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.surfaceVariant)
+            .drawBehind {
+                val strokeWidth = 1.dp.toPx()
+                drawLine(
+                    color = borderColor,
+                    start = Offset(0f, size.height - strokeWidth / 2),
+                    end = Offset(size.width, size.height - strokeWidth / 2),
+                    strokeWidth = strokeWidth,
+                )
+            }
             .padding(horizontal = 12.dp, vertical = 8.dp)
             .testTag("sync_status_bar"),
         verticalAlignment = Alignment.CenterVertically,
@@ -71,7 +85,7 @@ fun SyncStatusBar(
                         imageVector = Icons.Outlined.CloudOff,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                     Text(
                         text = stringResource(R.string.sync_status_offline),
@@ -153,7 +167,7 @@ fun SyncStatusBar(
                         imageVector = Icons.Outlined.ErrorOutline,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(20.dp),
                     )
                     Text(
                         text = syncState.error.asUiText(),
@@ -178,7 +192,8 @@ fun SyncStatusBar(
                 ) {
                     Text(
                         text = stringResource(R.string.sync_status_retry),
-                        style = MaterialTheme.typography.labelSmall,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
@@ -194,7 +209,7 @@ fun SyncStatusBar(
                     imageVector = Icons.Outlined.Close,
                     contentDescription = stringResource(R.string.sync_status_dismiss_cd),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }

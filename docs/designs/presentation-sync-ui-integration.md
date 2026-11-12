@@ -322,8 +322,12 @@ tests pass `false` so that rendered images are deterministic.
 | `Failed`          | `#F3F4F6`      | `ErrorOutline`    | `error.asUiText()`                                | `Retry` (`TextButton`)            | `Close`                          |
 
 - **Geometry & Tokens**: Container `MaterialTheme.colorScheme.surfaceVariant` (`#F3F4F6`), flat
-  `0.dp` elevation, padding `12.dp horizontal, 8.dp vertical`, text
-  `MaterialTheme.typography.bodySmall` (`12sp`).
+  `0.dp` elevation, `1.dp` bottom border in `outlineVariant` (`#D1D5DB`, matching Stitch `border-b border-border`),
+  padding `12.dp horizontal, 8.dp vertical`, text `MaterialTheme.typography.bodySmall` (`12sp`).
+- **Authoritative Stitch Screens (Project `10647833259558812227`)**:
+  - `Chats (Connecting / Syncing)`: `screens/9512792d8a1949a28b9d6960191b5623`
+  - `Chats (Offline)`: `screens/dcd52691192642fd877cec56d3688453`
+  - `Chats (Sync Error)`: `screens/21000258ec54445c9697ac1771170f81`
 - **Animation Ownership**: When `syncState` is `Synced` or `Idle`, `SyncStatusBar` returns
   immediately without composing nodes. Exit animations are driven by screen-level
   `AnimatedVisibility(visible = uiState.showSyncBanner)`.

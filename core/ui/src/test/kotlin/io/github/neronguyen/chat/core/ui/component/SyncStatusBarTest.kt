@@ -68,7 +68,7 @@ class SyncStatusBarTest {
         }
 
         composeTestRule.onNodeWithTag("sync_status_bar").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Waiting for network…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Offline — Waiting for connection").assertIsDisplayed()
         composeTestRule.onNodeWithTag("sync_status_retry_button").assertDoesNotExist()
 
         composeTestRule.onNodeWithTag("sync_status_dismiss_button").performClick()
@@ -89,7 +89,7 @@ class SyncStatusBarTest {
         }
 
         composeTestRule.onNodeWithTag("sync_status_bar").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Connecting…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Connecting… syncing messages").assertIsDisplayed()
         composeTestRule.onNodeWithTag("sync_status_retry_button").assertDoesNotExist()
     }
 
@@ -107,7 +107,7 @@ class SyncStatusBarTest {
         }
 
         composeTestRule.onNodeWithTag("sync_status_bar").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Syncing messages…").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Connecting… syncing messages").assertIsDisplayed()
         composeTestRule.onNodeWithTag("sync_status_retry_button").assertDoesNotExist()
     }
 
