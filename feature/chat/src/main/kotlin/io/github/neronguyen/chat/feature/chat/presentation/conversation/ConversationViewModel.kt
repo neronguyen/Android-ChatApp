@@ -8,15 +8,17 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.neronguyen.chat.core.data.realtime.RealtimeConnectionManager
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
 import io.github.neronguyen.chat.core.data.repository.ChatMessageRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
+import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.feature.chat.presentation.newchat.toParticipantUiModel
+import io.github.neronguyen.chat.feature.chat.presentation.util.SyncCategory
+import io.github.neronguyen.chat.feature.chat.presentation.util.toCategory
 import io.github.neronguyenvn.nerochat.contract.validation.EmailValidator
 import io.github.neronguyenvn.nerochat.contract.validation.chat.ChatValidationError
 import io.github.neronguyenvn.nerochat.contract.validation.chat.ChatValidator
@@ -45,7 +47,7 @@ class ConversationViewModel @AssistedInject constructor(
     @Assisted val roomId: String,
     private val chatRoomRepository: ChatRoomRepository,
     private val chatMessageRepository: ChatMessageRepository,
-    private val realtimeConnectionManager: RealtimeConnectionManager,
+    private val chatSyncManager: ChatSyncManager,
     private val authRepository: AuthRepository,
 ) : ViewModel() {
 
@@ -67,6 +69,7 @@ class ConversationViewModel @AssistedInject constructor(
     private val isLeavingFlow = MutableStateFlow(false)
     private val hasLeftFlow = MutableStateFlow(false)
     private val isBannerDismissedFlow = MutableStateFlow(false)
+    private var lastSyncCategory: SyncCategory? = null
 
     private val currentUserFlow: StateFlow<User?> = authRepository.getAuthState()
         .map { (it as? AuthState.Authenticated)?.user }
@@ -86,6 +89,7 @@ class ConversationViewModel @AssistedInject constructor(
     val uiState: StateFlow<ConversationUiState> = _uiState.asStateFlow()
 
     init {
+        observeSyncState()
         observeConversation()
         syncRoomAndRecentMessages()
     }
@@ -96,7 +100,7 @@ class ConversationViewModel @AssistedInject constructor(
             is ConversationUiEvent.RetryMessage -> retryMessage(event.messageId)
             is ConversationUiEvent.DeleteMessage -> deleteMessage(event.messageId)
             ConversationUiEvent.LoadOlderMessages -> loadOlderMessages()
-            ConversationUiEvent.RetrySync -> syncRoomAndRecentMessages()
+            ConversationUiEvent.RetrySync -> retrySync()
             ConversationUiEvent.DismissBanner -> dismissBanner()
             ConversationUiEvent.ClearActionError -> clearActionError()
             ConversationUiEvent.LeaveRoom -> leaveRoom()
@@ -105,6 +109,23 @@ class ConversationViewModel @AssistedInject constructor(
             ConversationUiEvent.SearchParticipantByEmail -> searchParticipantByEmail()
             ConversationUiEvent.ClearAddParticipantSearch -> clearAddParticipantSearch()
             ConversationUiEvent.ConfirmAddParticipant -> confirmAddParticipant()
+        }
+    }
+
+    private fun observeSyncState() {
+        viewModelScope.launch {
+            chatSyncManager.syncState.collect { syncState ->
+                val newCategory = syncState.toCategory()
+                val prevCategory = lastSyncCategory
+                if (prevCategory != null) {
+                    if (newCategory == SyncCategory.ERROR ||
+                        (newCategory == SyncCategory.OFFLINE && prevCategory != SyncCategory.OFFLINE)
+                    ) {
+                        isBannerDismissedFlow.value = false
+                    }
+                }
+                lastSyncCategory = newCategory
+            }
         }
     }
 
@@ -122,9 +143,9 @@ class ConversationViewModel @AssistedInject constructor(
                 chatRoomRepository.getChatRoom(roomId),
                 messagesFlow,
                 currentUserIdFlow,
-                realtimeConnectionManager.connectionState,
+                chatSyncManager.syncState,
                 syncStatusFlow,
-            ) { room, messages, currentUserId, connectionState, syncStatus ->
+            ) { room, messages, currentUserId, syncState, syncStatus ->
                 val header = mapConversationHeader(room, currentUserId)
                 val items = mapConversationItems(
                     messages = messages,
@@ -143,7 +164,7 @@ class ConversationViewModel @AssistedInject constructor(
                         initials = header.initials,
                         avatarUrl = header.avatarUrl,
                         items = items,
-                        connectionState = connectionState,
+                        syncState = syncState,
                         isInitialLoading = syncStatus.isInitialLoading && items.isEmpty(),
                         isSyncing = syncStatus.isSyncing,
                         syncError = syncStatus.syncError,
@@ -174,6 +195,13 @@ class ConversationViewModel @AssistedInject constructor(
                 }
             }.collect {}
         }
+    }
+
+    private fun retrySync() {
+        viewModelScope.launch {
+            chatSyncManager.retry()
+        }
+        syncRoomAndRecentMessages()
     }
 
     private fun syncRoomAndRecentMessages() {

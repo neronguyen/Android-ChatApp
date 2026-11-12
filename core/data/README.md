@@ -10,7 +10,7 @@ Offline-first data repositories, real-time sync coordinator (`ChatRealtimeSyncMa
 - `[RealtimeConnectionManager.kt:RealtimeConnectionManager]`: Real-time engine supervising WebSocket connections with smoothed backoff, app lifecycle (`ProcessLifecycleOwner`), internal network reachability (`NetworkMonitor`), and `reconnect()` trigger.
 - `[ChatRealtimeSyncManager.kt:ChatRealtimeSyncManager]`: Reactive consumer processing incoming `WsServerEvent` frames and applying updates to `ChatDao` (with foreign-key buffering guard, disconnect sweep, and idempotent duplicate message reconciliation).
 - `[NetworkMonitor.kt:NetworkMonitor]`: Internal network reachability interface with cold-start seeding and asymmetric 300ms offline debounce.
-- `[ChatSyncManager.kt:ChatSyncManager]`: Coordinates catch-up sync with bounded parallel prefetching (Semaphore 3) and exposes unified event-driven `syncState: StateFlow<ChatSyncState>`.
+- `[ChatSyncManager.kt:ChatSyncManager]`: Coordinates catch-up sync with bounded parallel prefetching (Semaphore 3), unified `retry(): Either<DataError, Unit>`, and exposes unified event-driven `syncState: StateFlow<ChatSyncState>`.
 - `[ChatSyncScheduler.kt:ChatSyncScheduler]`: SPI abstraction for edge background scheduling implemented by `:sync:work`.
 - `[DataModule.kt:DataModule]`: Hilt DI module binding repository, network monitor, and sync manager implementations.
 
@@ -30,6 +30,7 @@ Offline-first data repositories, real-time sync coordinator (`ChatRealtimeSyncMa
   key constraint crashes (`ChatRealtimeSyncManager`).
 - Socket disconnect sweeps pending `SENDING` messages to `FAILED`; server duplicate message events reconcile to `SENT`.
 - Catch-up sync prefetching across dirty rooms uses bounded `mapConcurrent(3)` (`:core:common`).
+- Catch-up sync mid-sync network loss yields `Offline`, and cancellation transitions to `Offline` or `Connecting`, never resetting to `Idle`.
 
 ## Side Effects
 - Reads and mutates Room database (`ChatDao`).

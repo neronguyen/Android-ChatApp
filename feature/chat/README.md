@@ -15,10 +15,13 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 - `[ChatNavigation.kt:ChatNavGraph]`: Navigation 3 entrypoint integrating chat routes into the app navigation host.
 
 ## Invariants
-- Depends only on `:core:ui`, `:core:model`, `:core:data` repository interfaces, and `:validation:chat`.
+- Depends only on `:core:ui`, `:core:model`, `:core:data` interfaces (`ChatRoomRepository`, `ChatMessageRepository`, `ChatSyncManager`), and `:validation:chat`.
 - Never imports wire DTOs (`:contract:*`) or database entities.
 - Validates room creation and participant searches synchronously via `ChatValidator`.
-- Exposes deterministic `testTag` identifiers for headless Robolectric testing.
+- Consumes unified `ChatSyncState` via `ChatSyncManager` across `ChatListViewModel`, `ConversationViewModel`, and `AccountViewModel`; embeds `SyncStatusBar` for reachability/sync feedback.
+- Gates message transmission on `canSendMessage == (syncState is Synced || syncState is Syncing)` while preserving editable user input in `TextFieldState`.
+- Preserves banner dismissal across positive recovery (`Offline` -> `Connecting` -> `Syncing` -> `Synced`) and resets strictly on negative regressions (`Failed` or unexpected `Offline`).
+- Exposes deterministic `testTag` identifiers (`conversation_send_button`, `sync_status_bar`, etc.) for headless Robolectric testing.
 
 ## Side Effects
 - Mutates UI state flows; triggers message transmissions and room queries via `ChatRoomRepository` and `ChatMessageRepository`.

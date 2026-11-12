@@ -8,16 +8,16 @@ import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
 import io.github.neronguyen.chat.core.model.ChatRoomType
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
-import kotlinx.coroutines.CompletableDeferred
+import io.github.neronguyen.chat.feature.chat.presentation.FakeChatSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -26,7 +26,6 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -39,6 +38,7 @@ class ChatListViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var fakeChatRoomRepository: FakeChatRoomRepository
     private lateinit var fakeAuthRepository: FakeAuthRepository
+    private lateinit var fakeChatSyncManager: FakeChatSyncManager
     private lateinit var viewModel: ChatListViewModel
 
     private val currentUser = User(
@@ -70,6 +70,7 @@ class ChatListViewModelTest {
         fakeAuthRepository = FakeAuthRepository(
             initialState = AuthState.Authenticated(currentUser, "token"),
         )
+        fakeChatSyncManager = FakeChatSyncManager(initialState = ChatSyncState.Synced)
     }
 
     @After
@@ -116,17 +117,16 @@ class ChatListViewModelTest {
         testScheduler.advanceUntilIdle()
 
         val state = viewModel.uiState.value
-        assertFalse(state.isSyncing)
+        assertEquals(ChatSyncState.Synced, state.syncState)
         assertTrue(state.isInitialLoadComplete)
-        assertNull(state.syncError)
-        assertEquals(1, fakeChatRoomRepository.syncCallCount)
+        assertFalse(state.showSyncBanner)
         assertEquals(listOf("room-newer", "room-older"), state.chats.map { it.id })
         assertEquals("Elena Rostova", state.chats[0].title)
         assertEquals("Backend Core Team", state.chats[1].title)
     }
 
     @Test
-    fun `when sync fails, cached chats remain visible and syncError is exposed until dismissed`() =
+    fun `when sync fails, cached chats remain visible and syncState is exposed until dismissed`() =
         runTest {
             val cachedRoom = ChatRoom(
                 id = "room-1",
@@ -135,14 +135,14 @@ class ChatListViewModelTest {
                 participants = listOf(meParticipant, elenaParticipant),
             )
             fakeChatRoomRepository.roomsFlow.value = listOf(cachedRoom)
-            fakeChatRoomRepository.syncResult = Either.Left(DataError.Connectivity.NoInternet)
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Failed(DataError.Connectivity.NoInternet)
 
             viewModel = createViewModel()
             testScheduler.advanceUntilIdle()
 
             val stateWithError = viewModel.uiState.value
             assertEquals(1, stateWithError.chats.size)
-            assertEquals(DataError.Connectivity.NoInternet, stateWithError.syncError)
+            assertEquals(ChatSyncState.Failed(DataError.Connectivity.NoInternet), stateWithError.syncState)
             assertTrue(stateWithError.showSyncBanner)
 
             viewModel.onEvent(ChatListUiEvent.DismissSyncBanner)
@@ -152,7 +152,7 @@ class ChatListViewModelTest {
         }
 
     @Test
-    fun `when sync fails offline and subsequent sync succeeds on refresh, syncError is cleared`() =
+    fun `when sync fails offline and subsequent sync succeeds on refresh, sync banner is cleared`() =
         runTest {
             val cachedRoom = ChatRoom(
                 id = "room-1",
@@ -161,23 +161,59 @@ class ChatListViewModelTest {
                 participants = listOf(meParticipant, elenaParticipant),
             )
             fakeChatRoomRepository.roomsFlow.value = listOf(cachedRoom)
-            fakeChatRoomRepository.syncResult = Either.Left(DataError.Connectivity.NoInternet)
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
 
             viewModel = createViewModel()
             testScheduler.advanceUntilIdle()
 
             val stateWithError = viewModel.uiState.value
-            assertEquals(DataError.Connectivity.NoInternet, stateWithError.syncError)
+            assertEquals(ChatSyncState.Offline, stateWithError.syncState)
             assertTrue(stateWithError.showSyncBanner)
 
-            // Subsequent refresh succeeds
-            fakeChatRoomRepository.syncResult = Either.Right(Unit)
+            // Subsequent refresh triggers retry
             viewModel.onEvent(ChatListUiEvent.RefreshChats)
             testScheduler.advanceUntilIdle()
 
+            assertEquals(1, fakeChatSyncManager.retryCallCount)
+
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Synced
+            testScheduler.advanceUntilIdle()
+
             val recoveredState = viewModel.uiState.value
-            assertNull(recoveredState.syncError)
+            assertEquals(ChatSyncState.Synced, recoveredState.syncState)
             assertFalse(recoveredState.showSyncBanner)
+        }
+
+    @Test
+    fun `dismissal persists across positive recovery but resets on negative regression`() =
+        runTest {
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
+            viewModel = createViewModel()
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.showSyncBanner)
+
+            // User dismisses banner while Offline
+            viewModel.onEvent(ChatListUiEvent.DismissSyncBanner)
+            testScheduler.advanceUntilIdle()
+            assertFalse(viewModel.uiState.value.showSyncBanner)
+
+            // Positive recovery progression: Offline -> Connecting -> Syncing -> Synced
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Connecting
+            testScheduler.advanceUntilIdle()
+            assertFalse(viewModel.uiState.value.showSyncBanner)
+
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Syncing
+            testScheduler.advanceUntilIdle()
+            assertFalse(viewModel.uiState.value.showSyncBanner)
+
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Synced
+            testScheduler.advanceUntilIdle()
+            assertFalse(viewModel.uiState.value.showSyncBanner)
+
+            // Negative regression back to Offline: dismissal resets
+            fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
+            testScheduler.advanceUntilIdle()
+            assertTrue(viewModel.uiState.value.showSyncBanner)
         }
 
     @Test
@@ -233,29 +269,11 @@ class ChatListViewModelTest {
             assertEquals(2, viewModel.uiState.value.chats.size)
         }
 
-    @Test
-    fun `RefreshChats during active sync does not start duplicate sync call`() = runTest {
-        val deferred = CompletableDeferred<Either<DataError, Unit>>()
-        fakeChatRoomRepository.syncCompletable = deferred
-
-        viewModel = createViewModel()
-        testScheduler.runCurrent()
-        assertEquals(1, fakeChatRoomRepository.syncCallCount)
-        assertTrue(viewModel.uiState.value.isSyncing)
-
-        viewModel.onEvent(ChatListUiEvent.RefreshChats)
-        testScheduler.runCurrent()
-        assertEquals(1, fakeChatRoomRepository.syncCallCount)
-
-        deferred.complete(Either.Right(Unit))
-        testScheduler.advanceUntilIdle()
-        assertFalse(viewModel.uiState.value.isSyncing)
-    }
-
     private fun createViewModel(): ChatListViewModel {
         return ChatListViewModel(
             chatRoomRepository = fakeChatRoomRepository,
             authRepository = fakeAuthRepository,
+            chatSyncManager = fakeChatSyncManager,
         ).apply {
             nowProvider = { Instant.parse("2026-03-15T14:00:00Z") }
             zoneIdProvider = { ZoneId.of("UTC") }
@@ -266,8 +284,6 @@ class ChatListViewModelTest {
 private class FakeChatRoomRepository : ChatRoomRepository {
     val roomsFlow = MutableStateFlow<List<ChatRoom>>(emptyList())
     var syncCallCount = 0
-    var syncResult: Either<DataError, Unit> = Either.Right(Unit)
-    var syncCompletable: CompletableDeferred<Either<DataError, Unit>>? = null
 
     override fun getChats(): Flow<List<ChatRoom>> = roomsFlow
 
@@ -276,12 +292,7 @@ private class FakeChatRoomRepository : ChatRoomRepository {
 
     override suspend fun syncChats(): Either<DataError, Unit> {
         syncCallCount++
-        val completable = syncCompletable
-        return if (completable != null) {
-            completable.await()
-        } else {
-            syncResult
-        }
+        return Either.Right(Unit)
     }
 
     override suspend fun findChatParticipantByEmail(
@@ -317,7 +328,6 @@ private class FakeChatRoomRepository : ChatRoomRepository {
     override suspend fun leaveChatRoom(roomId: String): Either<ChatError.LeaveRoom, Unit> =
         Either.Right(Unit)
 }
-
 
 private class FakeAuthRepository(
     initialState: AuthState,

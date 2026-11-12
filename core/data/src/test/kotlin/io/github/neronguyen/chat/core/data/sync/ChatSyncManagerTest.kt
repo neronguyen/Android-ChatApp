@@ -218,7 +218,7 @@ class ChatSyncManagerTest {
     }
 
     @Test
-    fun `when appScope is cancelled during catch-up sync, syncState resets to Idle`() = runTest(testDispatcher) {
+    fun `when appScope is cancelled during catch-up sync and online, syncState transitions to Connecting`() = runTest(testDispatcher) {
         val hangDeferred = CompletableDeferred<Either<DataError, List<String>>>()
         fakeChatRoomRepository.customSyncBlock = { hangDeferred.await() }
 
@@ -232,7 +232,64 @@ class ChatSyncManagerTest {
         testScope.cancel()
         testScheduler.runCurrent()
 
-        assertEquals(ChatSyncState.Idle, chatSyncManager.syncState.value)
+        assertEquals(ChatSyncState.Connecting, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `when appScope is cancelled during catch-up sync and offline, syncState transitions to Offline`() = runTest(testDispatcher) {
+        fakeNetworkMonitor.setConnected(false)
+        testScheduler.runCurrent()
+
+        val hangDeferred = CompletableDeferred<Either<DataError, List<String>>>()
+        fakeChatRoomRepository.customSyncBlock = { hangDeferred.await() }
+
+        launch {
+            chatSyncManager.performCatchUpSync()
+        }
+        testScheduler.runCurrent()
+
+        testScope.cancel()
+        testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Offline, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `when network drops mid-sync, syncState yields Offline instead of Synced or Failed`() = runTest(testDispatcher) {
+        fakeChatRoomRepository.customSyncBlock = {
+            fakeNetworkMonitor.setConnected(false)
+            testScheduler.runCurrent()
+            Either.Right(emptyList())
+        }
+
+        val result = chatSyncManager.performCatchUpSync()
+
+        assertTrue(result.isRight())
+        assertEquals(ChatSyncState.Offline, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `retry calls reconnect only when connection is FAILED`() = runTest(testDispatcher) {
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.FAILED
+        fakeChatRoomRepository.changedRoomIdsResult = Either.Right(emptyList())
+
+        val result = chatSyncManager.retry()
+
+        assertTrue(result.isRight())
+        assertEquals(1, fakeRealtimeConnectionManager.reconnectCalledCount)
+        assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
+    }
+
+    @Test
+    fun `retry does not call reconnect when connection is not FAILED`() = runTest(testDispatcher) {
+        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.CONNECTED
+        fakeChatRoomRepository.changedRoomIdsResult = Either.Right(emptyList())
+
+        val result = chatSyncManager.retry()
+
+        assertTrue(result.isRight())
+        assertEquals(0, fakeRealtimeConnectionManager.reconnectCalledCount)
+        assertEquals(ChatSyncState.Synced, chatSyncManager.syncState.value)
     }
 
     @Test

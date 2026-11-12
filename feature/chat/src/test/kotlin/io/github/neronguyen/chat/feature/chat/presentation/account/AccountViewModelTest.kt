@@ -1,13 +1,13 @@
 package io.github.neronguyen.chat.feature.chat.presentation.account
 
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.realtime.RealtimeConnectionManager
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
 import io.github.neronguyen.chat.core.model.AuthState
-import io.github.neronguyen.chat.core.model.RealtimeConnectionState
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.feature.chat.presentation.FakeChatSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -29,7 +29,7 @@ class AccountViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var fakeAuthRepository: FakeAuthRepository
-    private lateinit var fakeRealtimeConnectionManager: FakeRealtimeConnectionManager
+    private lateinit var fakeChatSyncManager: FakeChatSyncManager
     private lateinit var viewModel: AccountViewModel
 
     private val testUser = User(
@@ -45,12 +45,12 @@ class AccountViewModelTest {
         fakeAuthRepository = FakeAuthRepository(
             initialAuthState = AuthState.Authenticated(testUser, "access-token"),
         )
-        fakeRealtimeConnectionManager = FakeRealtimeConnectionManager(
-            initialState = RealtimeConnectionState.CONNECTED,
+        fakeChatSyncManager = FakeChatSyncManager(
+            initialState = ChatSyncState.Synced,
         )
         viewModel = AccountViewModel(
             authRepository = fakeAuthRepository,
-            realtimeConnectionManager = fakeRealtimeConnectionManager,
+            chatSyncManager = fakeChatSyncManager,
         )
     }
 
@@ -60,7 +60,7 @@ class AccountViewModelTest {
     }
 
     @Test
-    fun `init maps user details, initials, email verification, and realtime connection state`() =
+    fun `init maps user details, initials, email verification, and sync state`() =
         runTest {
             testScheduler.advanceUntilIdle()
 
@@ -69,22 +69,21 @@ class AccountViewModelTest {
             assertEquals("alex.lin@example.com", state.email)
             assertEquals("AL", state.initials)
             assertTrue(state.isEmailVerified)
-            assertEquals(RealtimeConnectionState.CONNECTED, state.connectionState)
+            assertEquals(ChatSyncState.Synced, state.syncState)
             assertFalse(state.isSigningOut)
             assertFalse(state.showSignOutConfirmation)
             assertNull(state.signOutError)
         }
 
     @Test
-    fun `realtime connection state changes update uiState`() = runTest {
+    fun `sync state changes update uiState`() = runTest {
         testScheduler.advanceUntilIdle()
-        assertEquals(RealtimeConnectionState.CONNECTED, viewModel.uiState.value.connectionState)
+        assertEquals(ChatSyncState.Synced, viewModel.uiState.value.syncState)
 
-        fakeRealtimeConnectionManager.connectionStateFlow.value =
-            RealtimeConnectionState.DISCONNECTED
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
         testScheduler.advanceUntilIdle()
 
-        assertEquals(RealtimeConnectionState.DISCONNECTED, viewModel.uiState.value.connectionState)
+        assertEquals(ChatSyncState.Offline, viewModel.uiState.value.syncState)
     }
 
     @Test
@@ -145,15 +144,6 @@ class AccountViewModelTest {
         assertEquals("", state.displayName)
         assertEquals("alex.lin@example.com", state.email)
         assertEquals("AL", state.initials)
-    }
-
-    private class FakeRealtimeConnectionManager(
-        initialState: RealtimeConnectionState = RealtimeConnectionState.CONNECTED
-    ) : RealtimeConnectionManager {
-        val connectionStateFlow = MutableStateFlow(initialState)
-        override val connectionState: Flow<RealtimeConnectionState> = connectionStateFlow
-        override fun initialize() {}
-        override fun reconnect() {}
     }
 
     private class FakeAuthRepository(

@@ -1,4 +1,4 @@
-package io.github.neronguyen.chat.ui.theme
+package io.github.neronguyen.chat.core.ui.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
@@ -6,12 +6,13 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// NeroChat "Quiet Messaging" Typography scale (design.md)
-// title-lg: 22sp / 28sp, Medium (500)
-// heading-md: 18sp / 24sp, Medium (500)
-// body-md: 16sp / 24sp, Regular (400)
-// label-md: 14sp / 20sp, Medium (500)
-// caption-sm: 12sp / 16sp, Regular (400)
+// NeroChat "Quiet Messaging" Typography scale (docs/designs/design-system.md)
+// title-lg: 22sp / 28sp, Medium (500) -> Typography.titleLarge
+// headline-md: 22sp / 28sp, Medium (500) -> Typography.headlineMedium
+// heading-md: 18sp / 24sp, Medium (500) -> Typography.titleMedium
+// body-md: 16sp / 24sp, Regular (400) -> Typography.bodyLarge / bodyMedium
+// label-md: 14sp / 20sp, Medium (500) -> Typography.labelLarge / labelMedium
+// caption-sm: 12sp / 16sp, Regular (400) -> Typography.bodySmall / labelSmall
 val Typography = Typography(
     titleLarge = TextStyle(
         fontFamily = FontFamily.SansSerif,

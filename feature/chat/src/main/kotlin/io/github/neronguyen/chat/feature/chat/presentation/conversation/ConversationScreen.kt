@@ -86,6 +86,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -99,9 +100,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.neronguyen.chat.core.model.ChatRoomType
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
-import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.ui.asUiText
+import io.github.neronguyen.chat.core.ui.component.SyncStatusBar
 import io.github.neronguyen.chat.feature.chat.presentation.util.asUiText
 import io.github.neronguyen.chat.feature.chat.R
 import io.github.neronguyen.chat.feature.chat.presentation.list.ChatAvatar
@@ -204,6 +206,7 @@ fun ConversationScreen(
         bottomBar = {
             ConversationComposerBar(
                 composerState = composerState,
+                isSendEnabled = composerState.text.isNotBlank() && uiState.canSendMessage,
                 onSend = { onEvent(ConversationUiEvent.SendMessage) },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -217,11 +220,9 @@ fun ConversationScreen(
                 .padding(innerPadding),
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                AnimatedVisibility(visible = uiState.showConnectionBanner) {
-                    val errorMessage = uiState.syncError?.asUiText() ?: uiState.loadOlderError?.asUiText()
-                    ConversationConnectionBanner(
-                        connectionState = uiState.connectionState,
-                        errorMessage = errorMessage,
+                AnimatedVisibility(visible = uiState.showSyncBanner) {
+                    SyncStatusBar(
+                        syncState = uiState.syncState,
                         onRetry = { onEvent(ConversationUiEvent.RetrySync) },
                         onDismiss = { onEvent(ConversationUiEvent.DismissBanner) },
                     )
@@ -523,115 +524,6 @@ private fun ConversationTopBar(
             actionIconContentColor = MaterialTheme.colorScheme.onBackground,
         ),
     )
-}
-
-@Composable
-private fun ConversationConnectionBanner(
-    connectionState: RealtimeConnectionState,
-    errorMessage: String?,
-    onRetry: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            when {
-                connectionState == RealtimeConnectionState.CONNECTING -> {
-                    val infiniteTransition = rememberInfiniteTransition(label = "banner_rotation")
-                    val rotation by infiniteTransition.animateFloat(
-                        initialValue = 0f,
-                        targetValue = 360f,
-                        animationSpec = infiniteRepeatable(
-                            animation = tween(1200, easing = LinearEasing),
-                            repeatMode = RepeatMode.Restart,
-                        ),
-                        label = "banner_rotation_anim",
-                    )
-                    Icon(
-                        imageVector = Icons.Outlined.Sync,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier
-                            .size(16.dp)
-                            .graphicsLayer { rotationZ = rotation },
-                    )
-                    Text(
-                        text = stringResource(R.string.conversation_connecting_banner),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-
-                errorMessage != null -> {
-                    Icon(
-                        imageVector = Icons.Outlined.ErrorOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = errorMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-
-                else -> {
-                    Icon(
-                        imageVector = Icons.Outlined.ErrorOutline,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = stringResource(R.string.conversation_offline_banner),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (errorMessage != null) {
-                TextButton(
-                    onClick = onRetry,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.retry_sync),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.size(28.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Close,
-                    contentDescription = stringResource(R.string.dismiss_banner),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -949,14 +841,13 @@ private fun DateHeaderRow(
 @Composable
 private fun ConversationComposerBar(
     composerState: TextFieldState,
+    isSendEnabled: Boolean,
     onSend: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val shape = RoundedCornerShape(16.dp)
-
-    val isSendEnabled = composerState.text.isNotBlank()
 
     val borderModifier = if (isFocused) {
         Modifier.border(
@@ -1035,7 +926,8 @@ private fun ConversationComposerBar(
                         enabled = isSendEnabled,
                         role = Role.Button,
                         onClick = onSend,
-                    ),
+                    )
+                    .testTag("conversation_send_button"),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(
@@ -1265,6 +1157,7 @@ private fun ConversationScreenDirectPreview() {
                 subtitle = "elena@example.com",
                 initials = "ER",
                 items = sampleItems,
+                syncState = ChatSyncState.Synced,
             ),
             composerState = remember { TextFieldState() },
             addParticipantEmailState = remember { TextFieldState() },

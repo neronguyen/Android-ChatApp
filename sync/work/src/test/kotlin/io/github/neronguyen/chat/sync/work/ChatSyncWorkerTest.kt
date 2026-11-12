@@ -75,5 +75,7 @@ class ChatSyncWorkerTest {
             callCount++
             return result
         }
+
+        override suspend fun retry(): Either<DataError, Unit> = performCatchUpSync()
     }
 }

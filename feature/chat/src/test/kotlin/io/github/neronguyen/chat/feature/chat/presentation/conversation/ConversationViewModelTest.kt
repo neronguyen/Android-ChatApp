@@ -2,7 +2,6 @@ package io.github.neronguyen.chat.feature.chat.presentation.conversation
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.realtime.RealtimeConnectionManager
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
 import io.github.neronguyen.chat.core.data.repository.ChatMessageRepository
 import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
@@ -11,12 +10,13 @@ import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
 import io.github.neronguyen.chat.core.model.ChatRoomType
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
-import io.github.neronguyen.chat.core.model.RealtimeConnectionState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.feature.chat.presentation.FakeChatSyncManager
 import io.github.neronguyenvn.nerochat.contract.validation.chat.ChatValidationError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -43,7 +43,7 @@ class ConversationViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private lateinit var fakeChatRoomRepository: FakeChatRoomRepository
     private lateinit var fakeChatMessageRepository: FakeChatMessageRepository
-    private lateinit var fakeRealtimeConnectionManager: FakeRealtimeConnectionManager
+    private lateinit var fakeChatSyncManager: FakeChatSyncManager
     private lateinit var fakeAuthRepository: FakeAuthRepository
     private lateinit var viewModel: ConversationViewModel
 
@@ -76,7 +76,7 @@ class ConversationViewModelTest {
         Dispatchers.setMain(testDispatcher)
         fakeChatRoomRepository = FakeChatRoomRepository(initialRoom = sampleRoom)
         fakeChatMessageRepository = FakeChatMessageRepository()
-        fakeRealtimeConnectionManager = FakeRealtimeConnectionManager()
+        fakeChatSyncManager = FakeChatSyncManager(initialState = ChatSyncState.Synced)
         fakeAuthRepository = FakeAuthRepository(
             initialAuthState = AuthState.Authenticated(currentUser, "token"),
         )
@@ -85,7 +85,7 @@ class ConversationViewModelTest {
             roomId = "room-123",
             chatRoomRepository = fakeChatRoomRepository,
             chatMessageRepository = fakeChatMessageRepository,
-            realtimeConnectionManager = fakeRealtimeConnectionManager,
+            chatSyncManager = fakeChatSyncManager,
             authRepository = fakeAuthRepository,
         ).apply {
             nowProvider = { Instant.parse("2026-10-17T12:00:00Z") }
@@ -195,16 +195,65 @@ class ConversationViewModelTest {
     }
 
     @Test
-    fun `connectionState changes are reflected in uiState showConnectionBanner`() = runTest {
+    fun `syncState changes are reflected in uiState showSyncBanner and canSendMessage`() = runTest {
         testScheduler.advanceUntilIdle()
 
-        assertFalse(viewModel.uiState.value.showConnectionBanner)
+        assertFalse(viewModel.uiState.value.showSyncBanner)
+        assertTrue(viewModel.uiState.value.canSendMessage)
 
-        fakeRealtimeConnectionManager.connectionStateFlow.value = RealtimeConnectionState.CONNECTING
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Connecting
         testScheduler.advanceUntilIdle()
 
-        assertTrue(viewModel.uiState.value.showConnectionBanner)
-        assertEquals(RealtimeConnectionState.CONNECTING, viewModel.uiState.value.connectionState)
+        assertTrue(viewModel.uiState.value.showSyncBanner)
+        assertFalse(viewModel.uiState.value.canSendMessage)
+        assertEquals(ChatSyncState.Connecting, viewModel.uiState.value.syncState)
+
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(viewModel.uiState.value.showSyncBanner)
+        assertFalse(viewModel.uiState.value.canSendMessage)
+
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Synced
+        testScheduler.advanceUntilIdle()
+
+        assertFalse(viewModel.uiState.value.showSyncBanner)
+        assertTrue(viewModel.uiState.value.canSendMessage)
+    }
+
+    @Test
+    fun `RetrySync onEvent delegates to chatSyncManager retry`() = runTest {
+        testScheduler.advanceUntilIdle()
+
+        viewModel.onEvent(ConversationUiEvent.RetrySync)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, fakeChatSyncManager.retryCallCount)
+    }
+
+    @Test
+    fun `dismissal persists across positive recovery but resets on negative regression`() = runTest {
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
+        testScheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.showSyncBanner)
+
+        viewModel.onEvent(ConversationUiEvent.DismissBanner)
+        testScheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.showSyncBanner)
+
+        // Positive recovery: Connecting -> Syncing -> Synced
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Connecting
+        testScheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.showSyncBanner)
+
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Synced
+        testScheduler.advanceUntilIdle()
+        assertFalse(viewModel.uiState.value.showSyncBanner)
+
+        // Negative regression back to Offline
+        fakeChatSyncManager.syncStateFlow.value = ChatSyncState.Offline
+        testScheduler.advanceUntilIdle()
+        assertTrue(viewModel.uiState.value.showSyncBanner)
     }
 
     @Test
@@ -405,15 +454,6 @@ class ConversationViewModelTest {
             deletedMessageIds.add(messageId)
             return deleteMessageResult
         }
-    }
-
-    private class FakeRealtimeConnectionManager(
-        initialState: RealtimeConnectionState = RealtimeConnectionState.CONNECTED
-    ) : RealtimeConnectionManager {
-        val connectionStateFlow = MutableStateFlow(initialState)
-        override val connectionState: Flow<RealtimeConnectionState> = connectionStateFlow
-        override fun initialize() {}
-        override fun reconnect() {}
     }
 
     private class FakeAuthRepository(

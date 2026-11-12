@@ -79,8 +79,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import io.github.neronguyen.chat.core.model.ChatRoomType
+import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.ui.asUiText
+import io.github.neronguyen.chat.core.ui.component.SyncStatusBar
 import io.github.neronguyen.chat.feature.chat.R
 
 @Composable
@@ -151,68 +153,72 @@ fun ChatListScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+                .padding(innerPadding),
         ) {
             AnimatedVisibility(visible = uiState.showSyncBanner) {
-                SyncStatusBanner(
-                    isSyncing = uiState.isSyncing,
-                    syncError = uiState.syncError,
+                SyncStatusBar(
+                    syncState = uiState.syncState,
                     onRetry = { onEvent(ChatListUiEvent.RefreshChats) },
                     onDismiss = { onEvent(ChatListUiEvent.DismissSyncBanner) },
                 )
             }
 
-            ChatSearchBar(
-                searchState = searchState,
-                onClearSearch = { onEvent(ChatListUiEvent.ClearSearch) },
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp, bottom = 8.dp),
-            )
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp),
+            ) {
+                ChatSearchBar(
+                    searchState = searchState,
+                    onClearSearch = { onEvent(ChatListUiEvent.ClearSearch) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp, bottom = 8.dp),
+                )
 
-            when {
-                uiState.isInitialLoading -> {
-                    ChatListSkeleton(modifier = Modifier.fillMaxSize())
-                }
+                when {
+                    uiState.isInitialLoading -> {
+                        ChatListSkeleton(modifier = Modifier.fillMaxSize())
+                    }
 
-                uiState.chats.isEmpty() && uiState.searchQuery.isNotBlank() -> {
-                    EmptySearchState(modifier = Modifier.fillMaxSize())
-                }
+                    uiState.chats.isEmpty() && uiState.searchQuery.isNotBlank() -> {
+                        EmptySearchState(modifier = Modifier.fillMaxSize())
+                    }
 
-                uiState.chats.isEmpty() -> {
-                    EmptyChatsState(
-                        onStartNewChat = onNewChatClick,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
+                    uiState.chats.isEmpty() -> {
+                        EmptyChatsState(
+                            onStartNewChat = onNewChatClick,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
-                    ) {
-                        items(
-                            items = uiState.chats,
-                            key = { room -> room.id },
-                        ) { room ->
-                            ConversationRow(
-                                room = room,
-                                onClick = { onOpenConversation(room.id) },
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 56.dp),
-                                thickness = 1.dp,
-                                color = MaterialTheme.colorScheme.outline,
-                            )
-                        }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 88.dp),
+                        ) {
+                            items(
+                                items = uiState.chats,
+                                key = { room -> room.id },
+                            ) { room ->
+                                ConversationRow(
+                                    room = room,
+                                    onClick = { onOpenConversation(room.id) },
+                                )
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(start = 56.dp),
+                                    thickness = 1.dp,
+                                    color = MaterialTheme.colorScheme.outline,
+                                )
+                            }
 
-                        item(key = "encryption_footer") {
-                            EncryptedChatsFooter(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 32.dp, bottom = 16.dp),
-                            )
+                            item(key = "encryption_footer") {
+                                EncryptedChatsFooter(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 32.dp, bottom = 16.dp),
+                                )
+                            }
                         }
                     }
                 }
@@ -284,99 +290,6 @@ private fun ChatListTopBar(
             actionIconContentColor = MaterialTheme.colorScheme.onBackground,
         ),
     )
-}
-
-@Composable
-internal fun SyncStatusBanner(
-    isSyncing: Boolean,
-    syncError: DataError?,
-    onRetry: () -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        Row(
-            modifier = Modifier.weight(1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            if (isSyncing) {
-                val infiniteTransition = rememberInfiniteTransition(label = "sync_rotation")
-                val rotation by infiniteTransition.animateFloat(
-                    initialValue = 0f,
-                    targetValue = 360f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(durationMillis = 1200, easing = LinearEasing),
-                        repeatMode = RepeatMode.Restart,
-                    ),
-                    label = "sync_icon_rotation",
-                )
-                Icon(
-                    imageVector = Icons.Outlined.Sync,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .size(18.dp)
-                        .graphicsLayer { rotationZ = rotation },
-                )
-                Text(
-                    text = stringResource(R.string.syncing_messages),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            } else if (syncError != null) {
-                Icon(
-                    imageVector = Icons.Outlined.ErrorOutline,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    text = syncError.asUiText(),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (!isSyncing && syncError != null) {
-                TextButton(
-                    onClick = onRetry,
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.retry_sync),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-            }
-
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier.size(32.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Close,
-                    contentDescription = stringResource(R.string.dismiss_banner),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp),
-                )
-            }
-        }
-    }
 }
 
 @Composable
@@ -787,7 +700,7 @@ private fun ChatListScreenPreview() {
             searchState = remember { TextFieldState() },
             uiState = ChatListUiState(
                 chats = sampleRooms,
-                isSyncing = true,
+                syncState = ChatSyncState.Synced,
                 isInitialLoadComplete = true,
             ),
             onEvent = {},

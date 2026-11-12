@@ -9,4 +9,5 @@ interface ChatSyncManager {
     val syncState: StateFlow<ChatSyncState>
     fun initialize()
     suspend fun performCatchUpSync(): Either<DataError, Unit>
+    suspend fun retry(): Either<DataError, Unit>
 }

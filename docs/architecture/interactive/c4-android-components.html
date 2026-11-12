@@ -5287,7 +5287,14 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
         </g>
         <g data-graph-role="automatic-crossover" style="--step:6">
           <path data-graph-role="automatic-crossover-underlay" d="M 235 388 L 304.5 388 Q 312.5 388 312.5 396 L 312.5 509 Q 312.5 517 320.5 517 L 390 517" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
-          <path data-edge-from="feature_chat" data-edge-to="realtime_managers" data-edge-label="Observes connectionState" data-edge-key="6" data-edge-id="chat_ui_to_realtime" data-composition-points="235,388;312.5,388;312.5,517;390,517" data-composition-crossover="halo" data-composition-independent="true" d="M 235 388 L 304.5 388 Q 312.5 388 312.5 396 L 312.5 509 Q 312.5 517 320.5 517 L 390 517" class="a-default" data-animate="edge" style="--step:6" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+          <path class="a-default" d="M 235 388 L 304.5 388 Q 312.5 388 312.5 396 L 312.5 509 Q 312.5 517 320.5 517 L 390 517"
+                data-animate="edge" data-composition-crossover="halo"
+                data-composition-independent="true"
+                data-composition-points="235,388;312.5,388;312.5,517;390,517"
+                data-edge-from="feature_chat" data-edge-id="chat_ui_to_realtime"
+                data-edge-key="6"
+                data-edge-label="Observes ChatSyncState &amp; retry" data-edge-to="realtime_managers" marker-end="url(#arrowhead)" stroke-width="1.5"
+                style="--step:6"/>
         </g>
         <g data-graph-role="automatic-crossover" style="--step:7">
           <path data-graph-role="automatic-crossover-underlay" d="M 147.5 510 L 147.5 408" fill="none" stroke="var(--mask)" stroke-width="5.5" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>
@@ -5550,9 +5557,13 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
           <rect x="257.1" y="329" width="110.8" height="14" rx="3" class="c-mask"/>
           <text x="312.5" y="339" class="t-edge-default" font-size="8" text-anchor="middle">Rooms, msgs &amp; actions</text>
         </g>
-        <g data-detail="context" data-edge-from="feature_chat" data-edge-to="realtime_managers" data-edge-label="Observes connectionState" data-edge-key="6" data-edge-id="chat_ui_to_realtime">
-          <rect x="249.9" y="432.5" width="125.19999999999999" height="14" rx="3" class="c-mask"/>
-          <text x="312.5" y="442.5" class="t-edge-default" font-size="8" text-anchor="middle">Observes connectionState</text>
+        <g data-detail="context" data-edge-from="feature_chat" data-edge-id="chat_ui_to_realtime"
+           data-edge-key="6" data-edge-label="Observes ChatSyncState &amp; retry"
+           data-edge-to="realtime_managers">
+          <rect class="c-mask" height="14" rx="3" width="154" x="235.5" y="432.5"/>
+          <text class="t-edge-default" font-size="8" text-anchor="middle" x="312.5" y="442.5">
+            Observes ChatSyncState &amp; retry
+          </text>
         </g>
         <g data-detail="context" data-edge-from="kmp_contract" data-edge-to="feature_chat" data-edge-label="Auth &amp; ChatValidators" data-edge-key="7" data-edge-id="contract_to_presentation">
           <rect x="92.1" y="490" width="110.8" height="14" rx="3" class="c-mask"/>
