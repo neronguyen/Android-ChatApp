@@ -316,10 +316,10 @@ tests pass `false` so that rendered images are deterministic.
 | State             | Container Fill | Icon              | Label Copy                                        | Primary Action                    | Dismiss Action                   |
 |-------------------|----------------|-------------------|---------------------------------------------------|-----------------------------------|----------------------------------|
 | `Synced` / `Idle` | N/A            | None              | None (Hidden, returns empty)                      | None                              | None                             |
-| `Offline`         | `#F3F4F6`      | `CloudOff`        | `stringResource(R.string.sync_status_offline)`    | None (Autonomous OS reachability) | `Close` (16dp icon, 48dp target) |
-| `Connecting`      | `#F3F4F6`      | `Sync` (spinning) | `stringResource(R.string.sync_status_connecting)` | None                              | `Close`                          |
-| `Syncing`         | `#F3F4F6`      | `Sync` (spinning) | `stringResource(R.string.sync_status_syncing)`    | None                              | `Close`                          |
-| `Failed`          | `#F3F4F6`      | `ErrorOutline`    | `error.asUiText()`                                | `Retry` (`TextButton`)            | `Close`                          |
+| `Offline`         | `#F3F4F6`      | `CloudOff`        | `stringResource(R.string.sync_status_offline)`    | None (Autonomous OS reachability) | `Close` (18dp icon, 48dp target) |
+| `Connecting`      | `#F3F4F6`      | `Sync` (spinning) | `stringResource(R.string.sync_status_connecting)` | None                              | `Close` (18dp icon, 48dp target) |
+| `Syncing`         | `#F3F4F6`      | `Sync` (spinning) | `stringResource(R.string.sync_status_syncing)`    | None                              | `Close` (18dp icon, 48dp target) |
+| `Failed`          | `#F3F4F6`      | `ErrorOutline`    | `error.asUiText()`                                | `Retry` (`TextButton`)            | `Close` (18dp icon, 48dp target) |
 
 - **Geometry & Tokens**: Container `MaterialTheme.colorScheme.surfaceVariant` (`#F3F4F6`), flat
   `0.dp` elevation, `1.dp` bottom border in `outlineVariant` (`#D1D5DB`, matching Stitch `border-b border-border`),
@@ -604,21 +604,3 @@ preview.
   not change topology, so the diagram duplicates C4 and adds rendering and freshness-check overhead.
 * **Reason for Rejection (by author)**: Removed before merge. Per the "No Forced 1-to-1 Diagram
   Overhead" rule, only the C4 edge label is updated.
-
----
-
-## Detailed Implementation Plan
-
-> Execution scaffolding. Per the Phase 3 completion invariant, this section and the Verification
-> Plan are deleted when the slice is marked `Implemented`.
-
-### Step 0: Documentation & Diagram Cleanup
-
-| Diagram                                           | Decision               | Reason                                                                                                                                                                 |
-|---------------------------------------------------|------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `android-components` (C4 L3)                      | Keep; relabel one edge | Core topology; `Chat Feature UI → Realtime Lifecycle & Sync`: `Observes connectionState` → `Observes ChatSyncState & retry`                                            |
-| `offline-catchup-sync` (sequence)                 | Keep                   | Core flow embedded in `offline-first-message-sync-and-cache.md`                                                                                                        |
-| `message-delivery-status` (lifecycle)             | Keep                   | Local state machine (FAILED, late ack, DELETED) not covered by Contract `optimistic-send`                                                                              |
-| `room-to-ui` (dataflow, `[PLANNED]`, staged only) | Delete                 | Duplicates C4 (Alternative G)                                                                                                                                          |
-| `unknown-room-fk-guard` (sequence)                | Delete                 | Edge case inside one class, not embedded anywhere; its invariants (in-memory buffer capped at 50, single-flight room fetch) move to `core/data/README.md` `Invariants` |
-
