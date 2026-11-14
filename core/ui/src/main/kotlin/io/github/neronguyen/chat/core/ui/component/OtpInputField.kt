@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +30,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -41,7 +41,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.neronguyen.chat.core.ui.theme.ChatBackground
 import io.github.neronguyen.chat.core.ui.theme.ChatBorder
 import io.github.neronguyen.chat.core.ui.theme.ChatError
 import io.github.neronguyen.chat.core.ui.theme.ChatPrimary
@@ -81,16 +80,21 @@ fun OtpInputField(
     val focusRequester = remember { FocusRequester() }
     val interactionSource = remember { MutableInteractionSource() }
 
-    val cursorTransition = rememberInfiniteTransition(label = "OtpCursorTransition")
-    val cursorAlpha by cursorTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 500),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "OtpCursorAlpha",
-    )
+    val cursorAlpha = if (LocalInspectionMode.current) {
+        1f
+    } else {
+        val cursorTransition = rememberInfiniteTransition(label = "OtpCursorTransition")
+        val animatedAlpha by cursorTransition.animateFloat(
+            initialValue = 1f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(durationMillis = 500),
+                repeatMode = RepeatMode.Reverse,
+            ),
+            label = "OtpCursorAlpha",
+        )
+        animatedAlpha
+    }
 
     val sanitizedValue = value.filter { it.isDigit() }.take(cellCount)
 
@@ -104,7 +108,8 @@ fun OtpInputField(
         modifier = modifier
             .testTag("otp_input_field")
             .semantics(mergeDescendants = true) {
-                contentDescription = "Verification code, ${sanitizedValue.length} of $cellCount digits entered"
+                contentDescription =
+                    "Verification code, ${sanitizedValue.length} of $cellCount digits entered"
             }
             .clickable(
                 interactionSource = interactionSource,

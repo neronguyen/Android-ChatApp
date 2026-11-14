@@ -40,13 +40,15 @@ Before proposing any plan or writing code, read and follow:
    functions for all visual states, verified via `android preview render` against Stitch mockups
    before integration into feature screens.
 5. **Screenshot Regression Policy & Verification Gate**: Preview screenshot tests in `:core:ui` run
-   host-side via `com.android.compose.screenshot` (`0.0.1-alpha16`). Reference images are committed
-   to version control under `<module>/src/screenshotTest*/reference/`. Never update screenshot golden
-   images to bypass validation errors; golden re-baselining is strictly reserved for approved,
-   intentional visual changes. Any PR touching UI tokens, layouts, or `@Preview` functions must
-   include visual validation against Stitch mockups. Validation command:
-   `./gradlew :core:ui:validateDebugScreenshotTest` (enforced in `./scripts/verify.sh`); re-baselining
-   command: `./gradlew :core:ui:updateDebugScreenshotTest`.
+   host-side via AGP screenshot test suites (`screenshot-validation-junit-engine` `0.0.1-alpha17`).
+   Reference images are committed to version control under
+   `<module>/src/screenshotTest*/reference/`.
+   Never update screenshot golden images to bypass validation errors; golden re-baselining is
+   strictly reserved for approved, intentional visual changes. Any PR touching UI tokens, layouts,
+   or `@Preview` functions must include visual validation against Stitch mockups. Validation
+   command:
+   `./gradlew :core:ui:testDebugScreenshotTestDefaultTestSuite` (enforced in `./scripts/verify.sh`);
+   re-baselining command: `./gradlew :core:ui:updateDebugScreenshotTestDefaultTestSuite`.
 
 ---
 

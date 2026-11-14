@@ -1,30 +1,30 @@
 [versions]
-androidGradlePlugin = "9.2.1"
+androidGradlePlugin = "9.5.1"
 androidxActivity = "1.13.0"
-androidxComposeBom = "2026.06.01"
-androidxDatastore = "1.2.1"
+androidxComposeBom = "2026.09.00"
+androidxDatastore = "1.3.0"
 androidxHiltLifecycleViewModelCompose = "1.4.0"
 androidxLifecycle = "2.11.0"
 androidxLifecycleViewModelNavigation3 = "2.11.0"
-androidxNavigation3 = "1.1.4"
-androidxWork = "2.11.2"
-arrow = "2.2.3"
-coil = "3.5.0"
+androidxNavigation3 = "1.2.1"
+androidxWork = "2.12.0"
+arrow = "2.3.0.1"
+coil = "3.6.3"
 contract = "0.6.0"
 errorprone = "2.50.0"
-hilt = "2.60"
+hilt = "2.60.1"
 hiltExt = "1.4.0"
-kotlin = "2.4.0"
+kotlin = "2.4.21"
 kotlinxCoroutines = "1.11.0"
 kotlinxDatetime = "0.8.0"
-kotlinxSerializationJson = "1.11.0"
+kotlinxSerializationJson = "1.13.0"
 konsist = "0.18.1"
-ksp = "2.3.9"
-okhttp = "5.4.0"
+ksp = "2.3.12"
+okhttp = "5.5.1"
 retrofit = "3.0.0"
-robolectric = "4.16.1"
-room = "2.8.4"
-screenshot = "0.0.1-alpha16"
+robolectric = "4.17"
+room = "2.8.5"
+screenshot = "0.0.1-alpha17"
 turbine = "1.2.1"
 
 [libraries]
@@ -45,7 +45,7 @@ coil-kt-compose = { group = "io.coil-kt.coil3", name = "coil-compose", version.r
 coil-kt-network-okhttp = { group = "io.coil-kt.coil3", name = "coil-network-okhttp", version.ref = "coil" }
 
 # Compose
-androidx-compose-bom = { group = "androidx.compose", name = "compose-bom-alpha", version.ref = "androidxComposeBom" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "androidxComposeBom" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3" }
 androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
@@ -55,7 +55,6 @@ androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "u
 contract-common = { group = "io.github.neronguyenvn.nerochat.contract", name = "common", version.ref = "contract" }
 contract-auth = { group = "io.github.neronguyenvn.nerochat.contract", name = "auth", version.ref = "contract" }
 contract-chat = { group = "io.github.neronguyenvn.nerochat.contract", name = "chat", version.ref = "contract" }
-validation-common = { group = "io.github.neronguyenvn.nerochat.validation", name = "common", version.ref = "contract" }
 validation-auth = { group = "io.github.neronguyenvn.nerochat.validation", name = "auth", version.ref = "contract" }
 validation-chat = { group = "io.github.neronguyenvn.nerochat.validation", name = "chat", version.ref = "contract" }
 
@@ -110,4 +109,3 @@ hilt = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
-screenshot = { id = "com.android.compose.screenshot", version.ref = "screenshot" }

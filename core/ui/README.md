@@ -101,5 +101,6 @@ All UI components use these semantic color tokens; never introduce component-spe
 ## 6. Verification
 
 - Fast inner-loop unit tests: `./gradlew :core:ui:testDebugUnitTest --rerun-tasks`
-- Update screenshot reference images: `./gradlew :core:ui:updateDebugScreenshotTest`
-- Validate screenshots against references: `./gradlew :core:ui:validateDebugScreenshotTest`
+- Update screenshot reference images: `./gradlew :core:ui:updateDebugScreenshotTestDefaultTestSuite`
+- Validate screenshots against references:
+  `./gradlew :core:ui:testDebugScreenshotTestDefaultTestSuite`
