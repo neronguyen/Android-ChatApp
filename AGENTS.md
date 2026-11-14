@@ -95,7 +95,12 @@ Before proposing any plan or writing code, read and follow:
    repository/coordinator interfaces and pure domain models (`:core:model`), using shared validators
    (`:validation:*`) for form validation.
 2. **Internal Data Layer Mappers**: All mapper functions and repository implementations in `:core:data` must be `internal` to prevent leaking database entities or network types into public APIs.
-3. **Contract SSOT & Pure Serialization**: All network requests and WebSocket frames use `kotlinx.serialization.json.Json` with `KMP-ChatContract` models. Never introduce Gson, Moshi, or Jackson.
+3. **Contract SSOT & Pure Serialization**: All network requests and WebSocket frames use
+   `kotlinx.serialization.json.Json` with `KMP-ChatContract` models. Never introduce Gson, Moshi, or
+   Jackson. Likewise, do not duplicate standalone DTO or `ErrorCode` golden wire serialization
+   tests—`KMP-ChatContract` owns pure contract wire-format tests; Android wire tests
+   (`RetrofitNetworkWireTest`, `ChatWebSocketClientTest`) must strictly verify
+   Retrofit/OkHttp/WebSocket client wiring.
 4. **WebSocket Lifecycle & Backoff**: Reconnection uses exponential backoff with jitter
    (`RealtimeConnectionManagerImpl` via `ExponentialBackoff`). `ChatWebSocketClient` enforces strict
    callback isolation on superseded sockets.

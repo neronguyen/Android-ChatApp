@@ -1,8 +1,10 @@
 package io.github.neronguyen.chat.architecture
 
 import com.lemonappdev.konsist.api.Konsist
+import com.lemonappdev.konsist.api.declaration.KoFileDeclaration
 import com.lemonappdev.konsist.api.ext.list.withPackage
 import com.lemonappdev.konsist.api.verify.assertTrue
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ArchitectureKonsistTest {
@@ -77,13 +79,24 @@ class ArchitectureKonsistTest {
 
     @Test
     fun `domain model classes do not import serialization or infrastructure`() {
+        val forbiddenPrefixes = listOf(
+            "kotlinx.serialization",
+            "io.github.neronguyenvn.nerochat.contract",
+            "retrofit2.",
+            "okhttp3.",
+            "androidx.datastore.",
+            "com.google.gson.",
+            "com.squareup.moshi.",
+            "com.fasterxml.jackson.",
+        )
+
         Konsist
             .scopeFromProject()
             .files
             .filter { it.path.contains("/core/model/src/main/") }
             .assertTrue { file ->
                 file.imports.none { import ->
-                    import.name.startsWith("kotlinx.serialization")
+                    forbiddenPrefixes.any { prefix -> import.name.startsWith(prefix) }
                 }
             }
     }
@@ -143,38 +156,102 @@ class ArchitectureKonsistTest {
     fun `every feature Screen file declares at least one Preview function wrapped in ChatTheme`() {
         val chatThemeInvocationRegex = Regex("""\bChatTheme\s*[({]""")
 
-        Konsist
-            .scopeFromProject()
-            .files
-            .filter {
-                it.path.contains("/feature/") &&
-                        it.path.contains("/src/main/") &&
-                        it.path.endsWith("Screen.kt")
-            }
+        featureScreenFiles()
             .assertTrue { file ->
                 val previewFunctions =
                     file.functions().filter { it.hasAnnotationWithName("Preview") }
                 previewFunctions.isNotEmpty() &&
                         previewFunctions.all { function ->
                             chatThemeInvocationRegex.containsMatchIn(
-                                stripCommentsAndStrings(
-                                    function.text
-                                )
+                                stripCommentsAndStrings(function.text),
                             )
                         }
             }
     }
 
     @Test
-    fun `every feature Screen file has a matching Robolectric ScreenTest`() {
-        val testFileNames = Konsist
+    fun `every feature Screen file exposes testTag semantics`() {
+        val testTagInvocationRegex = Regex("""\btestTag\s*\(""")
+
+        featureScreenFiles()
+            .assertTrue { file ->
+                val importsTestTag = file.imports.any {
+                    it.name == "androidx.compose.ui.platform.testTag"
+                }
+                val usesTestTag = testTagInvocationRegex.containsMatchIn(
+                    stripCommentsAndStrings(file.text),
+                )
+                importsTestTag && usesTestTag
+            }
+    }
+
+    @Test
+    fun `every feature Screen file has a matching Robolectric ScreenTest with semantics assertions`() {
+        val unitTestFiles = Konsist
             .scopeFromProject()
             .files
-            .filter { it.path.contains("/src/test/") }
-            .map { it.name }
-            .toSet()
+            .filter { it.path.contains("/feature/") && it.path.contains("/src/test/") }
+        assertTrue("Expected feature unit test files in Konsist scope", unitTestFiles.isNotEmpty())
 
-        Konsist
+        val composeRuleRegex = Regex("""\bcreate(?:Android)?ComposeRule\s*\(""")
+        val semanticsQueryRegex = Regex("""\bon(?:All)?Nodes?With(?:Tag|Text)\s*\(""")
+
+        featureScreenFiles()
+            .assertTrue { screenFile ->
+                val expectedClassName = "${screenFile.name}Test"
+                val testFile = findMatchingFeatureFile(
+                    screenFile = screenFile,
+                    candidates = unitTestFiles,
+                    expectedName = expectedClassName,
+                ) ?: return@assertTrue false
+
+                val testClass = testFile.classes().firstOrNull { it.name == expectedClassName }
+                    ?: return@assertTrue false
+                val hasRobolectricRunner = testClass.annotations.any { annotation ->
+                    annotation.name == "RunWith" &&
+                            annotation.text.contains("RobolectricTestRunner")
+                }
+                val hasTestMethod = testClass.functions().any { it.hasAnnotationWithName("Test") }
+                val strippedText = stripCommentsAndStrings(testFile.text)
+                val usesComposeRule = composeRuleRegex.containsMatchIn(strippedText)
+                val assertsSemantics = semanticsQueryRegex.containsMatchIn(strippedText)
+
+                hasRobolectricRunner && hasTestMethod && usesComposeRule && assertsSemantics
+            }
+    }
+
+    @Test
+    fun `every feature Screen file has a matching ScreenshotTest`() {
+        val screenshotFiles = Konsist
+            .scopeFromProject()
+            .files
+            .filter { it.path.contains("/feature/") && it.path.contains("/src/screenshotTest/") }
+        assertTrue(
+            "Expected feature screenshotTest files in Konsist scope",
+            screenshotFiles.isNotEmpty(),
+        )
+
+        featureScreenFiles()
+            .assertTrue { screenFile ->
+                val expectedClassName = "${screenFile.name}ScreenshotTest"
+                val screenshotFile = findMatchingFeatureFile(
+                    screenFile = screenFile,
+                    candidates = screenshotFiles,
+                    expectedName = expectedClassName,
+                ) ?: return@assertTrue false
+
+                val screenshotClass = screenshotFile.classes()
+                    .firstOrNull { it.name == expectedClassName }
+                    ?: return@assertTrue false
+                screenshotClass.functions().any { function ->
+                    function.hasAnnotationWithName("PreviewTest") &&
+                            function.hasAnnotationWithName("Preview")
+                }
+            }
+    }
+
+    private fun featureScreenFiles(): List<KoFileDeclaration> {
+        val screens = Konsist
             .scopeFromProject()
             .files
             .filter {
@@ -182,10 +259,26 @@ class ArchitectureKonsistTest {
                         it.path.contains("/src/main/") &&
                         it.path.endsWith("Screen.kt")
             }
-            .assertTrue { screenFile ->
-                "${screenFile.name}Test" in testFileNames
-            }
+        assertTrue("Expected feature Screen.kt files in Konsist scope", screens.isNotEmpty())
+        return screens
     }
+
+    private fun findMatchingFeatureFile(
+        screenFile: KoFileDeclaration,
+        candidates: List<KoFileDeclaration>,
+        expectedName: String,
+    ): KoFileDeclaration? {
+        val screenModule = featureModuleSegment(screenFile.path)
+        val screenPackage = screenFile.packagee?.name
+        return candidates.firstOrNull { candidate ->
+            candidate.name == expectedName &&
+                    featureModuleSegment(candidate.path) == screenModule &&
+                    candidate.packagee?.name == screenPackage
+        }
+    }
+
+    private fun featureModuleSegment(path: String): String? =
+        Regex("""(/feature/[^/]+/)""").find(path)?.groupValues?.get(1)
 
     private fun stripCommentsAndStrings(source: String): String {
         val result = StringBuilder(source.length)
