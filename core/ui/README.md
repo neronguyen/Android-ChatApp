@@ -4,8 +4,7 @@
 
 Shared Jetpack Compose design system foundations, application semantic color tokens, shapes,
 typography, and common UI helpers conforming to the *Quiet Messaging* design system specification
-in [`../../docs/designs/design-system.md`](../../docs/designs/design-system.md) (MCP Stitch
-`projects/10647833259558812227`).
+in [`../../docs/designs/design-system.md`](../../docs/designs/design-system.md).
 
 ---
 

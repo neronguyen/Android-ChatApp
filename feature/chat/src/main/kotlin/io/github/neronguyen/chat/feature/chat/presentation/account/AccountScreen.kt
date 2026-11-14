@@ -58,6 +58,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.ui.asUiText
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.chat.R
 import java.util.Locale
 
@@ -563,10 +564,10 @@ private fun SignOutSection(
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
-private fun AccountScreenPreview_VerifiedConnected() {
-    MaterialTheme {
+internal fun AccountScreenVerifiedConnectedPreview() {
+    ChatTheme {
         AccountScreen(
             uiState = AccountUiState(
                 displayName = "Alex Lin",
@@ -581,10 +582,10 @@ private fun AccountScreenPreview_VerifiedConnected() {
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
-private fun AccountScreenPreview_UnverifiedOffline() {
-    MaterialTheme {
+internal fun AccountScreenUnverifiedOfflinePreview() {
+    ChatTheme {
         AccountScreen(
             uiState = AccountUiState(
                 displayName = "Elena Rostova",

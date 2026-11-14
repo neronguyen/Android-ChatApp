@@ -1,12 +1,6 @@
 package io.github.neronguyen.chat.feature.chat.presentation.list
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -38,11 +32,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.EditNote
-import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Sync
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,7 +46,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -64,7 +55,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -80,9 +70,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.ChatSyncState
-import io.github.neronguyen.chat.core.model.error.DataError
-import io.github.neronguyen.chat.core.ui.asUiText
 import io.github.neronguyen.chat.core.ui.component.SyncStatusBar
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.chat.R
 
 @Composable
@@ -633,73 +622,12 @@ private fun EmptySearchState(
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
-private fun ChatListScreenPreview() {
-    val sampleRooms = listOf(
-        ChatRoomUiModel(
-            id = "1",
-            type = ChatRoomType.DIRECT,
-            title = "Elena Rostova",
-            initials = "ER",
-            avatarUrl = null,
-            preview = ChatMessagePreviewUi.IncomingDirect("The sync contracts are finalized."),
-            formattedTime = "10:42 AM",
-            lastActivityAt = null,
-            searchableText = "elena rostova the sync contracts are finalized.",
-        ),
-        ChatRoomUiModel(
-            id = "2",
-            type = ChatRoomType.GROUP,
-            title = "Backend Core Team",
-            initials = "BC",
-            avatarUrl = null,
-            preview = ChatMessagePreviewUi.IncomingGroup(
-                senderName = "Marcus",
-                content = "Reviewed the message persistence layer.",
-            ),
-            formattedTime = "Yesterday",
-            lastActivityAt = null,
-            searchableText = "backend core team marcus: reviewed the message persistence layer.",
-        ),
-        ChatRoomUiModel(
-            id = "3",
-            type = ChatRoomType.DIRECT,
-            title = "David Kim",
-            initials = "DK",
-            avatarUrl = null,
-            preview = ChatMessagePreviewUi.Deleted,
-            formattedTime = "Mar 12",
-            lastActivityAt = null,
-            searchableText = "david kim message deleted",
-        ),
-        ChatRoomUiModel(
-            id = "4",
-            type = ChatRoomType.DIRECT,
-            title = "Sarah Jenkins",
-            initials = "SJ",
-            avatarUrl = null,
-            preview = ChatMessagePreviewUi.Outgoing("Let me know when you test login."),
-            formattedTime = "Mar 10",
-            lastActivityAt = null,
-            searchableText = "sarah jenkins you: let me know when you test login.",
-        ),
-        ChatRoomUiModel(
-            id = "5",
-            type = ChatRoomType.GROUP,
-            title = "Architecture sync",
-            initials = "AS",
-            avatarUrl = null,
-            preview = ChatMessagePreviewUi.NoMessages,
-            formattedTime = "",
-            lastActivityAt = null,
-            searchableText = "architecture sync no messages yet",
-        ),
-    )
-
-    MaterialTheme {
+internal fun ChatListScreenPopulatedPreview() {
+    ChatTheme {
         ChatListScreen(
             searchState = remember { TextFieldState() },
             uiState = ChatListUiState(
-                chats = sampleRooms,
+                chats = previewSampleRooms(),
                 syncState = ChatSyncState.Synced,
                 isInitialLoadComplete = true,
             ),
@@ -710,3 +638,84 @@ private fun ChatListScreenPreview() {
         )
     }
 }
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun ChatListScreenOfflinePreview() {
+    ChatTheme {
+        ChatListScreen(
+            searchState = remember { TextFieldState() },
+            uiState = ChatListUiState(
+                chats = previewSampleRooms(),
+                syncState = ChatSyncState.Offline,
+                isInitialLoadComplete = true,
+                isBannerDismissed = false,
+            ),
+            onEvent = {},
+            onOpenConversation = {},
+            onNewChatClick = {},
+            onAccountClick = {},
+        )
+    }
+}
+
+private fun previewSampleRooms(): List<ChatRoomUiModel> = listOf(
+    ChatRoomUiModel(
+        id = "1",
+        type = ChatRoomType.DIRECT,
+        title = "Elena Rostova",
+        initials = "ER",
+        avatarUrl = null,
+        preview = ChatMessagePreviewUi.IncomingDirect("The sync contracts are finalized."),
+        formattedTime = "10:42 AM",
+        lastActivityAt = null,
+        searchableText = "elena rostova the sync contracts are finalized.",
+    ),
+    ChatRoomUiModel(
+        id = "2",
+        type = ChatRoomType.GROUP,
+        title = "Backend Core Team",
+        initials = "BC",
+        avatarUrl = null,
+        preview = ChatMessagePreviewUi.IncomingGroup(
+            senderName = "Marcus",
+            content = "Reviewed the message persistence layer.",
+        ),
+        formattedTime = "Yesterday",
+        lastActivityAt = null,
+        searchableText = "backend core team marcus: reviewed the message persistence layer.",
+    ),
+    ChatRoomUiModel(
+        id = "3",
+        type = ChatRoomType.DIRECT,
+        title = "David Kim",
+        initials = "DK",
+        avatarUrl = null,
+        preview = ChatMessagePreviewUi.Deleted,
+        formattedTime = "Mar 12",
+        lastActivityAt = null,
+        searchableText = "david kim message deleted",
+    ),
+    ChatRoomUiModel(
+        id = "4",
+        type = ChatRoomType.DIRECT,
+        title = "Sarah Jenkins",
+        initials = "SJ",
+        avatarUrl = null,
+        preview = ChatMessagePreviewUi.Outgoing("Let me know when you test login."),
+        formattedTime = "Mar 10",
+        lastActivityAt = null,
+        searchableText = "sarah jenkins you: let me know when you test login.",
+    ),
+    ChatRoomUiModel(
+        id = "5",
+        type = ChatRoomType.GROUP,
+        title = "Architecture sync",
+        initials = "AS",
+        avatarUrl = null,
+        preview = ChatMessagePreviewUi.NoMessages,
+        formattedTime = "",
+        lastActivityAt = null,
+        searchableText = "architecture sync no messages yet",
+    ),
+)

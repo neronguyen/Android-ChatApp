@@ -26,9 +26,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
 
@@ -141,5 +143,17 @@ fun ForgotPasswordScreen(
         ) {
             Text(stringResource(R.string.already_have_account))
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun ForgotPasswordScreenDefaultPreview() {
+    ChatTheme {
+        ForgotPasswordScreen(
+            uiState = ForgotPasswordUiState(email = "elena@example.com"),
+            onEvent = {},
+            onNavigateToLogin = {},
+        )
     }
 }

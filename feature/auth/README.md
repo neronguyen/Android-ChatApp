@@ -19,6 +19,10 @@ Authentication and onboarding user experience built with Jetpack Compose, execut
 ## Invariants
 - Depends only on `:core:ui`, `:core:model`, `:core:data` repository interfaces, and `:validation:auth`.
 - Never imports wire DTOs (`:contract:*`) or database entities.
+- Consumes visual tokens exclusively via `MaterialTheme.colorScheme`, `MaterialTheme.typography`,
+  and `MaterialTheme.shapes` (never hardcoded `Color(...)` literals or raw `Chat*` color constants).
+- Every `*Screen.kt` exposes `internal` `@Preview` functions wrapped in `ChatTheme` reused by
+  `src/screenshotTest`.
 - Validates inputs synchronously via `AuthValidator` before dispatching network requests.
 - Exposes deterministic `testTag` identifiers for headless Robolectric testing.
 
@@ -26,4 +30,9 @@ Authentication and onboarding user experience built with Jetpack Compose, execut
 - Mutates UI state flows; triggers authentication network requests via `AuthRepository`.
 
 ## Verification
-- Run: `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
+
+- Unit tests: `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
+- Validate screenshots against references:
+  `./gradlew :feature:auth:testDebugScreenshotTestDefaultTestSuite`
+- Update screenshot reference images:
+  `./gradlew :feature:auth:updateDebugScreenshotTestDefaultTestSuite`

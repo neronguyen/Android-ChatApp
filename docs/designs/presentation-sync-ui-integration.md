@@ -91,7 +91,7 @@ message sending safeguards in the absence of an automatic background outbox, and
    `SyncStatusBar` and ViewModels to this unified trigger.
 7. **Visual Regression Safety Net for `:core:ui` Components**:
    Introduce host-side Compose Preview Screenshot Testing for `SyncStatusBar` (all visible states).
-   Reference images are approved by a human against Stitch, committed to git, and validated
+   Reference images are approved by a human, committed to git, and validated
    automatically in `./scripts/verify.sh clean` (and therefore CI), so unintended padding, color,
    typography, or icon changes fail the build.
 
@@ -111,13 +111,11 @@ message sending safeguards in the absence of an automatic background outbox, and
 5. **AGP Upgrade / AGP Test Suites**:
    Upgrading AGP from `9.2.1` to `9.5.0-alpha03+` to use
    `testOptions { screenshotTests.create(...) }` is a separate future decision. This slice uses the
-   deprecated standalone `com.android.compose.screenshot` plugin.
-6. **Automated Pixel Comparison Against Stitch**:
-   Stitch exports are not used as test oracles. Design fidelity is a human review step; screenshot
-   tests only guard against regressions after approval.
-7. **Feature-Screen Screenshot Coverage**:
-   Full screens in `:feature:chat` are not screenshot-tested in this slice (higher flakiness and
-   image churn); behavior is covered by Robolectric `testTag` tests.
+   deprecated standalone `com.android.compose.screenshot` plugin (superseded in AGP 9.5.1).
+6. **Feature-Screen Screenshot Coverage**:
+   Full screens in `:feature:chat` are not screenshot-tested in this slice (deferred to [
+   `codebase-first-ui-architecture.md`](./codebase-first-ui-architecture.md)); behavior is covered
+   by Robolectric `testTag` tests.
 
 ---
 
@@ -167,7 +165,7 @@ message sending safeguards in the absence of an automatic background outbox, and
   `8.dp`) and opens a PR.
 * **Then**: `./scripts/verify.sh clean` (CI) runs `:core:ui:validateDebugScreenshotTest`, fails, and
   produces an HTML report showing reference, actual, and diff images. The change merges only after
-  the developer compares the new rendering with the Stitch screen, regenerates references with
+  the developer reviews the new rendering, regenerates references with
   `updateDebugScreenshotTest`, and ticks the PR template's visual checklist.
 
 ---
@@ -322,16 +320,8 @@ tests pass `false` so that rendered images are deterministic.
 | `Failed`          | `#F3F4F6`      | `ErrorOutline`    | `error.asUiText()`                                | `Retry` (`TextButton`)            | `Close` (18dp icon, 48dp target) |
 
 - **Geometry & Tokens**: Container `MaterialTheme.colorScheme.surfaceVariant` (`#F3F4F6`), flat
-  `0.dp` elevation, `1.dp` bottom border in `outlineVariant` (`#D1D5DB`, matching Stitch `border-b border-border`),
+  `0.dp` elevation, `1.dp` bottom border in `outlineVariant` (`#D1D5DB`),
   padding `12.dp horizontal, 8.dp vertical`, text `MaterialTheme.typography.bodySmall` (`12sp`).
-- **Authoritative Stitch Screens (Project `10647833259558812227`)**:
-  - `Component: SyncStatusBar` (Authoritative Isolated Component Spec): `screens/32684811740844638bd8c04c6a04983b`
-    - Direct URL: https://stitch.withgoogle.com/projects/10647833259558812227/screens/32684811740844638bd8c04c6a04983b
-    - Showcases all 5 component states independently (`Offline`, `Connecting`, `Syncing`, `Failed with Retry`, `Quiet/Synced 0dp`) alongside design token specifications and 48dp minimum touch target bounds.
-  - Screen Integration Variants (Contextual reference):
-    - `Chats (Connecting / Syncing)`: `screens/9512792d8a1949a28b9d6960191b5623`
-    - `Chats (Offline)`: `screens/dcd52691192642fd877cec56d3688453`
-    - `Chats (Sync Error)`: `screens/21000258ec54445c9697ac1771170f81`
 - **Animation Ownership**: When `syncState` is `Synced` or `Idle`, `SyncStatusBar` returns
   immediately without composing nodes. Exit animations are driven by screen-level
   `AnimatedVisibility(visible = uiState.showSyncBanner)`.
@@ -353,8 +343,7 @@ tests pass `false` so that rendered images are deterministic.
 2. **Visual Inspection Gate**:
    Execute `android preview render --module :core:ui` (via `android-cli` / `compose-preview`) to
    render preview screenshots to disk and visually verify layout, typography, and hit padding
-   against the Stitch visual prototype (`projects/10647833259558812227`) before embedding into
-   feature screens.
+   against [`design-system.md`](./design-system.md) before embedding into feature screens.
 3. **Relationship to Screenshot Tests**:
    The `@Preview` functions in `main` serve the IDE and `android preview render`. The `@PreviewTest`
    functions in the `screenshotTest` source set (Section 6.3) are separate because the plugin only
@@ -492,15 +481,13 @@ its text. Screenshot tests fill that gap. They render each `@PreviewTest` compos
 (Layoutlib, no emulator) and compare the image pixel by pixel with an approved reference PNG. Any
 difference fails the test and produces an HTML report with reference, actual, and diff images.
 
-**Role of Stitch.** Stitch is the design target, not the test oracle. The workflow is:
+**Design fidelity workflow.** [`design-system.md`](./design-system.md) is the design target. The
+workflow is:
 
-1. Implement the component against the Stitch screen.
-2. A human compares the rendered preview with Stitch and approves it.
+1. Implement the component against [`design-system.md`](./design-system.md).
+2. A human reviews the rendered preview and approves it.
 3. `updateDebugScreenshotTest` records the approved rendering as the reference image.
 4. From then on, `validateDebugScreenshotTest` catches unintended changes.
-
-Stitch exports are never compared pixel-for-pixel, because font rasterization, antialiasing, and
-canvas size differ between Stitch and Layoutlib, which would make the test fail permanently.
 
 **Tooling choice.** The project is on AGP `9.2.1`. The recommended AGP test-suite DSL
 (`testOptions { screenshotTests.create(...) }`) requires AGP `9.5.0-alpha03+`. This slice therefore
@@ -509,12 +496,12 @@ Migrating to test suites is deferred to the AGP upgrade (see Non-Goals and Alter
 
 **Policy decisions.**
 
-| Decision                       | Choice                                                                                  | Reason                                                                                                             |
-|--------------------------------|-----------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
-| Scope                          | `:core:ui` components only, starting with `SyncStatusBar` (4 visible states)            | Small, stable surfaces; few images; easy to compare with Stitch                                                    |
-| When it runs                   | `./scripts/verify.sh clean` and CI only; Tier 1 skips it                                | Keeps the Tier 1 inner loop at 3–10s                                                                               |
-| Where references are generated | Locally; CI only validates                                                              | One authority for references; if Linux CI rendering drifts, tune the tolerance later instead of regenerating in CI |
-| Design-fidelity gate           | PR template checklist: reference changes must be compared against linked Stitch screens | Fidelity is a human judgement; the checklist makes it explicit and reviewable                                      |
+| Decision                       | Choice                                                                               | Reason                                                                                                             |
+|--------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| Scope                          | `:core:ui` components only, starting with `SyncStatusBar` (4 visible states)         | Small, stable surfaces; few images; easy to review                                                                 |
+| When it runs                   | `./scripts/verify.sh clean` and CI only; Tier 1 skips it                             | Keeps the Tier 1 inner loop at 3–10s                                                                               |
+| Where references are generated | Locally; CI only validates                                                           | One authority for references; if Linux CI rendering drifts, tune the tolerance later instead of regenerating in CI |
+| Design-fidelity gate           | PR template checklist: reference changes must be reviewed against `design-system.md` | Fidelity is a human judgement; the checklist makes it explicit and reviewable                                      |
 
 **Determinism rules.** Fixed `widthDp = 390`, light theme only (the design system defines only
 light), `animate = false`, no time-dependent or network data, and `ChatTheme` wrapping every
@@ -588,14 +575,6 @@ preview.
 * **Reason for Rejection (by author)**: The `testing-setup` skill standardizes on Compose Preview
   Screenshot Testing, which reuses previews that `AGENTS.md` already requires for every `:core:ui`
   visual state, and has a direct migration path to AGP test suites.
-
-### Alternative F: Pixel-Diff Implemented Components Against Stitch Exports
-
-* **Pros**: Would automate design-fidelity checks.
-* **Cons**: Stitch and Layoutlib render fonts, antialiasing, and canvas sizes differently; tests
-  would fail permanently or need tolerances so loose they catch nothing.
-* **Reason for Rejection (by author)**: Fidelity stays a human review step recorded in the PR
-  checklist; screenshot tests guard regressions after approval.
 
 ### Alternative G: Dedicated `room-to-ui` Dataflow Diagram
 

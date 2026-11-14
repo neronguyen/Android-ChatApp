@@ -16,39 +16,41 @@ Before proposing any plan or writing code, read and follow:
    module's `README.md` before modifying it, and update it (plus root `README.md` if topology
    changes) in the same changeset.
 
-### 1.1 UI & Design System Gate (MCP Stitch SSOT)
+### 1.1 Codebase-First UI & Design System Gate
 
-1. **Visual & Token SSOT**: The NeroChat *Quiet Messaging* design system on MCP `stitch` (Project
-   ID: `projects/10647833259558812227`, spec screen `design.md`, and screen instances `Chats`,
-   `Direct Conversation`, `Group Conversation`, `New Chat`, `Account`) is the Single Source of Truth
-   for semantic color tokens, typography, geometry, spacing, and visual feedback rules (e.g., quiet
-   connected state; subtle contextual banners instead of blocking full-screen spinners when cached
-   data exists).
-2. **Authority Boundary (Visual vs. Functional)**: Stitch `design.md` and screen layouts govern
-   visual presentation and component states, whereas `:core:model`, `:core:data`, and approved EGM
-   specs in `docs/designs/` govern functional capabilities (do not regress domain capabilities such
-   as optimistic offline message staging, message retry, soft deletion, or room membership actions
-   due to older historical notes in `stitch-prompt.md`).
-3. **Pre-Design & Post-Execution Stitch Audit**: Before designing or modifying UI in `:core:ui`,
-   `:feature:auth`, or `:feature:chat`, inspect the Stitch design system and relevant screens via
-   MCP `stitch` (`get_project`, `list_screens`, `get_screen`, `download_file`). Upon completing
-   implementation, cross-check implemented tokens, component states, and copy against Stitch
-   specifications alongside headless Robolectric `testTag` verification.
-4. **Visual Component Prototype & Preview Verification Loop**: Reusable UI components with discrete
-   visual states (e.g. `SyncStatusBar`) must be prototyped on MCP Stitch (or inspect existing screen
-   variants) before writing Compose code. Composable components in `:core:ui` must expose `@Preview`
-   functions for all visual states, verified via `android preview render` against Stitch mockups
-   before integration into feature screens.
-5. **Screenshot Regression Policy & Verification Gate**: Preview screenshot tests in `:core:ui` run
-   host-side via AGP screenshot test suites (`screenshot-validation-junit-engine` `0.0.1-alpha17`).
-   Reference images are committed to version control under
-   `<module>/src/screenshotTest*/reference/`.
-   Never update screenshot golden images to bypass validation errors; golden re-baselining is
-   strictly reserved for approved, intentional visual changes. Any PR touching UI tokens, layouts,
-   or `@Preview` functions must include visual validation against Stitch mockups. Validation
-   command:
-   `./gradlew :core:ui:testDebugScreenshotTestDefaultTestSuite` (enforced in `./scripts/verify.sh`);
-   re-baselining command: `./gradlew :core:ui:updateDebugScreenshotTestDefaultTestSuite`.
+1. **Visual & Token SSOT**: [`docs/designs/design-system.md`](docs/designs/design-system.md) and
+   `:core:ui` (`Theme.kt`, `Color.kt`, `Shape.kt`, `Type.kt`) are the Single Source of Truth for
+   semantic color tokens, typography, geometry, spacing, and *Quiet Messaging* visual rules (flat
+   `0.dp` elevation, quiet connected state, subtle contextual banners instead of blocking
+   full-screen spinners when cached data exists).
+2. **Component & Token Consumption Policy**: Feature modules (`:feature:auth`, `:feature:chat`)
+   build screens using standard Material 3 primitives (`Scaffold`, `TopAppBar`, `OutlinedTextField`,
+   `Button`) consuming tokens exclusively through `MaterialTheme.colorScheme`,
+   `MaterialTheme.typography`, and `MaterialTheme.shapes`. Shared multi-module or stateful widgets
+   (`SyncStatusBar`, `OtpInputField`) live in `:core:ui`. Never hardcode `Color(...)` literals,
+   import raw `Chat*` color constants, or call `MaterialTheme { ... }` as a theme wrapper inside
+   `:feature:*` (enforced by `ArchitectureKonsistTest`).
+3. **Preview & Self-Inspection Loop**: Every `*Screen.kt` in `:feature:*` must expose `internal`
+   `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` functions wrapped in `ChatTheme`
+   covering key visual states (reused by `*ScreenScreenshotTest` and enforced by
+   `ArchitectureKonsistTest`), and reusable UI components in `:core:ui` must expose `@Preview`
+   functions wrapped in `ChatTheme`. Agents should use `android preview render` (when the `android`
+   CLI is available) to inspect layout, spacing, and contrast locally, alongside deterministic
+   `testTag` Robolectric semantics tests.
+4. **Screenshot Regression Policy & Verification Gate**: Preview screenshot tests in `:core:ui`,
+   `:feature:auth`, and `:feature:chat` run host-side on Linux via AGP 9.5.1 screenshot test suites
+   (`screenshot-validation-junit-engine` `0.0.1-alpha17`). Reference images are committed to version
+   control under `<module>/src/screenshotTest*/reference/`.
+    - **Permitted Updates**: Only run `updateDebugScreenshotTestDefaultTestSuite` when the active
+      task explicitly requests a visual/layout change (including re-baselining impacted `:feature:*`
+      suites when shared `:core:ui` tokens or components change visually), and present updated
+      screenshots for user review.
+    - **Prohibited Updates**: Never update screenshot golden images to silence unexpected failures
+      during non-UI bug fixes, logic refactors, or dependency upgrades.
+    - Validation command:
+      `./gradlew :core:ui:testDebugScreenshotTestDefaultTestSuite :feature:auth:testDebugScreenshotTestDefaultTestSuite :feature:chat:testDebugScreenshotTestDefaultTestSuite`
+      (enforced in `./scripts/verify.sh clean`); re-baselining command:
+      `./scripts/verify.sh :<module>:updateDebugScreenshotTestDefaultTestSuite`.
 
 ---
 
@@ -98,9 +100,9 @@ Before proposing any plan or writing code, read and follow:
    (`RealtimeConnectionManagerImpl` via `ExponentialBackoff`). `ChatWebSocketClient` enforces strict
    callback isolation on superseded sockets.
 5. **Optimistic Sending & Idempotency**: Messages are inserted locally as `SENDING` with client-assigned `UUIDv7` IDs before transmission. Server acknowledgments or broadcasts reconcile status to `SENT`.
-6. **UI Verification & Design Fidelity Standard**: Screens must conform to MCP Stitch
-   (`projects/10647833259558812227`) tokens/layouts and expose deterministic `testTag` semantics for
-   headless Robolectric testing.
+6. **UI Verification & Design Fidelity Standard**: Screens must conform to [
+   `docs/designs/design-system.md`](docs/designs/design-system.md) / `ChatTheme` tokens via
+   `MaterialTheme` and expose deterministic `testTag` semantics for headless Robolectric testing.
 
 ---
 
