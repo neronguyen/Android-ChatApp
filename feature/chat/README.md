@@ -17,6 +17,10 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 ## Invariants
 - Depends only on `:core:ui`, `:core:model`, `:core:data` interfaces (`ChatRoomRepository`, `ChatMessageRepository`, `ChatSyncManager`), and `:validation:chat`.
 - Never imports wire DTOs (`:contract:*`) or database entities.
+- Consumes visual tokens exclusively via `MaterialTheme.colorScheme`, `MaterialTheme.typography`,
+  and `MaterialTheme.shapes` (never hardcoded `Color(...)` literals or raw `Chat*` color constants).
+- Every `*Screen.kt` exposes `internal` `@Preview` functions wrapped in `ChatTheme` reused by
+  `src/screenshotTest`.
 - Validates room creation and participant searches synchronously via `ChatValidator`.
 - Consumes unified `ChatSyncState` via `ChatSyncManager` across `ChatListViewModel`, `ConversationViewModel`, and `AccountViewModel`; embeds `SyncStatusBar` for reachability/sync feedback.
 - Gates message transmission on `canSendMessage == (syncState is Synced || syncState is Syncing)` while preserving editable user input in `TextFieldState`.
@@ -27,4 +31,9 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 - Mutates UI state flows; triggers message transmissions and room queries via `ChatRoomRepository` and `ChatMessageRepository`.
 
 ## Verification
-- Run: `./gradlew :feature:chat:testDebugUnitTest --rerun-tasks`
+
+- Unit tests: `./gradlew :feature:chat:testDebugUnitTest --rerun-tasks`
+- Validate screenshots against references:
+  `./gradlew :feature:chat:testDebugScreenshotTestDefaultTestSuite`
+- Update screenshot reference images:
+  `./gradlew :feature:chat:updateDebugScreenshotTestDefaultTestSuite`

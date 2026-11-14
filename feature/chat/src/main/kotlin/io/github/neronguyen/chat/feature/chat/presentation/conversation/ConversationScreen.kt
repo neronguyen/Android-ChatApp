@@ -1,12 +1,6 @@
 package io.github.neronguyen.chat.feature.chat.presentation.conversation
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
@@ -85,7 +79,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -102,11 +95,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
-import io.github.neronguyen.chat.core.ui.asUiText
 import io.github.neronguyen.chat.core.ui.component.SyncStatusBar
-import io.github.neronguyen.chat.feature.chat.presentation.util.asUiText
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.chat.R
 import io.github.neronguyen.chat.feature.chat.presentation.list.ChatAvatar
+import io.github.neronguyen.chat.feature.chat.presentation.util.asUiText
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
@@ -1117,7 +1110,7 @@ private fun AddParticipantDialog(
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
-private fun ConversationScreenDirectPreview() {
+internal fun ConversationScreenDirectPreview() {
     val sampleItems = listOf(
         ConversationListItem.MessageItem(
             MessageUiModel(
@@ -1148,7 +1141,7 @@ private fun ConversationScreenDirectPreview() {
         ),
     )
 
-    MaterialTheme {
+    ChatTheme {
         ConversationScreen(
             uiState = ConversationUiState(
                 roomId = "r1",
@@ -1160,6 +1153,70 @@ private fun ConversationScreenDirectPreview() {
                 syncState = ChatSyncState.Synced,
             ),
             composerState = remember { TextFieldState() },
+            addParticipantEmailState = remember { TextFieldState() },
+            onEvent = {},
+            onBackClick = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun ConversationScreenDeliveryStatesOfflinePreview() {
+    val sampleItems = listOf(
+        ConversationListItem.MessageItem(
+            MessageUiModel(
+                id = "3",
+                roomId = "r1",
+                content = "Retrying this message once the connection comes back.",
+                formattedTime = "10:44 AM",
+                isOutgoing = true,
+                deliveryStatus = MessageDeliveryStatus.FAILED,
+                senderId = "me",
+            ),
+        ),
+        ConversationListItem.MessageItem(
+            MessageUiModel(
+                id = "2",
+                roomId = "r1",
+                content = "Uploading the updated state machine table now.",
+                formattedTime = "10:43 AM",
+                isOutgoing = true,
+                deliveryStatus = MessageDeliveryStatus.SENDING,
+                senderId = "me",
+            ),
+        ),
+        ConversationListItem.MessageItem(
+            MessageUiModel(
+                id = "1",
+                roomId = "r1",
+                content = "The sync contracts are finalized and ready for review.",
+                formattedTime = "10:42 AM",
+                isOutgoing = false,
+                deliveryStatus = MessageDeliveryStatus.SENT,
+                senderId = "elena",
+                senderName = "Elena Rostova",
+            ),
+        ),
+        ConversationListItem.DateHeader(
+            headerId = "date_today",
+            label = "Today",
+        ),
+    )
+
+    ChatTheme {
+        ConversationScreen(
+            uiState = ConversationUiState(
+                roomId = "r1",
+                roomType = ChatRoomType.DIRECT,
+                title = "Elena Rostova",
+                subtitle = "elena@example.com",
+                initials = "ER",
+                items = sampleItems,
+                syncState = ChatSyncState.Offline,
+                isBannerDismissed = false,
+            ),
+            composerState = remember { TextFieldState("Draft message preserved offline") },
             addParticipantEmailState = remember { TextFieldState() },
             onEvent = {},
             onBackClick = {},

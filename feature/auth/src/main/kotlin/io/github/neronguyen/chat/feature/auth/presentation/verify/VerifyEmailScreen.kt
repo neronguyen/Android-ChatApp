@@ -22,10 +22,12 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.neronguyen.chat.core.ui.component.OtpInputField
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
 
@@ -177,5 +179,37 @@ fun VerifyEmailScreen(
         ) {
             Text(stringResource(R.string.already_have_account))
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun VerifyEmailScreenDefaultPreview() {
+    ChatTheme {
+        VerifyEmailScreen(
+            uiState = VerifyEmailUiState(
+                email = "elena@example.com",
+                code = "482",
+            ),
+            onEvent = {},
+            onNavigateToLogin = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun VerifyEmailScreenCooldownPreview() {
+    ChatTheme {
+        VerifyEmailScreen(
+            uiState = VerifyEmailUiState(
+                email = "elena@example.com",
+                code = "482910",
+                resendCooldownSeconds = 45,
+                infoMessage = "A new 6-digit verification code has been sent.",
+            ),
+            onEvent = {},
+            onNavigateToLogin = {},
+        )
     }
 }

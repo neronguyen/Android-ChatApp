@@ -25,6 +25,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -33,13 +34,12 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
-import io.github.neronguyen.chat.core.ui.theme.ChatBorder
-import io.github.neronguyen.chat.core.ui.theme.ChatPrimary
-import io.github.neronguyen.chat.core.ui.theme.ChatSurface
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
 
@@ -111,14 +111,21 @@ fun LoginScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("confirmation_banner")
-                    .background(ChatSurface, RoundedCornerShape(12.dp))
-                    .border(1.dp, ChatBorder, RoundedCornerShape(12.dp))
+                    .background(
+                        MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(12.dp),
+                    )
+                    .border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outline,
+                        RoundedCornerShape(12.dp),
+                    )
                     .padding(horizontal = 16.dp, vertical = 12.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
                     text = uiState.bannerMessage,
-                    color = ChatPrimary,
+                    color = MaterialTheme.colorScheme.primary,
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                 )
@@ -210,5 +217,36 @@ fun LoginScreen(
         ) {
             Text(stringResource(R.string.dont_have_account))
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun LoginScreenDefaultPreview() {
+    ChatTheme {
+        LoginScreen(
+            emailState = remember { TextFieldState("elena@example.com") },
+            passwordState = remember { TextFieldState() },
+            uiState = LoginUiState(),
+            onEvent = {},
+            onNavigateToRegister = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun LoginScreenErrorAndBannerPreview() {
+    ChatTheme {
+        LoginScreen(
+            emailState = remember { TextFieldState("elena@example.com") },
+            passwordState = remember { TextFieldState("••••••••••••") },
+            uiState = LoginUiState(
+                authError = AuthError.EmailNotVerified,
+                bannerMessage = "Password reset successful. Please sign in with your new password.",
+            ),
+            onEvent = {},
+            onNavigateToRegister = {},
+        )
     }
 }

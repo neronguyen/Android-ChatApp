@@ -3,7 +3,7 @@
 | Metadata           | Value                                                                   |
 |--------------------|-------------------------------------------------------------------------|
 | **Author**         | Nero Nguyen                                                             |
-| **Status**         | Draft                                                                   |
+| **Status**         | Implemented                                                             |
 | **Date**           | 2026-11-14                                                              |
 | **Role**           | UI Governance & Verification Harness Specification                      |
 | **Target Modules** | `Android-ChatApp`: `:core:ui`, `:feature:auth`, `:feature:chat`, `:app` |
@@ -269,13 +269,13 @@ text or Konsist AST declarations:
       `OtpInputFieldScreenshotTest.kt`) and their committed golden PNGs remain untouched; only
       `OtpInputField.kt`'s preview functions in `src/main` are narrowed from `public` to `private`
       so they do not leak into `:core:ui`'s public API.
-* **Screen & State Matrix (15 Feature Screenshot Golden States + 8 Existing `:core:ui` States)**:
-    * `:feature:auth` (5 screens, 7 preview states):
+* **Screen & State Matrix (16 Feature Screenshot Golden States + 8 Existing `:core:ui` States)**:
+    * `:feature:auth` (5 screens, 8 preview states):
         * `LoginScreen`: `LoginScreenDefaultPreview` (populated email),
           `LoginScreenErrorAndBannerPreview` (`AuthError.EmailNotVerified` from `:core:model` with
           verify-email prompt + password-reset confirmation banner).
         * `RegisterScreen`: `RegisterScreenDefaultPreview` (populated fields),
-          `RegisterScreenValidationErrorPreview` (`PasswordValidationError.TooShort` from
+          `RegisterScreenValidationErrorPreview` (`AuthValidationError.InvalidPassword` from
           `:validation:auth`).
         * `ForgotPasswordScreen`: `ForgotPasswordScreenDefaultPreview` (populated email).
         * `ResetPasswordScreen`: `ResetPasswordScreenDefaultPreview` (6-digit code + matching
@@ -354,7 +354,7 @@ text or Konsist AST declarations:
 
 ### Alternative B: Restrict AGP `screenshotTests` to `:core:ui` Only
 
-* **Pros**: Avoids adding `screenshotTests` configuration and 15 reference PNG baselines to
+* **Pros**: Avoids adding `screenshotTests` configuration and 16 reference PNG baselines to
   `:feature:auth` and `:feature:chat`.
 * **Cons**: Leaves all 9 feature screens (`LoginScreen`, `RegisterScreen`, `ForgotPasswordScreen`,
   `ResetPasswordScreen`, `VerifyEmailScreen`, `ChatListScreen`, `ConversationScreen`,
@@ -374,9 +374,9 @@ text or Konsist AST declarations:
   parameter forwarding for standard Material 3 components when `ChatTheme` + `MaterialTheme` +
   `Konsist` already enforce token consumption.
 * **Reason for Rejection**: Contradicts [
-  `PHILOSOPHY.md`](../../../KMP-ChatContract/docs/PHILOSOPHY.md) Section 3 (*Reject Cosmetic
-  Bloat*); only shared multi-module or stateful widgets (`SyncStatusBar`, `OtpInputField`) belong in
-  `:core:ui`.
+  `PHILOSOPHY.md`](../../../KMP-ChatContract/docs/PHILOSOPHY.md) Section 3 (*Intentional UI
+  Engineering Over Cosmetic Feature Creep*); only shared multi-module or stateful widgets
+  (`SyncStatusBar`, `OtpInputField`) belong in `:core:ui`.
 
 ### Alternative D: Keep Separate `private` `@Preview` Functions in `src/main` and Duplicated
 `@PreviewTest` Bodies in `src/screenshotTest`
@@ -402,318 +402,6 @@ text or Konsist AST declarations:
       `testDebugScreenshotTestDefaultTestSuite` across `:core:ui`, `:feature:auth`, and
       `:feature:chat`.
 * **Repository Storage Footprint**:
-    * Adding 15 mobile-viewport (`390x844` dp) reference PNGs across `:feature:auth` (7 images) and
+    * Adding 16 mobile-viewport (`390x844` dp) reference PNGs across `:feature:auth` (8 images) and
       `:feature:chat` (8 images) adds ~300–600 KB of compressed PNG assets under
       `src/screenshotTestDebug/reference/`.
-
----
-
-## Detailed Implementation Plan
-
-> [!NOTE]
-> Per Unified Elephant-and-Goldfish Model (EGM) Workflow Gate Phase 2 & Phase 3, this file-by-file
-checklist provides an unambiguous blueprint for implementation and will be pruned when transitioning
-the document to `Status: Implemented` after `./scripts/verify.sh clean` passes.
-
-### Target Files to Create/Modify
-
-#### 1. [`AGENTS.md`](../../AGENTS.md) (Modify — Applied in Workspace)
-
-* **Type / Scope**: Repository Agent Governance Rules
-* **Proposed Changes**: Replace Section `1.1 UI & Design System Gate (MCP Stitch SSOT)` with
-  `1.1 Codebase-First UI & Design System Gate` establishing `docs/designs/design-system.md` and
-  `:core:ui` as the visual SSOT, defining the `MaterialTheme`-only token policy for `:feature:*`,
-  requiring `internal` `@Preview` functions wrapped in `ChatTheme`, and documenting the AGP 9.5.1
-  `testDebugScreenshotTestDefaultTestSuite` / `updateDebugScreenshotTestDefaultTestSuite` workflow
-  (including Linux canonical host and cascading `:core:ui` updates). Update Section `2.2` rule #6
-  accordingly.
-
-#### 2. [`docs/README.md`](../README.md) (Modify — Applied in Workspace)
-
-* **Type / Scope**: Unified Repository Documentation Index
-* **Proposed Changes**: Register [
-  `./codebase-first-ui-architecture.md`](./codebase-first-ui-architecture.md) in the EGM Technical
-  Design Documents table.
-
-#### 3. [`docs/designs/design-system.md`](./design-system.md) (Modify — Applied in Workspace)
-
-* **Type / Scope**: Visual & Token SSOT Specification
-* **Proposed Changes**: Add Section `6. Codebase-First Enforcement & Component Extraction Policy`
-  specifying the `MaterialTheme` consumption rule for `:feature:*`, component extraction criteria
-  into `:core:ui`, and the static (`Konsist`) + visual (`screenshotTests`) enforcement loop.
-
-#### 4. [
-`docs/designs/presentation-sync-ui-integration.md`](./presentation-sync-ui-integration.md) (Modify — Applied in Workspace)
-
-* **Type / Scope**: EGM Technical Design Document
-* **Proposed Changes**: Remove all MCP Stitch screen URLs, Stitch audit requirements, and
-  `Alternative F` Stitch pixel-comparison references so historical design docs do not point agents
-  back to external cloud mockups.
-
-#### 5. [`core/ui/README.md`](../../core/ui/README.md) (Modify — Applied in Workspace)
-
-* **Type / Scope**: Module Contract Documentation
-* **Proposed Changes**: Remove `(MCP Stitch projects/10647833259558812227)` from the module overview
-  and reference `../docs/designs/design-system.md` as the visual specification.
-
-#### 6. [`feature/auth/README.md`](../../feature/auth/README.md) (Modify)
-
-* **Type / Scope**: Module Contract Documentation
-* **Proposed Changes**: Update `## Invariants` to note `internal` `@Preview` functions wrapped in
-  `ChatTheme` and `MaterialTheme`-only token consumption; update `## Verification` to include
-  `:feature:auth:testDebugScreenshotTestDefaultTestSuite` and
-  `:feature:auth:updateDebugScreenshotTestDefaultTestSuite`.
-
-#### 7. [`feature/chat/README.md`](../../feature/chat/README.md) (Modify)
-
-* **Type / Scope**: Module Contract Documentation
-* **Proposed Changes**: Update `## Invariants` to note `internal` `@Preview` functions wrapped in
-  `ChatTheme` and `MaterialTheme`-only token consumption; update `## Verification` to include
-  `:feature:chat:testDebugScreenshotTestDefaultTestSuite` and
-  `:feature:chat:updateDebugScreenshotTestDefaultTestSuite`.
-
-#### 8. [`feature/auth/build.gradle.kts`](../../feature/auth/build.gradle.kts) (Modify)
-
-* **Type / Scope**: Gradle Module Build Configuration
-* **Proposed Changes**:
-    * Add `testOptions` configuring `unitTests.isIncludeAndroidResources = true` and
-      `screenshotTests.create("screenshotTest")` with
-      `engineVersion = libs.versions.screenshot.get()`, `targetVariants.add("debug")`,
-      `implementation(libs.androidx.compose.ui.tooling)`, and
-      `implementation(libs.screenshot.validation.api)`.
-    * Add `testImplementation(libs.robolectric)`,
-      `testImplementation(libs.androidx.compose.ui.test)`, and
-      `debugImplementation(libs.androidx.compose.ui.testManifest)` in `dependencies` (matching
-      `feature/chat/build.gradle.kts`).
-
-#### 9. [`feature/chat/build.gradle.kts`](../../feature/chat/build.gradle.kts) (Modify)
-
-* **Type / Scope**: Gradle Module Build Configuration
-* **Proposed Changes**: Inside `android.testOptions`, add `screenshotTests.create("screenshotTest")`
-  with `engineVersion = libs.versions.screenshot.get()`, `targetVariants.add("debug")`,
-  `implementation(libs.androidx.compose.ui.tooling)`, and
-  `implementation(libs.screenshot.validation.api)`.
-
-#### 10. [`scripts/verify.sh`](../../scripts/verify.sh) (Modify)
-
-* **Type / Scope**: Verification & CI Gate Script
-* **Proposed Changes**:
-    * In the `clean` gate block, append `:feature:auth:testDebugScreenshotTestDefaultTestSuite` and
-      `:feature:chat:testDebugScreenshotTestDefaultTestSuite` alongside
-      `:core:ui:testDebugScreenshotTestDefaultTestSuite`.
-    * In the Tier 1 affected-module `case` branches for `core/ui/*`, `feature/auth/*`, and
-      `feature/chat/*`, trigger `:app:testDebugUnitTest --tests "*.ArchitectureKonsistTest"` so the
-      architectural guardrails run whenever any UI or feature module changes.
-
-#### 11. [
-`app/src/test/kotlin/io/github/neronguyen/chat/architecture/ArchitectureKonsistTest.kt`](../../app/src/test/kotlin/io/github/neronguyen/chat/architecture/ArchitectureKonsistTest.kt) (Modify)
-
-* **Type / Scope**: Static Architectural Unit Test (`Konsist`)
-* **Proposed Changes**: Add a helper that strips comments and string literals from Kotlin source
-  text, plus three `@Test` methods (bringing the suite from 5 to 8 tests):
-    * `presentation and app modules do not hardcode Color literals outside core ui theme`: Asserts
-      stripped text has no `Color(...)` calls and no `Color.<Constant>` references other than
-      `Color.Transparent` and `Color.Unspecified` in `/src/main/` of `:feature:*`, `:core:ui`, and
-      `:app` outside `/core/ui/src/main/kotlin/io/github/neronguyen/chat/core/ui/theme/`.
-    * `feature modules consume theme colors via MaterialTheme instead of raw Chat color tokens`:
-      Asserts files in `/feature/*/src/main/` have no wildcard
-      `io.github.neronguyen.chat.core.ui.theme.*` import, no `Chat*` theme import except `ChatTheme`
-      in files with `@Preview` functions, and no `MaterialTheme(` or `MaterialTheme {` composable
-      wrapper calls in stripped text.
-    * `every feature Screen file declares at least one Preview function wrapped in ChatTheme`: Using
-      `file.functions()`, asserts every `*Screen.kt` under `/feature/*/src/main/` declares at least
-      one `@Preview`-annotated function and every `@Preview` function in the file invokes
-      `ChatTheme` in its body.
-
-#### 12. [
-`core/ui/src/main/kotlin/io/github/neronguyen/chat/core/ui/component/OtpInputField.kt`](../../core/ui/src/main/kotlin/io/github/neronguyen/chat/core/ui/component/OtpInputField.kt) (Modify)
-
-* **Type / Scope**: Shared Compose UI Component (`:core:ui`)
-* **Proposed Changes**: Change visibility of `OtpInputFieldEmptyPreview()`,
-  `OtpInputFieldPartialPreview()`, `OtpInputFieldFullPreview()`, and `OtpInputFieldErrorPreview()`
-  from `public` to `private` so preview functions do not leak into `:core:ui`'s public API.
-
-#### 13. [
-`feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/login/LoginScreen.kt`](../../feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/login/LoginScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:auth`)
-* **Proposed Changes**:
-    * Remove raw imports `ChatBorder`, `ChatPrimary`, and `ChatSurface`; replace their usages in the
-      confirmation banner with `MaterialTheme.colorScheme.outline`,
-      `MaterialTheme.colorScheme.primary`, and `MaterialTheme.colorScheme.surfaceVariant`.
-    * Add two `internal` `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` functions
-      wrapped in `ChatTheme`: `LoginScreenDefaultPreview()` and
-      `LoginScreenErrorAndBannerPreview()`.
-
-#### 14. [
-`feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/register/RegisterScreen.kt`](../../feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/register/RegisterScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:auth`)
-* **Proposed Changes**: Add two `internal`
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` functions wrapped in `ChatTheme`:
-  `RegisterScreenDefaultPreview()` and `RegisterScreenValidationErrorPreview()`.
-
-#### 15. [
-`feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/forgot/ForgotPasswordScreen.kt`](../../feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/forgot/ForgotPasswordScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:auth`)
-* **Proposed Changes**: Add `internal`
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` function
-  `ForgotPasswordScreenDefaultPreview()` wrapped in `ChatTheme`.
-
-#### 16. [
-`feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/reset/ResetPasswordScreen.kt`](../../feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/reset/ResetPasswordScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:auth`)
-* **Proposed Changes**: Add `internal`
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` function
-  `ResetPasswordScreenDefaultPreview()` wrapped in `ChatTheme`.
-
-#### 17. [
-`feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/verify/VerifyEmailScreen.kt`](../../feature/auth/src/main/kotlin/io/github/neronguyen/chat/feature/auth/presentation/verify/VerifyEmailScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:auth`)
-* **Proposed Changes**: Add two `internal`
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` functions wrapped in `ChatTheme`:
-  `VerifyEmailScreenDefaultPreview()` and `VerifyEmailScreenCooldownPreview()`.
-
-#### 18. [
-`feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/list/ChatListScreen.kt`](../../feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/list/ChatListScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:chat`)
-* **Proposed Changes**: Change `ChatListScreenPreview` to
-  `internal fun ChatListScreenPopulatedPreview()` with
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` and replace its
-  `MaterialTheme { ... }` wrapper with `ChatTheme { ... }`. Add
-  `internal fun ChatListScreenOfflinePreview()` with
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` wrapped in `ChatTheme`
-  (`syncState = ChatSyncState.Offline`, `isInitialLoading = false`, `isBannerDismissed = false`).
-
-#### 19. [
-`feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/conversation/ConversationScreen.kt`](../../feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/conversation/ConversationScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:chat`)
-* **Proposed Changes**: Change `ConversationScreenDirectPreview()` from `private` to `internal` with
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` and replace its
-  `MaterialTheme { ... }` wrapper with `ChatTheme { ... }`. Add
-  `internal fun ConversationScreenDeliveryStatesOfflinePreview()` with
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` wrapped in `ChatTheme` covering
-  `MessageDeliveryStatus.SENDING`, `MessageDeliveryStatus.FAILED`, and `ChatSyncState.Offline`
-  (`isBannerDismissed = false`).
-
-#### 20. [
-`feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/newchat/NewChatScreen.kt`](../../feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/newchat/NewChatScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:chat`)
-* **Proposed Changes**: Change `NewChatDirectPreview()` and `NewChatGroupPreview()` from `private`
-  to `internal` (retaining `@Preview(showBackground = true, widthDp = 390, heightDp = 844)`) and
-  replace their `MaterialTheme { ... }` wrappers with `ChatTheme { ... }`.
-
-#### 21. [
-`feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/account/AccountScreen.kt`](../../feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/account/AccountScreen.kt) (Modify)
-
-* **Type / Scope**: Feature Screen Composable (`:feature:chat`)
-* **Proposed Changes**: Change `AccountScreenPreview_VerifiedConnected` and
-  `AccountScreenPreview_UnverifiedOffline` to `internal fun AccountScreenVerifiedConnectedPreview()`
-  and `internal fun AccountScreenUnverifiedOfflinePreview()` with
-  `@Preview(showBackground = true, widthDp = 390, heightDp = 844)` and replace their
-  `MaterialTheme { ... }` wrappers with `ChatTheme { ... }`.
-
-#### 22.
-`feature/auth/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/auth/presentation/login/LoginScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:auth`)
-* **Proposed Changes**: Create `LoginScreenScreenshotTest` with `@PreviewTest` methods
-  `loginScreenDefault()` and `loginScreenErrorAndBanner()` delegating to
-  `LoginScreenDefaultPreview()` and `LoginScreenErrorAndBannerPreview()`.
-
-#### 23.
-`feature/auth/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/auth/presentation/register/RegisterScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:auth`)
-* **Proposed Changes**: Create `RegisterScreenScreenshotTest` with `@PreviewTest` methods
-  `registerScreenDefault()` and `registerScreenValidationError()` delegating to
-  `RegisterScreenDefaultPreview()` and `RegisterScreenValidationErrorPreview()`.
-
-#### 24.
-`feature/auth/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/auth/presentation/forgot/ForgotPasswordScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:auth`)
-* **Proposed Changes**: Create `ForgotPasswordScreenScreenshotTest` with `@PreviewTest` method
-  `forgotPasswordScreenDefault()` delegating to `ForgotPasswordScreenDefaultPreview()`.
-
-#### 25.
-`feature/auth/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/auth/presentation/reset/ResetPasswordScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:auth`)
-* **Proposed Changes**: Create `ResetPasswordScreenScreenshotTest` with `@PreviewTest` method
-  `resetPasswordScreenDefault()` delegating to `ResetPasswordScreenDefaultPreview()`.
-
-#### 26.
-`feature/auth/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/auth/presentation/verify/VerifyEmailScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:auth`)
-* **Proposed Changes**: Create `VerifyEmailScreenScreenshotTest` with `@PreviewTest` methods
-  `verifyEmailScreenDefault()` and `verifyEmailScreenCooldown()` delegating to
-  `VerifyEmailScreenDefaultPreview()` and `VerifyEmailScreenCooldownPreview()`.
-
-#### 27.
-`feature/chat/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/chat/presentation/list/ChatListScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:chat`)
-* **Proposed Changes**: Create `ChatListScreenScreenshotTest` with `@PreviewTest` methods
-  `chatListScreenPopulated()` and `chatListScreenOffline()` delegating to
-  `ChatListScreenPopulatedPreview()` and `ChatListScreenOfflinePreview()`.
-
-#### 28.
-`feature/chat/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/chat/presentation/conversation/ConversationScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:chat`)
-* **Proposed Changes**: Create `ConversationScreenScreenshotTest` with `@PreviewTest` methods
-  `conversationScreenDirect()` and `conversationScreenDeliveryStatesOffline()` delegating to
-  `ConversationScreenDirectPreview()` and `ConversationScreenDeliveryStatesOfflinePreview()`.
-
-#### 29.
-`feature/chat/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/chat/presentation/newchat/NewChatScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:chat`)
-* **Proposed Changes**: Create `NewChatScreenScreenshotTest` with `@PreviewTest` methods
-  `newChatDirect()` and `newChatGroup()` delegating to `NewChatDirectPreview()` and
-  `NewChatGroupPreview()`.
-
-#### 30.
-`feature/chat/src/screenshotTest/kotlin/io/github/neronguyen/chat/feature/chat/presentation/account/AccountScreenScreenshotTest.kt` (Create)
-
-* **Type / Scope**: Host-Side Screenshot Test (`:feature:chat`)
-* **Proposed Changes**: Create `AccountScreenScreenshotTest` with `@PreviewTest` methods
-  `accountScreenVerifiedConnected()` and `accountScreenUnverifiedOffline()` delegating to
-  `AccountScreenVerifiedConnectedPreview()` and `AccountScreenUnverifiedOfflinePreview()`.
-
-#### 31. `feature/auth/src/screenshotTestDebug/reference/` &
-`feature/chat/src/screenshotTestDebug/reference/` (Create)
-
-* **Type / Scope**: Golden Reference PNG Baselines
-* **Proposed Changes**: Generate and visually inspect the 15 reference PNG files on Linux (7 in
-  `:feature:auth`, 8 in `:feature:chat`) via
-  `./scripts/verify.sh :feature:auth:updateDebugScreenshotTestDefaultTestSuite :feature:chat:updateDebugScreenshotTestDefaultTestSuite`.
-
----
-
-### Verification Plan
-
-* **Zero Stitch References**:
-  `grep -rni "stitch" AGENTS.md README.md docs/designs/design-system.md docs/designs/presentation-sync-ui-integration.md core/ feature/ app/`
-  returns 0 source file matches.
-* **Unit, Robolectric & Static Architectural Tests (Tier 1)**: `./scripts/verify.sh` and
-  `./gradlew :app:testDebugUnitTest :core:ui:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest`
-  pass all 8 `ArchitectureKonsistTest` rules (5 existing, 3 new) and all Robolectric `testTag`
-  semantics tests.
-* **Static Analysis & Linting**: `./gradlew lintDebug` passes with 0 errors.
-* **Screenshot Regression & Full Clean Gate (Tier 2)**: `./scripts/verify.sh clean` executes
-  `testDebugUnitTest`, `lintDebug`, and
-  `:core:ui:testDebugScreenshotTestDefaultTestSuite :feature:auth:testDebugScreenshotTestDefaultTestSuite :feature:chat:testDebugScreenshotTestDefaultTestSuite --rerun-tasks`
-  and passes with an empty `git status --porcelain`.
-
----
-
-*Drafted with EGM*

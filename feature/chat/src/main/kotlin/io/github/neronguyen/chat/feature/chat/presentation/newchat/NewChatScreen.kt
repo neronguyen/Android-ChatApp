@@ -72,11 +72,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.neronguyen.chat.core.ui.asUiText
-import io.github.neronguyen.chat.feature.chat.presentation.util.asUiText
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.chat.R
 import io.github.neronguyen.chat.feature.chat.presentation.list.ChatAvatar
+import io.github.neronguyen.chat.feature.chat.presentation.util.asUiText
 import java.util.Locale
 
 @Composable
@@ -1082,7 +1082,7 @@ private fun GroupChatSubmitSection(
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
-private fun NewChatDirectPreview() {
+internal fun NewChatDirectPreview() {
     val elena = ParticipantUiModel(
         userId = "1",
         email = "elena@example.com",
@@ -1090,7 +1090,7 @@ private fun NewChatDirectPreview() {
         initials = "ER",
         avatarUrl = null,
     )
-    MaterialTheme {
+    ChatTheme {
         NewChatScreen(
             emailSearchState = remember { TextFieldState("elena@example.com") },
             firstMessageState = remember {
@@ -1111,7 +1111,7 @@ private fun NewChatDirectPreview() {
 
 @Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
-private fun NewChatGroupPreview() {
+internal fun NewChatGroupPreview() {
     val elena = ParticipantUiModel(
         userId = "1",
         email = "elena@example.com",
@@ -1126,7 +1126,7 @@ private fun NewChatGroupPreview() {
         initials = "MV",
         avatarUrl = null,
     )
-    MaterialTheme {
+    ChatTheme {
         NewChatScreen(
             emailSearchState = remember { TextFieldState("marcus@example.com") },
             firstMessageState = remember { TextFieldState() },

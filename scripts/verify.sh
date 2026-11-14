@@ -62,7 +62,7 @@ fi
 if [ "$IS_CI" = "true" ] || [ "${1:-}" = "clean" ]; then
   if [ "${1:-}" = "clean" ]; then shift; fi
   echo "==> [CLEAN GATE] Running clean unit tests & lintDebug on Android-ChatApp (CI=${IS_CI})..."
-  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" testDebugUnitTest lintDebug :core:ui:testDebugScreenshotTestDefaultTestSuite --rerun-tasks "$@"
+  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" testDebugUnitTest lintDebug :core:ui:testDebugScreenshotTestDefaultTestSuite :feature:auth:testDebugScreenshotTestDefaultTestSuite :feature:chat:testDebugScreenshotTestDefaultTestSuite --rerun-tasks "$@"
 
   if [ -n "$(git -C "$REPO_DIR" status --porcelain)" ]; then
     echo "ERROR: Clean verification produced uncommitted or untracked changes (drift detected):" >&2
@@ -101,6 +101,7 @@ UNIQUE_FILES=($(printf "%s\n" "${CHANGED_FILES[@]:-}" | sort -u))
 
 # Map changed files to Gradle sub-projects
 RUN_ALL=false
+RUN_KONSIST=false
 GRADLE_TASKS=()
 
 for file in "${UNIQUE_FILES[@]:-}"; do
@@ -135,12 +136,15 @@ for file in "${UNIQUE_FILES[@]:-}"; do
       ;;
     core/ui/*)
       GRADLE_TASKS+=(":core:ui:testDebugUnitTest")
+      RUN_KONSIST=true
       ;;
     feature/auth/*)
       GRADLE_TASKS+=(":feature:auth:testDebugUnitTest")
+      RUN_KONSIST=true
       ;;
     feature/chat/*)
       GRADLE_TASKS+=(":feature:chat:testDebugUnitTest")
+      RUN_KONSIST=true
       ;;
     sync/work/*)
       GRADLE_TASKS+=(":sync:work:testDebugUnitTest")
@@ -160,5 +164,19 @@ fi
 # Deduplicate tasks
 UNIQUE_TASKS=($(printf "%s\n" "${GRADLE_TASKS[@]}" | sort -u))
 
-echo "==> [FAST FEEDBACK] Running ${#UNIQUE_TASKS[@]} affected test task(s): ${UNIQUE_TASKS[*]}"
-exec "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" "${UNIQUE_TASKS[@]}" "$@"
+EXTRA_ARGS=()
+if [ "$RUN_KONSIST" = "true" ]; then
+  APP_MODIFIED=false
+  for t in "${UNIQUE_TASKS[@]}"; do
+    if [ "$t" = ":app:testDebugUnitTest" ]; then
+      APP_MODIFIED=true
+      break
+    fi
+  done
+  if [ "$APP_MODIFIED" = "false" ]; then
+    EXTRA_ARGS+=(":app:testDebugUnitTest" "--tests" "*.ArchitectureKonsistTest")
+  fi
+fi
+
+echo "==> [FAST FEEDBACK] Running ${#UNIQUE_TASKS[@]} affected test task(s): ${UNIQUE_TASKS[*]} ${EXTRA_ARGS[*]}"
+exec "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" "${UNIQUE_TASKS[@]}" "${EXTRA_ARGS[@]}" "$@"

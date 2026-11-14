@@ -216,7 +216,7 @@ private fun OtpCell(
 
 @Preview(name = "Empty", showBackground = true)
 @Composable
-fun OtpInputFieldEmptyPreview() = ChatTheme {
+private fun OtpInputFieldEmptyPreview() = ChatTheme {
     OtpInputField(
         value = "",
         onValueChange = {},
@@ -225,7 +225,7 @@ fun OtpInputFieldEmptyPreview() = ChatTheme {
 
 @Preview(name = "Partial", showBackground = true)
 @Composable
-fun OtpInputFieldPartialPreview() = ChatTheme {
+private fun OtpInputFieldPartialPreview() = ChatTheme {
     OtpInputField(
         value = "123",
         onValueChange = {},
@@ -234,7 +234,7 @@ fun OtpInputFieldPartialPreview() = ChatTheme {
 
 @Preview(name = "Full", showBackground = true)
 @Composable
-fun OtpInputFieldFullPreview() = ChatTheme {
+private fun OtpInputFieldFullPreview() = ChatTheme {
     OtpInputField(
         value = "123456",
         onValueChange = {},
@@ -243,7 +243,7 @@ fun OtpInputFieldFullPreview() = ChatTheme {
 
 @Preview(name = "Error", showBackground = true)
 @Composable
-fun OtpInputFieldErrorPreview() = ChatTheme {
+private fun OtpInputFieldErrorPreview() = ChatTheme {
     OtpInputField(
         value = "123456",
         onValueChange = {},

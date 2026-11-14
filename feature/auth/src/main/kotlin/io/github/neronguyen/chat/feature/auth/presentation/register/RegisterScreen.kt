@@ -21,18 +21,21 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.neronguyen.chat.core.ui.asUiText
 import io.github.neronguyen.chat.core.ui.rememberMinLoading
+import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
+import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidationError
 
 @Composable
 fun RegisterRoute(
@@ -156,5 +159,37 @@ fun RegisterScreen(
         TextButton(onClick = onNavigateToLogin) {
             Text(stringResource(R.string.already_have_account))
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun RegisterScreenDefaultPreview() {
+    ChatTheme {
+        RegisterScreen(
+            emailState = remember { TextFieldState("elena@example.com") },
+            displayNameState = remember { TextFieldState("Elena Rostova") },
+            passwordState = remember { TextFieldState() },
+            uiState = RegisterUiState(),
+            onEvent = {},
+            onNavigateToLogin = {},
+        )
+    }
+}
+
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
+@Composable
+internal fun RegisterScreenValidationErrorPreview() {
+    ChatTheme {
+        RegisterScreen(
+            emailState = remember { TextFieldState("elena@example.com") },
+            displayNameState = remember { TextFieldState("Elena Rostova") },
+            passwordState = remember { TextFieldState("short") },
+            uiState = RegisterUiState(
+                validationError = AuthValidationError.InvalidPassword,
+            ),
+            onEvent = {},
+            onNavigateToLogin = {},
+        )
     }
 }
