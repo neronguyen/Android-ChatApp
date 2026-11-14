@@ -1,6 +1,7 @@
 package io.github.neronguyen.chat.core.network.util
 
 import arrow.core.Either
+import io.github.neronguyenvn.nerochat.contract.ContractJson
 import io.github.neronguyenvn.nerochat.contract.auth.error.AuthServerError
 import io.github.neronguyenvn.nerochat.contract.error.ApiErrorDto
 import io.github.neronguyenvn.nerochat.contract.error.CommonServerError
@@ -8,7 +9,6 @@ import io.github.neronguyenvn.nerochat.contract.error.ErrorCode
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Protocol
 import okhttp3.Request
@@ -27,7 +27,7 @@ import kotlin.test.assertTrue
 
 class NetworkExtensionsTest {
 
-    private val json = Json { ignoreUnknownKeys = true }
+    private val json = ContractJson
 
     private fun <T> createErrorResponse(
         code: Int,

@@ -19,6 +19,7 @@ import io.github.neronguyen.chat.core.network.interceptor.TokenAuthenticator
 import io.github.neronguyen.chat.core.network.retrofit.RetrofitAuthNetwork
 import io.github.neronguyen.chat.core.network.retrofit.RetrofitChatNetwork
 import io.github.neronguyen.chat.core.network.websocket.ChatWebSocketClient
+import io.github.neronguyenvn.nerochat.contract.ContractJson
 import jakarta.inject.Singleton
 import kotlinx.serialization.json.Json
 import okhttp3.Dispatcher
@@ -119,9 +120,7 @@ internal abstract class NetworkModule {
 
         @Provides
         @Singleton
-        fun provideNetworkJson(): Json = Json {
-            ignoreUnknownKeys = true
-        }
+        fun provideNetworkJson(): Json = ContractJson
 
         @Provides
         @Singleton

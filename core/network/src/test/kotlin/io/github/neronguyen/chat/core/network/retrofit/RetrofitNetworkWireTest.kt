@@ -4,6 +4,7 @@ import arrow.core.Either
 import io.github.neronguyen.chat.core.network.interceptor.AuthInterceptor
 import io.github.neronguyen.chat.core.network.interceptor.TokenProvider
 import io.github.neronguyen.chat.core.network.util.NetworkError
+import io.github.neronguyenvn.nerochat.contract.ContractJson
 import io.github.neronguyenvn.nerochat.contract.auth.AuthenticatedUserDto
 import io.github.neronguyenvn.nerochat.contract.auth.LoginRequest
 import io.github.neronguyenvn.nerochat.contract.auth.error.AuthServerError
@@ -12,7 +13,6 @@ import io.github.neronguyenvn.nerochat.contract.chat.ChatRoomDto
 import io.github.neronguyenvn.nerochat.contract.chat.error.ChatServerError
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
 import okhttp3.mockwebserver.MockWebServer
@@ -29,7 +29,7 @@ import kotlin.time.Instant
 class RetrofitNetworkWireTest {
 
     private lateinit var server: MockWebServer
-    private val networkJson = Json { ignoreUnknownKeys = true }
+    private val networkJson = ContractJson
 
     @BeforeTest
     fun setUp() {

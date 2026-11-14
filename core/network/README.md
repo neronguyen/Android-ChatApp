@@ -17,7 +17,7 @@ Retrofit HTTP client infrastructure, authenticated OkHttp pipeline, token refres
 ## Invariants
 - Enforces strict callback isolation on superseded WebSocket connections.
 - Concurrent `401` failures trigger exactly one token refresh request under a synchronization mutex.
-- All JSON payloads are serialized using `kotlinx.serialization.json.Json` with `KMP-ChatContract` wire models.
+- All JSON payloads are serialized using `ContractJson` (`kotlinx.serialization.json.Json` with `KMP-ChatContract` defaults) and `KMP-ChatContract` wire models.
 - `[BASELINE-DEBT]`: Public data source interfaces leak wire DTOs (`UserDto`, `RegisterRequest`, etc.) across module boundaries (scheduled for domain model encapsulation in Track 4).
 
 ## Side Effects

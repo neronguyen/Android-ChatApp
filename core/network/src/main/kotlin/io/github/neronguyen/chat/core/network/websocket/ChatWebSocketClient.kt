@@ -9,6 +9,7 @@ import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionSt
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Connecting
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Disconnected
 import io.github.neronguyen.chat.core.network.model.websocket.SocketConnectionState.Failed
+import io.github.neronguyenvn.nerochat.contract.ContractJson
 import io.github.neronguyenvn.nerochat.contract.chat.WsClientMessage
 import io.github.neronguyenvn.nerochat.contract.chat.WsServerEvent
 import kotlinx.coroutines.channels.BufferOverflow
@@ -20,7 +21,6 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -39,10 +39,7 @@ internal class ChatWebSocketClient @Inject constructor(
     @BaseUrl private val baseUrl: String,
 ) : ChatRealtimeDataSource {
 
-    private val json = Json {
-        classDiscriminator = WsServerEvent.CLASS_DISCRIMINATOR
-        ignoreUnknownKeys = true
-    }
+    private val json = ContractJson
 
     private val connectMutex = Mutex()
     private val webSocket = AtomicReference<WebSocket?>(null)
