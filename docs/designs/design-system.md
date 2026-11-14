@@ -306,6 +306,19 @@ fun ChatTheme(
 }
 ```
 
+### 6. Codebase-First Enforcement & Component Extraction Policy
+
+1. **Theme Consumption (`MaterialTheme`-Only in Features)**:
+   Feature modules (`:feature:auth`, `:feature:chat`) must consume colors, shapes, and typography
+   exclusively via `MaterialTheme.colorScheme`, `MaterialTheme.shapes`, and
+   `MaterialTheme.typography`—never by importing raw `Chat*` color constants or hardcoding
+   `Color(...)` hex literals. (Enforced statically by `ArchitectureKonsistTest`).
+2. **Component Extraction Criteria (`:core:ui` vs. `:feature:*`)**:
+    - Standard Material 3 primitives (`Scaffold`, `TopAppBar`, `OutlinedTextField`, `Button`) are
+      used directly in `:feature:*` screens without thin wrappers.
+    - Only shared multi-module widgets or stateful design components (`SyncStatusBar`,
+      `OtpInputField`) are extracted into `:core:ui/component/`.
+
 ---
 
 ## Alternatives Considered
