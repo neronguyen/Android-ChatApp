@@ -61,6 +61,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -121,7 +122,9 @@ fun NewChatScreen(
     val showCreating by rememberMinLoading(isLoading = uiState.isCreatingRoom)
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("new_chat_screen"),
         containerColor = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -236,7 +239,9 @@ private fun NewChatTopBar(
         navigationIcon = {
             IconButton(
                 onClick = onBackClick,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("new_chat_back_button"),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -280,14 +285,18 @@ private fun NewChatModeSelector(
             icon = Icons.Outlined.Person,
             isSelected = selectedMode == NewChatMode.DIRECT,
             onClick = { onSelectMode(NewChatMode.DIRECT) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag("new_chat_mode_direct"),
         )
         ModeSegmentButton(
             label = stringResource(R.string.new_chat_mode_group),
             icon = Icons.Outlined.Group,
             isSelected = selectedMode == NewChatMode.GROUP,
             onClick = { onSelectMode(NewChatMode.GROUP) },
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag("new_chat_mode_group"),
         )
     }
 }
@@ -385,7 +394,9 @@ private fun EmailLookupSection(
         ) {
             BasicTextField(
                 state = emailSearchState,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("new_chat_email_field"),
                 interactionSource = interactionSource,
                 lineLimits = TextFieldLineLimits.SingleLine,
                 textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -433,7 +444,9 @@ private fun EmailLookupSection(
                         if (emailSearchState.text.isNotEmpty()) {
                             IconButton(
                                 onClick = onClearInput,
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .testTag("new_chat_clear_search_button"),
                             ) {
                                 Icon(
                                     imageVector = Icons.Outlined.Close,
@@ -456,7 +469,9 @@ private fun EmailLookupSection(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
-                modifier = Modifier.heightIn(min = 48.dp),
+                modifier = Modifier
+                    .heightIn(min = 48.dp)
+                    .testTag("new_chat_search_button"),
             ) {
                 if (isSearching) {
                     CircularProgressIndicator(
@@ -487,7 +502,9 @@ private fun InlineErrorRow(
     modifier: Modifier = Modifier,
 ) {
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("new_chat_error_banner"),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -551,6 +568,7 @@ private fun SearchedParticipantSection(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
+                .testTag("new_chat_searched_participant_card")
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .then(borderModifier)
@@ -623,7 +641,9 @@ private fun SearchedParticipantSection(
 
             IconButton(
                 onClick = onDismiss,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag("new_chat_dismiss_search_result_button"),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Close,
@@ -757,6 +777,7 @@ private fun SelectedParticipantChip(
     Row(
         modifier = modifier
             .heightIn(min = 36.dp)
+            .testTag("new_chat_participant_chip_${participant.userId}")
             .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .border(
@@ -795,7 +816,9 @@ private fun SelectedParticipantChip(
 
         IconButton(
             onClick = onRemove,
-            modifier = Modifier.size(28.dp),
+            modifier = Modifier
+                .size(28.dp)
+                .testTag("new_chat_remove_participant_${participant.userId}"),
         ) {
             Icon(
                 imageVector = Icons.Outlined.Close,
@@ -851,7 +874,9 @@ private fun FirstMessageComposerSection(
 
         BasicTextField(
             state = firstMessageState,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("new_chat_first_message_field"),
             interactionSource = interactionSource,
             lineLimits = TextFieldLineLimits.MultiLine(
                 minHeightInLines = 4,
@@ -933,7 +958,9 @@ private fun GroupNameInputSection(
 
         BasicTextField(
             state = groupNameState,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("new_chat_group_name_field"),
             interactionSource = interactionSource,
             lineLimits = TextFieldLineLimits.SingleLine,
             textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -995,7 +1022,8 @@ private fun DirectChatSubmitSection(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 48.dp),
+                .heightIn(min = 48.dp)
+                .testTag("new_chat_submit_direct_button"),
         ) {
             if (isSubmitting) {
                 CircularProgressIndicator(
@@ -1057,7 +1085,8 @@ private fun GroupChatSubmitSection(
         ),
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 48.dp),
+            .heightIn(min = 48.dp)
+            .testTag("new_chat_submit_group_button"),
     ) {
         if (isSubmitting) {
             CircularProgressIndicator(

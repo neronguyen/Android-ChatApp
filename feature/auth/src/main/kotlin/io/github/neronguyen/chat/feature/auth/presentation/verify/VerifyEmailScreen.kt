@@ -105,7 +105,9 @@ fun VerifyEmailScreen(
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
-            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f),
+            modifier = Modifier
+                .testTag("verify_email_error_text")
+                .alpha(if (activeErrorText != null) 1f else 0f),
         )
 
         if (uiState.infoMessage != null) {
@@ -115,6 +117,7 @@ fun VerifyEmailScreen(
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("verify_email_info_text"),
             )
         }
 
@@ -139,7 +142,9 @@ fun VerifyEmailScreen(
             ) {
                 if (showLoading) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier
+                            .size(24.dp)
+                            .testTag("verify_loading_indicator"),
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {

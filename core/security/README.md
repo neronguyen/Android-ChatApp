@@ -16,4 +16,6 @@ Android KeyStore cryptographic manager providing hardware-backed AES-256-GCM aut
 - Mutates Android KeyStore alias keys on disk/TEE.
 
 ## Verification
+
 - Run: `./gradlew :core:security:testDebugUnitTest --rerun-tasks`
+  (`AndroidKeyStoreCryptoManagerTest`)

@@ -187,7 +187,9 @@ fun ResetPasswordScreen(
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
             textAlign = TextAlign.Center,
-            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f),
+            modifier = Modifier
+                .testTag("reset_password_error_text")
+                .alpha(if (activeErrorText != null) 1f else 0f),
         )
 
         if (uiState.infoMessage != null) {
@@ -197,6 +199,7 @@ fun ResetPasswordScreen(
                 color = MaterialTheme.colorScheme.primary,
                 style = MaterialTheme.typography.bodySmall,
                 textAlign = TextAlign.Center,
+                modifier = Modifier.testTag("reset_password_info_text"),
             )
         }
 
@@ -211,7 +214,9 @@ fun ResetPasswordScreen(
         ) {
             if (showLoading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("reset_password_loading_indicator"),
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
             } else {

@@ -113,7 +113,9 @@ fun ForgotPasswordScreen(
             text = activeErrorText.orEmpty(),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f),
+            modifier = Modifier
+                .testTag("forgot_password_error_text")
+                .alpha(if (activeErrorText != null) 1f else 0f),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -127,7 +129,9 @@ fun ForgotPasswordScreen(
         ) {
             if (showLoading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("forgot_password_loading_indicator"),
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
             } else {

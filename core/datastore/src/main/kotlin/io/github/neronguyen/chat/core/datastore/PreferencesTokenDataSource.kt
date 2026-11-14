@@ -1,7 +1,6 @@
 package io.github.neronguyen.chat.core.datastore
 
 import android.content.Context
-import android.util.Base64
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
@@ -22,6 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import java.io.IOException
+import java.util.Base64
 import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -37,14 +38,26 @@ import javax.inject.Singleton
 private val Context.authDataStore: DataStore<Preferences> by preferencesDataStore(name = "auth_preferences")
 
 @Singleton
-internal class PreferencesTokenDataSource @Inject constructor(
-    @ApplicationContext private val context: Context,
+internal class PreferencesTokenDataSource internal constructor(
+    private val dataStore: DataStore<Preferences>,
     private val cryptoManager: CryptoManager,
     @Dispatcher(ChatDispatchers.IO) private val ioDispatcher: CoroutineDispatcher,
     @AppScope private val appScope: CoroutineScope,
 ) : TokenDataSource {
 
-    private val dataStore = context.authDataStore
+    @Inject
+    constructor(
+        @ApplicationContext context: Context,
+        cryptoManager: CryptoManager,
+        @Dispatcher(ChatDispatchers.IO) ioDispatcher: CoroutineDispatcher,
+        @AppScope appScope: CoroutineScope,
+    ) : this(
+        dataStore = context.authDataStore,
+        cryptoManager = cryptoManager,
+        ioDispatcher = ioDispatcher,
+        appScope = appScope,
+    )
+
     private val json = Json { ignoreUnknownKeys = true }
 
     private val cachedAccessToken = AtomicReference<String?>(null)
@@ -58,10 +71,17 @@ internal class PreferencesTokenDataSource @Inject constructor(
             val encryptedAccessToken = preferences[KEY_ENCRYPTED_ACCESS_TOKEN]
                 ?: return@map AuthState.Unauthenticated
 
-            val userDataJson = preferences[KEY_USER_DATA] ?: return@map AuthState.Unauthenticated
+            val userDataJson = preferences[KEY_USER_DATA]
+            if (userDataJson == null) {
+                clearCorruptedPreferences()
+                return@map AuthState.Unauthenticated
+            }
 
             val accessToken = decryptString(encryptedAccessToken)
-            if (accessToken.isBlank()) return@map AuthState.Unauthenticated
+            if (accessToken.isBlank()) {
+                clearCorruptedPreferences()
+                return@map AuthState.Unauthenticated
+            }
 
             try {
                 val userData = json.decodeFromString<UserData>(userDataJson)
@@ -70,9 +90,11 @@ internal class PreferencesTokenDataSource @Inject constructor(
                     accessToken = accessToken,
                 )
             } catch (_: Exception) {
+                clearCorruptedPreferences()
                 AuthState.Unauthenticated
             }
         }
+        .distinctUntilChanged()
         .onEach { state ->
             if (state is AuthState.Authenticated) cachedAccessToken.set(state.accessToken)
             else cachedAccessToken.set(null)
@@ -94,7 +116,14 @@ internal class PreferencesTokenDataSource @Inject constructor(
     override suspend fun getRefreshToken(): String? = withContext(ioDispatcher) {
         val preferences = dataStore.data.firstOrNull() ?: return@withContext null
         val encrypted = preferences[KEY_ENCRYPTED_REFRESH_TOKEN] ?: return@withContext null
-        decryptString(encrypted).ifBlank { null }
+        if (encrypted.isEmpty()) return@withContext null
+
+        val decrypted = decryptString(encrypted)
+        if (decrypted.isBlank()) {
+            clearCorruptedPreferences()
+            return@withContext null
+        }
+        decrypted
     }
 
     override suspend fun saveAuthData(user: User, accessToken: String, refreshToken: String) =
@@ -139,18 +168,27 @@ internal class PreferencesTokenDataSource @Inject constructor(
         }
     }
 
+    private suspend fun clearCorruptedPreferences() {
+        cachedAccessToken.set(null)
+        runCatching {
+            dataStore.edit { preferences ->
+                preferences.clear()
+            }
+        }
+    }
+
     private fun encryptString(rawText: String): String {
         if (rawText.isEmpty()) return ""
 
         val encryptedBytes = cryptoManager.encrypt(rawText.encodeToByteArray())
-        return Base64.encodeToString(encryptedBytes, Base64.NO_WRAP)
+        return Base64.getEncoder().encodeToString(encryptedBytes)
     }
 
     private fun decryptString(encryptedBase64: String): String {
         if (encryptedBase64.isEmpty()) return ""
 
         return try {
-            val encryptedBytes = Base64.decode(encryptedBase64, Base64.NO_WRAP)
+            val encryptedBytes = Base64.getDecoder().decode(encryptedBase64)
             val decryptedBytes = cryptoManager.decrypt(encryptedBytes)
             decryptedBytes.decodeToString()
         } catch (_: Exception) {
@@ -159,8 +197,8 @@ internal class PreferencesTokenDataSource @Inject constructor(
     }
 
     companion object {
-        private val KEY_ENCRYPTED_ACCESS_TOKEN = stringPreferencesKey("encrypted_access_token")
-        private val KEY_ENCRYPTED_REFRESH_TOKEN = stringPreferencesKey("encrypted_refresh_token")
-        private val KEY_USER_DATA = stringPreferencesKey("user_data")
+        internal val KEY_ENCRYPTED_ACCESS_TOKEN = stringPreferencesKey("encrypted_access_token")
+        internal val KEY_ENCRYPTED_REFRESH_TOKEN = stringPreferencesKey("encrypted_refresh_token")
+        internal val KEY_USER_DATA = stringPreferencesKey("user_data")
     }
 }

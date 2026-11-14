@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -90,6 +91,7 @@ fun AccountScreen(
     if (uiState.showSignOutConfirmation) {
         AlertDialog(
             onDismissRequest = { onEvent(AccountUiEvent.DismissSignOutConfirmation) },
+            modifier = Modifier.testTag("account_sign_out_dialog"),
             title = {
                 Text(
                     text = stringResource(R.string.account_sign_out_confirm_title),
@@ -105,6 +107,7 @@ fun AccountScreen(
             confirmButton = {
                 TextButton(
                     onClick = { onEvent(AccountUiEvent.ConfirmSignOut) },
+                    modifier = Modifier.testTag("account_sign_out_confirm_button"),
                 ) {
                     Text(
                         text = stringResource(R.string.account_sign_out),
@@ -116,6 +119,7 @@ fun AccountScreen(
             dismissButton = {
                 TextButton(
                     onClick = { onEvent(AccountUiEvent.DismissSignOutConfirmation) },
+                    modifier = Modifier.testTag("account_sign_out_cancel_button"),
                 ) {
                     Text(
                         text = stringResource(R.string.conversation_cancel),
@@ -127,7 +131,9 @@ fun AccountScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier
+            .fillMaxSize()
+            .testTag("account_screen"),
         containerColor = MaterialTheme.colorScheme.background,
         contentColor = MaterialTheme.colorScheme.onBackground,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -164,6 +170,7 @@ fun AccountScreen(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .testTag("account_sign_out_error")
                         .clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.errorContainer)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -204,7 +211,9 @@ private fun AccountTopBar(
         navigationIcon = {
             IconButton(
                 onClick = onBackClick,
-                modifier = Modifier.size(48.dp),
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("account_back_button"),
             ) {
                 Icon(
                     imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
@@ -275,6 +284,7 @@ private fun RealtimeSyncBanner(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .testTag("account_sync_banner")
             .clip(RoundedCornerShape(12.dp))
             .background(MaterialTheme.colorScheme.surfaceVariant)
             .padding(horizontal = 12.dp, vertical = 10.dp),
@@ -447,6 +457,7 @@ private fun CredentialStatusSection(
 
             Row(
                 modifier = Modifier
+                    .testTag("account_verification_badge")
                     .clip(RoundedCornerShape(16.dp))
                     .background(MaterialTheme.colorScheme.background)
                     .padding(horizontal = 8.dp, vertical = 4.dp),
@@ -527,7 +538,8 @@ private fun SignOutSection(
             ),
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(min = 48.dp),
+                .heightIn(min = 48.dp)
+                .testTag("account_sign_out_button"),
         ) {
             if (isSigningOut) {
                 CircularProgressIndicator(

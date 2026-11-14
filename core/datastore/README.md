@@ -11,10 +11,14 @@ Preferences DataStore wrapper storing encrypted access/refresh session tokens, c
 ## Invariants
 - Tokens stored in DataStore are always encrypted via `CryptoManager`.
 - In-memory `AtomicReference` ensures fast non-blocking token reads in OkHttp interceptors.
+- Corrupted ciphertext or malformed user payloads self-heal by clearing stored preferences and
+  emitting `AuthState.Unauthenticated`.
 - Exposes `authState: Flow<AuthState>` using the domain model from `:core:model`.
 
 ## Side Effects
 - Reads/writes private app Preferences DataStore files on disk.
 
 ## Verification
+
 - Run: `./gradlew :core:datastore:testDebugUnitTest --rerun-tasks`
+  (`PreferencesTokenDataSourceTest`)

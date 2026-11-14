@@ -24,14 +24,18 @@ Authentication and onboarding user experience built with Jetpack Compose, execut
 - Every `*Screen.kt` exposes `internal` `@Preview` functions wrapped in `ChatTheme` reused by
   `src/screenshotTest`.
 - Validates inputs synchronously via `AuthValidator` before dispatching network requests.
-- Exposes deterministic `testTag` identifiers for headless Robolectric testing.
+- Exposes deterministic `testTag` identifiers across all auth screens (`login_screen`,
+  `register_screen`, `verify_email_screen`, `forgot_password_screen`, `reset_password_screen`, and
+  their fields/buttons/error banners) covered by Robolectric `*ScreenTest` suites.
 
 ## Side Effects
 - Mutates UI state flows; triggers authentication network requests via `AuthRepository`.
 
 ## Verification
 
-- Unit tests: `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
+- Unit & Robolectric UI tests: `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
+  (`LoginScreenTest`, `RegisterScreenTest`, `VerifyEmailScreenTest`, `ForgotPasswordScreenTest`,
+  `ResetPasswordScreenTest`)
 - Validate screenshots against references:
   `./gradlew :feature:auth:testDebugScreenshotTestDefaultTestSuite`
 - Update screenshot reference images:

@@ -32,4 +32,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     ksp(libs.hilt.compiler)
+
+    // Unit Testing
+    testImplementation(libs.kotlin.test.junit)
 }

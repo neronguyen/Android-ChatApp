@@ -19,7 +19,8 @@ Pure Kotlin client domain models and typed domain error hierarchies.
   `DataError.isRetryable()` transient failure classification.
 
 ## Invariants
-- Zero Android framework or persistence dependencies (pure Kotlin JVM module).
+
+- Zero Android framework, persistence, or serialization dependencies (pure Kotlin JVM module).
 - Never depends on wire DTOs (`:contract:*`) or database entities (`:core:database`).
 
 ## Side Effects

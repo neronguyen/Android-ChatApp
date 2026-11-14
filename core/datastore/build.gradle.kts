@@ -43,4 +43,9 @@ dependencies {
 
     // KotlinX Serialization
     implementation(libs.kotlinx.serialization.json)
+
+    // Unit Testing
+    testImplementation(libs.kotlin.test.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.turbine)
 }

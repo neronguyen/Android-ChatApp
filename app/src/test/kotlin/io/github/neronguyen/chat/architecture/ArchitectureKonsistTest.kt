@@ -76,6 +76,19 @@ class ArchitectureKonsistTest {
     }
 
     @Test
+    fun `domain model classes do not import serialization or infrastructure`() {
+        Konsist
+            .scopeFromProject()
+            .files
+            .filter { it.path.contains("/core/model/src/main/") }
+            .assertTrue { file ->
+                file.imports.none { import ->
+                    import.name.startsWith("kotlinx.serialization")
+                }
+            }
+    }
+
+    @Test
     fun `presentation and app modules do not hardcode Color literals outside core ui theme`() {
         val colorConstructorRegex = Regex("""\bColor\s*\(""")
         val colorConstantRegex = Regex("""\bColor\.([A-Z]\w*)""")
@@ -149,6 +162,28 @@ class ArchitectureKonsistTest {
                                 )
                             )
                         }
+            }
+    }
+
+    @Test
+    fun `every feature Screen file has a matching Robolectric ScreenTest`() {
+        val testFileNames = Konsist
+            .scopeFromProject()
+            .files
+            .filter { it.path.contains("/src/test/") }
+            .map { it.name }
+            .toSet()
+
+        Konsist
+            .scopeFromProject()
+            .files
+            .filter {
+                it.path.contains("/feature/") &&
+                        it.path.contains("/src/main/") &&
+                        it.path.endsWith("Screen.kt")
+            }
+            .assertTrue { screenFile ->
+                "${screenFile.name}Test" in testFileNames
             }
     }
 

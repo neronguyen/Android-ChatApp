@@ -25,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -80,6 +81,7 @@ fun RegisterScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
+            .testTag("register_screen")
             .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
@@ -99,7 +101,9 @@ fun RegisterScreen(
                 keyboardType = KeyboardType.Email,
                 imeAction = ImeAction.Next,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("email_field"),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -112,7 +116,9 @@ fun RegisterScreen(
                 keyboardType = KeyboardType.Text,
                 imeAction = ImeAction.Next,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("display_name_field"),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -124,7 +130,9 @@ fun RegisterScreen(
                 keyboardType = KeyboardType.Password,
                 imeAction = ImeAction.Done,
             ),
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("password_field"),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
@@ -134,19 +142,25 @@ fun RegisterScreen(
             text = activeErrorText.orEmpty(),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f),
+            modifier = Modifier
+                .testTag("register_error_text")
+                .alpha(if (activeErrorText != null) 1f else 0f),
         )
 
         Spacer(modifier = Modifier.height(12.dp))
 
         Button(
             onClick = { onEvent(RegisterUiEvent.Register) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("register_button"),
             enabled = !uiState.isLoading,
         ) {
             if (showLoading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("register_loading_indicator"),
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
             } else {
@@ -156,7 +170,10 @@ fun RegisterScreen(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        TextButton(onClick = onNavigateToLogin) {
+        TextButton(
+            onClick = onNavigateToLogin,
+            modifier = Modifier.testTag("login_button"),
+        ) {
             Text(stringResource(R.string.already_have_account))
         }
     }

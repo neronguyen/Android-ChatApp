@@ -168,7 +168,9 @@ fun LoginScreen(
             text = activeErrorText.orEmpty(),
             color = MaterialTheme.colorScheme.error,
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.alpha(if (activeErrorText != null) 1f else 0f),
+            modifier = Modifier
+                .testTag("login_error_text")
+                .alpha(if (activeErrorText != null) 1f else 0f),
         )
 
         if (uiState.authError == AuthError.EmailNotVerified) {
@@ -192,7 +194,9 @@ fun LoginScreen(
         ) {
             if (showLoading) {
                 CircularProgressIndicator(
-                    modifier = Modifier.size(24.dp),
+                    modifier = Modifier
+                        .size(24.dp)
+                        .testTag("login_loading_indicator"),
                     color = MaterialTheme.colorScheme.onPrimary,
                 )
             } else {

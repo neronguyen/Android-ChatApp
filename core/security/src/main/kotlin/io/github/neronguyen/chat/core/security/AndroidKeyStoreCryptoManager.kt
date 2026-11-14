@@ -11,13 +11,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-internal class AndroidKeyStoreCryptoManager @Inject constructor() : CryptoManager {
+internal class AndroidKeyStoreCryptoManager internal constructor(
+    private val secretKeyProvider: () -> SecretKey,
+) : CryptoManager {
+
+    @Inject
+    constructor() : this(secretKeyProvider = AndroidKeyStoreKeyProvider())
 
     override fun encrypt(bytes: ByteArray): ByteArray {
         if (bytes.isEmpty()) return byteArrayOf()
 
         val cipher = Cipher.getInstance(TRANSFORMATION)
-        cipher.init(Cipher.ENCRYPT_MODE, getSecretKey())
+        cipher.init(Cipher.ENCRYPT_MODE, secretKeyProvider())
         val iv = cipher.iv
         val encryptedBytes = cipher.doFinal(bytes)
 
@@ -32,39 +37,41 @@ internal class AndroidKeyStoreCryptoManager @Inject constructor() : CryptoManage
 
         val cipher = Cipher.getInstance(TRANSFORMATION)
         val spec = GCMParameterSpec(GCM_TAG_LENGTH, iv)
-        cipher.init(Cipher.DECRYPT_MODE, getSecretKey(), spec)
+        cipher.init(Cipher.DECRYPT_MODE, secretKeyProvider(), spec)
 
         return cipher.doFinal(ciphertext)
     }
 
-    private val keyStore: KeyStore by lazy {
-        KeyStore.getInstance(KEYSTORE_PROVIDER).apply {
-            load(null)
+    private class AndroidKeyStoreKeyProvider : () -> SecretKey {
+        private val keyStore: KeyStore by lazy {
+            KeyStore.getInstance(KEYSTORE_PROVIDER).apply {
+                load(null)
+            }
         }
-    }
 
-    @Synchronized
-    private fun getSecretKey(): SecretKey {
-        val existingKey = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
-        return existingKey?.secretKey ?: generateSecretKey()
-    }
+        @Synchronized
+        override fun invoke(): SecretKey {
+            val existingKey = keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry
+            return existingKey?.secretKey ?: generateSecretKey()
+        }
 
-    private fun generateSecretKey(): SecretKey {
-        val keyGenerator = KeyGenerator.getInstance(
-            KeyProperties.KEY_ALGORITHM_AES,
-            KEYSTORE_PROVIDER
-        )
-        val spec = KeyGenParameterSpec.Builder(
-            KEY_ALIAS,
-            KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
-        )
-            .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-            .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-            .setKeySize(256)
-            .build()
+        private fun generateSecretKey(): SecretKey {
+            val keyGenerator = KeyGenerator.getInstance(
+                KeyProperties.KEY_ALGORITHM_AES,
+                KEYSTORE_PROVIDER
+            )
+            val spec = KeyGenParameterSpec.Builder(
+                KEY_ALIAS,
+                KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT
+            )
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .setKeySize(256)
+                .build()
 
-        keyGenerator.init(spec)
-        return keyGenerator.generateKey()
+            keyGenerator.init(spec)
+            return keyGenerator.generateKey()
+        }
     }
 
     companion object {
