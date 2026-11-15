@@ -73,6 +73,10 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 # Full clean unit tests & Android Lint gate (Tier 2 - Pre-commit)
 ./scripts/verify.sh clean
 
+# Full-stack AVD + Spring Boot + Docker Compose E2E smoke (Tier 3)
+./scripts/smoke-e2e.sh --journey all
+./scripts/smoke-e2e.sh --journey happy-path --record-demo
+
 # Direct Gradle commands
 ./gradlew testDebugUnitTest
 ./gradlew assembleDebug
