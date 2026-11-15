@@ -57,8 +57,9 @@ class DebouncedNetworkMonitorTest {
         testScheduler.runCurrent()
         assertEquals(listOf(true), emissions)
 
+        val debounceMs = DebouncedNetworkMonitor.DEFAULT_OFFLINE_DEBOUNCE.inWholeMilliseconds
         delegate.setConnected(false)
-        testScheduler.advanceTimeBy(299)
+        testScheduler.advanceTimeBy(debounceMs - 1)
         testScheduler.runCurrent()
         assertEquals(listOf(true), emissions)
 
@@ -80,13 +81,14 @@ class DebouncedNetworkMonitorTest {
         testScheduler.runCurrent()
         assertEquals(listOf(true), emissions)
 
+        val debounceMs = DebouncedNetworkMonitor.DEFAULT_OFFLINE_DEBOUNCE.inWholeMilliseconds
         delegate.setConnected(false)
-        testScheduler.advanceTimeBy(299)
+        testScheduler.advanceTimeBy(debounceMs - 1)
         testScheduler.runCurrent()
         assertEquals(listOf(true), emissions)
 
         delegate.setConnected(true)
-        testScheduler.advanceTimeBy(500)
+        testScheduler.advanceTimeBy(debounceMs + 200)
         testScheduler.runCurrent()
         assertEquals(listOf(true), emissions)
         job.cancel()
@@ -143,7 +145,7 @@ class DebouncedNetworkMonitorTest {
         assertEquals(listOf(true), emissions2)
 
         upstream.value = false
-        testScheduler.advanceTimeBy(300)
+        testScheduler.advanceTimeBy(DebouncedNetworkMonitor.DEFAULT_OFFLINE_DEBOUNCE.inWholeMilliseconds)
         testScheduler.runCurrent()
 
         assertEquals(listOf(true, false), emissions1)
@@ -171,7 +173,7 @@ class DebouncedNetworkMonitorTest {
         testScheduler.runCurrent()
 
         delegate.setConnected(false)
-        testScheduler.advanceTimeBy(300)
+        testScheduler.advanceTimeBy(DebouncedNetworkMonitor.DEFAULT_OFFLINE_DEBOUNCE.inWholeMilliseconds)
         testScheduler.runCurrent()
         assertEquals(listOf(true, false), firstEmissions)
 

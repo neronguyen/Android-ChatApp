@@ -274,7 +274,7 @@ In `core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/sync/ChatSyncM
 - **Concurrency & Cancellation Invariants**:
     - In `executeCatchUpSync()`, before updating `_syncState.value = ChatSyncState.Synced` or
       `ChatSyncState.Failed`, check if `isOnline.load() == false` (tracked from
-      `networkMonitor.isOnline.debounceOffline()`). If offline, leave
+      `networkMonitor.isOnline`, backed by `DebouncedNetworkMonitor`). If offline, leave
       `_syncState.value = ChatSyncState.Offline` to prevent clobbering airplane mode transitions.
     - In the `finally` block of `executeCatchUpSync()`, if the coroutine is cancelled while in
       `Syncing`, transition `_syncState.value` based on current reachability: `Offline` if

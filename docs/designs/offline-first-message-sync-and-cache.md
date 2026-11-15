@@ -41,7 +41,8 @@ By resolving these concerns fully within `:core:data` and `:core:model`, present
    `NetworkMonitor` wrapping Android `ConnectivityManager` callbacks (`NET_CAPABILITY_INTERNET`
    tracking in `ConnectivityManagerNetworkMonitor` matching Now in Android) as `internal` to
    `:core:data`. Synchronously seed initial network state on cold start, debounce offline
-   transitions by 300ms in consumers (`debounceOffline()`), and cancel backoff delays with 0ms delay
+   transitions by 700ms via the `DebouncedNetworkMonitor` decorator, and cancel backoff delays with
+   0ms delay
    on online recovery.
 3. **Smoothed Foreground Reconnection Supervision**: In `RealtimeConnectionManagerImpl`, smooth `connectionState` during active foreground supervision so it continuously emits `RealtimeConnectionState.CONNECTING` across exponential backoff delays until `CONNECTED` is reached, eliminating banner flicker. Include a dead-man switch (timeout after 5 failures) allowing manual retry intervention via `reconnect()`.
 4. **Unified Event-Driven State Machine (`ChatSyncState`)**: Expand `ChatSyncState` in `:core:model` to include `Idle`, `Offline`, `Connecting`, `Syncing`, `Synced`, and `Failed(val error: DataError)`. Expose a single `StateFlow<ChatSyncState>` from `ChatSyncManager` coordinating network reachability, socket reconnection, and catch-up sync.
@@ -71,7 +72,7 @@ User opens the app in Airplane Mode (`isOnline == false`). `NetworkMonitor` dete
 ### CUJ 2: WebSocket Drop & Automatic Reconnect Reconciliation
 
 While chatting, the user enters an elevator and loses cellular connection. `NetworkMonitor` detects
-the drop (debounced by 300ms in consumers via `debounceOffline()`). `RealtimeConnectionManagerImpl`
+the drop (debounced by 700ms via `DebouncedNetworkMonitor`). `RealtimeConnectionManagerImpl`
 pauses reconnection. Inbound pending messages for uncached rooms remain safely guarded. Upon exiting
 the elevator, `NetworkMonitor` emits `isOnline == true`. Active backoffs are cancelled immediately
 (0ms delay), `RealtimeConnectionManagerImpl` emits smoothed `CONNECTING`, the WebSocket reconnects,
