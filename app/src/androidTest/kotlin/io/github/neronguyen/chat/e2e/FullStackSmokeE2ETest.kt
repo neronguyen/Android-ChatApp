@@ -33,6 +33,7 @@ class FullStackSmokeE2ETest : BaseE2EJourneyTest() {
         val bobEmail = E2EPeerClient.DEFAULT_BOB_EMAIL
 
         peerClient.ensureVerifiedPeerBob()
+        peerClient.connectWebSocket()
 
         step("00_register_form", "S0_REGISTER_FORM") {
             waitForTag("login_screen", timeoutMs = 15_000L)
@@ -121,12 +122,12 @@ class FullStackSmokeE2ETest : BaseE2EJourneyTest() {
             }
             composeTestRule.onNodeWithText(firstOutbound).assertIsDisplayed()
             composeTestRule.onNodeWithText(secondOutbound).assertIsDisplayed()
+            peerClient.awaitReceivedMessages(listOf(firstOutbound, secondOutbound))
         }
 
         lateinit var roomId: String
         step("06_inbound_message_received", "S6_INBOUND_MESSAGE_RECEIVED") {
             roomId = peerClient.resolveDirectRoomId(aliceEmail)
-            peerClient.connectWebSocket()
             val inboundReply = "Reply from Bob over WS"
             peerClient.sendDirectTextMessage(roomId, inboundReply)
             waitForText(inboundReply, timeoutMs = 20_000L)

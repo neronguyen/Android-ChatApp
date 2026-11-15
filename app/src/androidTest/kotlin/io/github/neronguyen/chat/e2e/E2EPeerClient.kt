@@ -48,6 +48,12 @@ internal class E2EPeerClient(
         .writeTimeout(15, TimeUnit.SECONDS)
         .build()
 
+    private val wsClient = client.newBuilder()
+        .callTimeout(0, TimeUnit.SECONDS)
+        .readTimeout(0, TimeUnit.SECONDS)
+        .pingInterval(30, TimeUnit.SECONDS)
+        .build()
+
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     @Volatile
@@ -59,7 +65,7 @@ internal class E2EPeerClient(
     @Volatile
     private var webSocket: WebSocket? = null
 
-    private val wsErrors = CopyOnWriteArrayList<String>()
+    private val wsEvents = CopyOnWriteArrayList<WsServerEvent>()
 
     fun ensureVerifiedPeerBob(
         email: String = DEFAULT_BOB_EMAIL,
@@ -197,7 +203,7 @@ internal class E2EPeerClient(
         val token = requireBobToken()
         webSocket?.close(1000, "Reconnecting")
         webSocket = null
-        wsErrors.clear()
+        wsEvents.clear()
 
         val openLatch = CountDownLatch(1)
         var failure: Throwable? = null
@@ -207,7 +213,7 @@ internal class E2EPeerClient(
             .header("Authorization", "Bearer $token")
             .build()
 
-        val socket = client.newWebSocket(
+        val socket = wsClient.newWebSocket(
             request,
             object : WebSocketListener() {
                 override fun onOpen(webSocket: WebSocket, response: Response) {
@@ -218,6 +224,7 @@ internal class E2EPeerClient(
                     runCatching {
                         ContractJson.decodeFromString<WsServerEvent>(text)
                     }.onSuccess { event ->
+                        wsEvents.add(event)
                         when (event) {
                             is WsServerEvent.NewMessage -> {
                                 val msg = event.message
@@ -236,7 +243,6 @@ internal class E2EPeerClient(
                             }
 
                             is WsServerEvent.Error -> {
-                                wsErrors.add("${event.error}: ${event.message}")
                                 Log.w(TAG, "[BOB-WS] Error ${event.error}: ${event.message}")
                             }
 
@@ -279,11 +285,41 @@ internal class E2EPeerClient(
             ),
         )
         check(socket.send(payload)) {
-            "WebSocket.send returned false for roomId=$roomId (errors=$wsErrors)"
+            "WebSocket.send returned false for roomId=$roomId (errors=${wsErrorSummaries()})"
         }
         Log.i(TAG, "[BOB-WS] Sending: \"$content\"")
         return messageId
     }
+
+    fun awaitReceivedMessages(
+        expectedContents: List<String>,
+        timeoutMs: Long = 10_000L,
+    ) {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            val receivedSet = receivedPeerMessageContents().toSet()
+            if (expectedContents.all { it in receivedSet }) {
+                return
+            }
+            Thread.sleep(100L)
+        }
+        error(
+            "Timed out waiting for Bob WebSocket to receive $expectedContents within ${timeoutMs}ms " +
+                    "(received=${receivedPeerMessageContents()}, errors=${wsErrorSummaries()})",
+        )
+    }
+
+    private fun receivedPeerMessageContents(): List<String> =
+        wsEvents
+            .filterIsInstance<WsServerEvent.NewMessage>()
+            .map { it.message }
+            .filter { it.senderId != bobUserId }
+            .map { it.content }
+
+    private fun wsErrorSummaries(): List<String> =
+        wsEvents
+            .filterIsInstance<WsServerEvent.Error>()
+            .map { "${it.error}: ${it.message}" }
 
     override fun close() {
         if (webSocket != null) {
