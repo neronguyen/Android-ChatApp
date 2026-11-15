@@ -105,11 +105,23 @@ stop_screen_recording() {
     waited=$((waited + 1))
   done
 
+  if kill -0 "$SCREENRECORD_PID" 2>/dev/null; then
+    local pipe_wait=0
+    while [ "$pipe_wait" -lt 10 ] && kill -0 "$SCREENRECORD_PID" 2>/dev/null; do
+      sleep 0.3
+      pipe_wait=$((pipe_wait + 1))
+    done
+    if kill -0 "$SCREENRECORD_PID" 2>/dev/null; then
+      adb shell "kill -KILL \$(pidof screenrecord)" </dev/null >/dev/null 2>&1 || true
+      kill "$SCREENRECORD_PID" 2>/dev/null || true
+    fi
+  fi
+
   wait "$SCREENRECORD_PID" 2>/dev/null || true
   SCREENRECORD_PID=""
   sleep 1
 
-  if adb pull "$REMOTE_RAW_VIDEO" "${JOURNEY_DIR}/avd-raw.mp4" >/dev/null 2>&1 && [ -s "${JOURNEY_DIR}/avd-raw.mp4" ]; then
+  if adb pull "$REMOTE_RAW_VIDEO" "${JOURNEY_DIR}/avd-raw.mp4" </dev/null >/dev/null 2>&1 && [ -s "${JOURNEY_DIR}/avd-raw.mp4" ]; then
     echo "==> [E2E RECORD] Pulled raw AVD recording."
   else
     echo "WARN: [E2E RECORD] Could not pull non-empty $REMOTE_RAW_VIDEO from device." >&2
@@ -136,7 +148,8 @@ render_video_with_ffmpeg() {
 
   echo "==> [E2E RECORD] Rendering video with ffmpeg for '${JOURNEY}'..."
 
-  python3 - "$raw_mp4" "${JOURNEY_DIR}/logcat.txt" "$ass_file" "$JOURNEY" <<'PY'
+  local video_duration
+  video_duration="$(python3 - "$raw_mp4" "${JOURNEY_DIR}/logcat.txt" "$ass_file" "$JOURNEY" <<'PY'
 import datetime
 import json
 import os
@@ -152,6 +165,7 @@ probe = json.loads(
             "ffprobe", "-v", "error", "-select_streams", "v:0",
             "-show_entries", "stream=duration:format=duration", "-of", "json", raw_mp4,
         ],
+        stdin=subprocess.DEVNULL,
         text=True,
     )
 )
@@ -159,9 +173,12 @@ stream = (probe.get("streams") or [{}])[0]
 fmt = probe.get("format") or {}
 raw_dur = stream.get("duration") or fmt.get("duration")
 try:
-    duration = max(float(raw_dur), 3.0) if raw_dur and raw_dur != "N/A" else 30.0
+    raw_duration = max(float(raw_dur), 3.0) if raw_dur and raw_dur != "N/A" else 30.0
 except (TypeError, ValueError):
-    duration = 30.0
+    raw_duration = 30.0
+
+hold_sec = 2.0
+total_duration = raw_duration + hold_sec
 
 pat = re.compile(
     r"^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+[VDIWEF]/(E2E_TEST|E2E_PEER)\s*\(\s*\d+\):\s*(.*)$"
@@ -181,7 +198,7 @@ if os.path.isfile(log_path):
                 ts = datetime.datetime.strptime(f"{year}-{ts_str}", "%Y-%m-%d %H:%M:%S.%f").timestamp()
             except ValueError:
                 ts = 0.0
-            clock = ts_str.split()[1]
+            clock = ts_str.split()[1].split(".")[0]
             if tag == "E2E_TEST" and msg.startswith("[RECORDER]") and start_ts is None:
                 start_ts = ts
             elif tag == "E2E_PEER":
@@ -221,34 +238,35 @@ def bgr_color(msg: str) -> str:
 ass_lines = [
     "[Script Info]",
     "ScriptType: v4.00+",
-    "PlayResX: 760",
+    "PlayResX: 1000",
     "PlayResY: 960",
+    "WrapStyle: 2",
     "",
     "[V4+ Styles]",
     "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-    "Style: Header,Monospace,18,&H009E948B,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,7,24,20,16,1",
-    "Style: Log,Monospace,15,&H00D9D1C9,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,24,20,68,1",
+    "Style: Header,Monospace,32,&H009E948B,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,7,24,24,20,1",
+    "Style: Log,Monospace,30,&H00D9D1C9,&H000000FF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,24,24,92,1",
     "",
     "[Events]",
     "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
-    f"Dialogue: 0,0:00:00.00,{fmt_ass_time(duration)},Header,,0,0,0,,{esc_ass(header)}",
+    f"Dialogue: 0,0:00:00.00,{fmt_ass_time(total_duration)},Header,,0,0,0,,{esc_ass(header)}",
 ]
 
 keyframes = []
 visible = []
 for ts, clock, msg in events:
-    rel_t = max(0.0, min(duration - 0.05, ts - base_ts))
+    rel_t = max(0.0, min(raw_duration - 0.05, ts - base_ts))
     display = f"{clock}  {msg}"
-    if len(display) > 68:
-        display = display[:65] + "..."
-    visible = (visible + [f"{{\\c{bgr_color(msg)}}}{esc_ass(display)}"])[-21:]
+    if len(display) > 56:
+        display = display[:53] + "..."
+    visible = (visible + [f"{{\\c{bgr_color(msg)}}}{esc_ass(display)}"])[-18:]
     if keyframes and abs(keyframes[-1][0] - rel_t) < 0.08:
         keyframes[-1] = (keyframes[-1][0], list(visible))
     else:
         keyframes.append((rel_t, list(visible)))
 
 for idx, (t0, lines) in enumerate(keyframes):
-    t1 = keyframes[idx + 1][0] if idx + 1 < len(keyframes) else duration
+    t1 = keyframes[idx + 1][0] if idx + 1 < len(keyframes) else total_duration
     if t1 > t0:
         body = r"\N".join(lines)
         ass_lines.append(
@@ -257,26 +275,35 @@ for idx, (t0, lines) in enumerate(keyframes):
 
 with open(ass_path, "w", encoding="utf-8") as f:
     f.write("\n".join(ass_lines) + "\n")
-PY
 
-  if ! ffmpeg -y -v error \
+print(f"{total_duration:.3f}")
+PY
+)"
+
+  local ass_file_escaped
+  ass_file_escaped="${ass_file//\\/\\\\}"
+  ass_file_escaped="${ass_file_escaped//:/\\:}"
+  ass_file_escaped="${ass_file_escaped//\'/\\\'}"
+
+  local ffmpeg_err
+  if ! ffmpeg_err="$(ffmpeg -nostdin -y -v error \
     -i "$raw_mp4" \
-    -f lavfi -i "color=c=0x0d1117:s=760x960:r=30" \
-    -filter_complex "[0:v]fps=30,scale=-2:960:flags=lanczos,setsar=1[avd];[1:v]drawbox=x=0:y=0:w=760:h=48:color=0x161b22:t=fill,ass='${ass_file}'[term];[avd][term]hstack=inputs=2[v]" \
+    -f lavfi -i "color=c=0x0d1117:s=1000x960:r=30:d=${video_duration}" \
+    -filter_complex "[0:v]fps=30,scale=-2:960:flags=lanczos,setsar=1,tpad=stop_mode=clone:stop_duration=2[avd];[1:v]drawbox=x=0:y=0:w=1000:h=72:color=0x161b22:t=fill,ass=filename='${ass_file_escaped}'[term];[avd][term]hstack=inputs=2:shortest=1[v]" \
     -map "[v]" \
     -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -movflags +faststart -shortest \
-    "$out_mp4" 2>/dev/null; then
-    echo "==> [E2E RECORD] ffmpeg libass filter unavailable; encoding clean AVD video directly..."
-    ffmpeg -y -v error \
+    "$out_mp4" 2>&1)"; then
+    echo "==> [E2E RECORD] Side-by-side ffmpeg render failed (${ffmpeg_err:-unknown error}); encoding clean AVD video directly..." >&2
+    ffmpeg -nostdin -y -v error \
       -i "$raw_mp4" \
-      -vf "fps=30,scale=-2:960:flags=lanczos,setsar=1" \
+      -vf "fps=30,scale=-2:960:flags=lanczos,setsar=1,tpad=stop_mode=clone:stop_duration=2" \
       -c:v libx264 -preset fast -crf 23 -pix_fmt yuv420p -movflags +faststart \
       "$out_mp4"
   fi
 
-  ffmpeg -y -v error \
+  ffmpeg -nostdin -y -v error \
     -i "$out_mp4" \
-    -vf "fps=8,scale=960:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
+    -vf "fps=8,scale=1080:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse" \
     "$out_gif" || true
 
   rm -f "$raw_mp4" "$ass_file"
@@ -297,11 +324,11 @@ finalize() {
   stop_screen_recording
 
   if [ "$ARTIFACTS_PULLED" = false ]; then
-    adb logcat -d -v time -s E2E_TEST:V E2E_PEER:V TestRunner:I AndroidRuntime:E OkHttp:I >"${JOURNEY_DIR}/logcat.txt" 2>/dev/null || true
+    adb logcat -d -v time -s E2E_TEST:V E2E_PEER:V TestRunner:I AndroidRuntime:E OkHttp:I </dev/null >"${JOURNEY_DIR}/logcat.txt" 2>/dev/null || true
     pull_journey_artifacts "$JOURNEY" "$JOURNEY_DIR"
-    render_video_with_ffmpeg
     ARTIFACTS_PULLED=true
   fi
+  render_video_with_ffmpeg
 
   if [ "$TEARDOWN" = true ]; then
     if [ "$CLEAN" = true ]; then
@@ -320,7 +347,7 @@ trap finalize EXIT
 
 cmd_up
 
-adb shell "rm -rf ${E2E_PERSISTENT_DEVICE_DIR} && mkdir -p ${E2E_PERSISTENT_DEVICE_DIR}" >/dev/null 2>&1 || true
+adb shell "rm -rf ${E2E_PERSISTENT_DEVICE_DIR} && mkdir -p ${E2E_PERSISTENT_DEVICE_DIR}" </dev/null >/dev/null 2>&1 || true
 
 GRADLE_ARGS=(-p "$REPO_DIR")
 if [ "${CI:-false}" = "true" ]; then
@@ -334,8 +361,8 @@ echo "==> [E2E RECORD] Pre-building and installing debug + androidTest APKs..."
 
 test_fqcn="$(journey_test_fqcn "$JOURNEY")"
 echo "==> [E2E RECORD] Preparing clean device state for '${JOURNEY}' (${test_fqcn})..."
-adb shell pm clear "$E2E_APP_ID" >/dev/null 2>&1 || true
-adb logcat -c >/dev/null 2>&1 || true
+adb shell pm clear "$E2E_APP_ID" </dev/null >/dev/null 2>&1 || true
+adb logcat -c </dev/null >/dev/null 2>&1 || true
 
 INSTR_ARGS=(-e e2e true -e class "$test_fqcn")
 if [ "$CAPTURE_STEPS" = true ]; then
@@ -345,7 +372,7 @@ fi
 start_screen_recording
 echo "==> [E2E RECORD] Launching '${JOURNEY}' via am instrument for zero-lag recording..."
 set +e
-INSTR_OUT="$(adb shell am instrument -w "${INSTR_ARGS[@]}" "${E2E_APP_ID}.test/androidx.test.runner.AndroidJUnitRunner" 2>&1 | tr -d '\r')"
+INSTR_OUT="$(adb shell am instrument -w "${INSTR_ARGS[@]}" "${E2E_APP_ID}.test/androidx.test.runner.AndroidJUnitRunner" </dev/null 2>&1 | tr -d '\r')"
 am_rc=$?
 set -e
 printf '%s\n' "$INSTR_OUT"
@@ -356,10 +383,10 @@ else
 fi
 stop_screen_recording
 
-adb logcat -d -v time -s E2E_TEST:V E2E_PEER:V TestRunner:I AndroidRuntime:E OkHttp:I >"${JOURNEY_DIR}/logcat.txt" 2>/dev/null || true
+adb logcat -d -v time -s E2E_TEST:V E2E_PEER:V TestRunner:I AndroidRuntime:E OkHttp:I </dev/null >"${JOURNEY_DIR}/logcat.txt" 2>/dev/null || true
 pull_journey_artifacts "$JOURNEY" "$JOURNEY_DIR"
-render_video_with_ffmpeg
 ARTIFACTS_PULLED=true
+render_video_with_ffmpeg
 
 echo "==> [E2E RECORD] Artifacts saved to: build/reports/e2e/${JOURNEY}/"
 exit "$TEST_EXIT"

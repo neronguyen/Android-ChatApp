@@ -138,7 +138,22 @@ pull_journey_artifacts() {
   local dest_dir="$2"
   mkdir -p "$dest_dir"
 
-  if ! command -v adb >/dev/null 2>&1 || [ "$(adb get-state 2>/dev/null || true)" != "device" ]; then
+  if ! command -v adb >/dev/null 2>&1 || [ "$(adb get-state </dev/null 2>/dev/null || true)" != "device" ]; then
+    return 0
+  fi
+
+  local app_rel_dir="files/e2e/${j_id}"
+  local file_list
+  file_list="$(adb shell "run-as ${E2E_APP_ID} ls -1 ${app_rel_dir} 2>/dev/null" </dev/null 2>/dev/null | tr -d '\r' || true)"
+  if [ -n "$file_list" ]; then
+    local fname
+    while IFS= read -r fname; do
+      [ -z "$fname" ] && continue
+      adb exec-out run-as "$E2E_APP_ID" cat "${app_rel_dir}/${fname}" </dev/null >"${dest_dir}/${fname}" 2>/dev/null || rm -f "${dest_dir}/${fname}"
+    done <<<"$file_list"
+  fi
+
+  if [ -f "${dest_dir}/steps.csv" ] || [ -f "${dest_dir}/failure.png" ]; then
     return 0
   fi
 
@@ -146,7 +161,7 @@ pull_journey_artifacts() {
   for remote_base in "$E2E_PERSISTENT_DEVICE_DIR" "$E2E_APP_DEVICE_DIR"; do
     local remote_dir="${remote_base}/${j_id}"
     rm -rf "${dest_dir}/_pulled"
-    if adb pull "$remote_dir" "${dest_dir}/_pulled" >/dev/null 2>&1 && [ -d "${dest_dir}/_pulled" ]; then
+    if adb pull "$remote_dir" "${dest_dir}/_pulled" </dev/null >/dev/null 2>&1 && [ -d "${dest_dir}/_pulled" ]; then
       if [ -d "${dest_dir}/_pulled/${j_id}" ]; then
         mv "${dest_dir}/_pulled/${j_id}"/* "${dest_dir}/" 2>/dev/null || true
       else

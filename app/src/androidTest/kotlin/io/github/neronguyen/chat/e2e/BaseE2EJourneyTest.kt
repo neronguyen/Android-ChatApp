@@ -1,5 +1,7 @@
 package io.github.neronguyen.chat.e2e
 
+import android.os.Build
+import android.os.ParcelFileDescriptor
 import android.util.Log
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -137,15 +139,15 @@ abstract class BaseE2EJourneyTest {
 
     private fun prepareArtifactDir(): File {
         val targetContext = InstrumentationRegistry.getInstrumentation().targetContext
-        val externalRoot = targetContext.getExternalFilesDir(null) ?: targetContext.filesDir
-        val dir = File(File(externalRoot, "e2e"), journeyId)
+        val dir = File(File(targetContext.filesDir, "e2e"), journeyId)
         if (dir.exists()) {
             dir.listFiles()?.forEach { it.deleteRecursively() }
         } else {
             dir.mkdirs()
         }
         runCatching {
-            device.executeShellCommand("rm -rf $persistentJourneyDir && mkdir -p $persistentJourneyDir")
+            device.executeShellCommand("rm -rf $persistentJourneyDir")
+            device.executeShellCommand("mkdir -p $persistentJourneyDir")
         }
         return dir
     }
@@ -170,10 +172,22 @@ abstract class BaseE2EJourneyTest {
 
     private fun mirrorFileToPersistentDir(file: File) {
         if (!file.exists()) return
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
         runCatching {
-            device.executeShellCommand(
-                "mkdir -p $persistentJourneyDir && cp ${file.absolutePath} $persistentJourneyDir/${file.name}",
-            )
+            device.executeShellCommand("mkdir -p $persistentJourneyDir")
+            val descriptors = InstrumentationRegistry.getInstrumentation()
+                .uiAutomation
+                .executeShellCommandRw("dd of=$persistentJourneyDir/${file.name} status=none")
+            descriptors.getOrNull(1)?.let { stdinPfd ->
+                ParcelFileDescriptor.AutoCloseOutputStream(stdinPfd).use { out ->
+                    file.inputStream().use { input -> input.copyTo(out) }
+                }
+            }
+            descriptors.getOrNull(0)?.let { stdoutPfd ->
+                ParcelFileDescriptor.AutoCloseInputStream(stdoutPfd).use { input ->
+                    input.readBytes()
+                }
+            }
         }
     }
 

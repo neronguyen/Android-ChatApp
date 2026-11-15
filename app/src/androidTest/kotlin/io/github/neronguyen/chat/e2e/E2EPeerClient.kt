@@ -25,6 +25,7 @@ import java.io.Closeable
 import java.io.IOException
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -66,6 +67,7 @@ internal class E2EPeerClient(
     private var webSocket: WebSocket? = null
 
     private val wsEvents = CopyOnWriteArrayList<WsServerEvent>()
+    private val seenRoomIds = ConcurrentHashMap.newKeySet<String>()
 
     fun ensureVerifiedPeerBob(
         email: String = DEFAULT_BOB_EMAIL,
@@ -180,9 +182,9 @@ internal class E2EPeerClient(
                                 }
                     }
                     if (match != null) {
-                        Log.i(TAG, "[BOB] Joined direct room ${match.id.take(8)} with $peerEmail")
+                        Log.i(TAG, "[BOB] Resolved room ${match.id.take(8)} (REST)")
                         match.lastMessage?.let { latest ->
-                            Log.i(TAG, "[BOB] Latest msg from peer: \"${latest.content}\"")
+                            Log.i(TAG, "[BOB] Latest msg: \"${latest.content}\"")
                         }
                         return match.id
                     }
@@ -204,6 +206,7 @@ internal class E2EPeerClient(
         webSocket?.close(1000, "Reconnecting")
         webSocket = null
         wsEvents.clear()
+        seenRoomIds.clear()
 
         val openLatch = CountDownLatch(1)
         var failure: Throwable? = null
@@ -229,16 +232,24 @@ internal class E2EPeerClient(
                             is WsServerEvent.NewMessage -> {
                                 val msg = event.message
                                 if (msg.senderId == bobUserId) {
+                                    seenRoomIds.add(msg.roomId)
                                     Log.i(TAG, "[BOB-WS] Server ACK: \"${msg.content}\"")
                                 } else {
-                                    Log.i(TAG, "[BOB-WS] Received from peer: \"${msg.content}\"")
+                                    if (seenRoomIds.add(msg.roomId)) {
+                                        Log.i(
+                                            TAG,
+                                            "[BOB-WS] Peer opened room ${msg.roomId.take(8)}",
+                                        )
+                                    }
+                                    Log.i(TAG, "[BOB-WS] Received: \"${msg.content}\"")
                                 }
                             }
 
                             is WsServerEvent.ParticipantJoined -> {
+                                seenRoomIds.add(event.roomId)
                                 Log.i(
                                     TAG,
-                                    "[BOB-WS] Room ${event.roomId.take(8)} participant joined"
+                                    "[BOB-WS] User joined room ${event.roomId.take(8)}",
                                 )
                             }
 
@@ -271,7 +282,7 @@ internal class E2EPeerClient(
         }
         failure?.let { throw it }
         webSocket = socket
-        Log.i(TAG, "[BOB-WS] Connected /ws/chat")
+        Log.i(TAG, "[BOB-WS] Connected /ws/chat (listening)")
     }
 
     fun sendDirectTextMessage(roomId: String, content: String): String {
