@@ -54,6 +54,9 @@ internal class E2EPeerClient(
     private var bobAccessToken: String? = null
 
     @Volatile
+    private var bobUserId: String? = null
+
+    @Volatile
     private var webSocket: WebSocket? = null
 
     private val wsErrors = CopyOnWriteArrayList<String>()
@@ -63,12 +66,12 @@ internal class E2EPeerClient(
         displayName: String = DEFAULT_BOB_DISPLAY_NAME,
         password: String = DEFAULT_BOB_PASSWORD,
     ) {
-        Log.i(TAG, "[BOB] Checking existing session POST /api/auth/login ($email)")
         val existingAuth = tryLogin(email, password)
         if (existingAuth != null) {
-            Log.i(TAG, "[BOB] Reusing active verified session for $email")
             bobAccessToken = existingAuth.accessToken
+            bobUserId = existingAuth.user.id
             awaitParticipantProjection(email = email, bearerToken = existingAuth.accessToken)
+            Log.i(TAG, "[BOB] Online as $email")
             return
         }
 
@@ -79,7 +82,6 @@ internal class E2EPeerClient(
                 RegisterRequest(email = email, displayName = displayName, password = password),
             ),
         ).first
-        Log.i(TAG, "[BOB] POST /api/auth/register ($email) -> HTTP $registerStatus")
 
         when (registerStatus) {
             in 200..299 -> Unit
@@ -87,10 +89,6 @@ internal class E2EPeerClient(
                 val (resendStatus, resendBody) = postJson(
                     url = "$httpBaseUrl/api/auth/resend-verification",
                     body = ContractJson.encodeToString(EmailRequest(email = email)),
-                )
-                Log.i(
-                    TAG,
-                    "[BOB] POST /api/auth/resend-verification ($email) -> HTTP $resendStatus"
                 )
                 check(resendStatus in 200..299) {
                     "Failed to resend verification email for $email: HTTP $resendStatus $resendBody"
@@ -105,7 +103,6 @@ internal class E2EPeerClient(
             url = "$httpBaseUrl/api/auth/verify-email",
             body = ContractJson.encodeToString(VerifyEmailRequest(email = email, code = otp)),
         )
-        Log.i(TAG, "[BOB] POST /api/auth/verify-email ($email) -> HTTP $verifyStatus")
         check(verifyStatus in 200..299) {
             "Failed to verify peer $email: HTTP $verifyStatus $verifyBody"
         }
@@ -113,7 +110,9 @@ internal class E2EPeerClient(
         val auth = tryLogin(email, password)
             ?: error("Peer $email login failed immediately after verification")
         bobAccessToken = auth.accessToken
+        bobUserId = auth.user.id
         awaitParticipantProjection(email = email, bearerToken = auth.accessToken)
+        Log.i(TAG, "[BOB] Online as $email")
     }
 
     fun fetchLatestOtp(
@@ -121,7 +120,7 @@ internal class E2EPeerClient(
         excludeMessageId: String? = null,
         timeoutMs: Long = 20_000L,
     ): String {
-        Log.i(TAG, "[MAILPIT] Polling OTP email for $email...")
+        Log.i(SETUP_TAG, "[MAILPIT] Polling OTP email for $email...")
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastError: String? = null
 
@@ -134,7 +133,7 @@ internal class E2EPeerClient(
                     val otp = fetchOtpFromMessage(newest.id)
                     if (otp != null) {
                         Log.i(
-                            TAG,
+                            SETUP_TAG,
                             "[MAILPIT] OTP fetched for $email: $otp (msgId=${newest.id.take(8)})"
                         )
                         return otp
@@ -157,7 +156,6 @@ internal class E2EPeerClient(
         timeoutMs: Long = 15_000L,
     ): String {
         val token = requireBobToken()
-        Log.i(TAG, "[BOB] Resolving DIRECT room with $peerEmail via GET /api/chat/rooms...")
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastError: String? = null
 
@@ -176,10 +174,10 @@ internal class E2EPeerClient(
                                 }
                     }
                     if (match != null) {
-                        Log.i(
-                            TAG,
-                            "[BOB] Resolved DIRECT roomId=${match.id.take(8)} with $peerEmail"
-                        )
+                        Log.i(TAG, "[BOB] Joined direct room ${match.id.take(8)} with $peerEmail")
+                        match.lastMessage?.let { latest ->
+                            Log.i(TAG, "[BOB] Latest msg from peer: \"${latest.content}\"")
+                        }
                         return match.id
                     }
                     lastError = "No DIRECT room with $peerEmail in ${rooms.size} rooms"
@@ -201,7 +199,6 @@ internal class E2EPeerClient(
         webSocket = null
         wsErrors.clear()
 
-        Log.i(TAG, "[BOB-WS] Connecting to $wsUrl...")
         val openLatch = CountDownLatch(1)
         var failure: Throwable? = null
 
@@ -221,8 +218,29 @@ internal class E2EPeerClient(
                     runCatching {
                         ContractJson.decodeFromString<WsServerEvent>(text)
                     }.onSuccess { event ->
-                        if (event is WsServerEvent.Error) {
-                            wsErrors.add("${event.error}: ${event.message}")
+                        when (event) {
+                            is WsServerEvent.NewMessage -> {
+                                val msg = event.message
+                                if (msg.senderId == bobUserId) {
+                                    Log.i(TAG, "[BOB-WS] Server ACK: \"${msg.content}\"")
+                                } else {
+                                    Log.i(TAG, "[BOB-WS] Received from peer: \"${msg.content}\"")
+                                }
+                            }
+
+                            is WsServerEvent.ParticipantJoined -> {
+                                Log.i(
+                                    TAG,
+                                    "[BOB-WS] Room ${event.roomId.take(8)} participant joined"
+                                )
+                            }
+
+                            is WsServerEvent.Error -> {
+                                wsErrors.add("${event.error}: ${event.message}")
+                                Log.w(TAG, "[BOB-WS] Error ${event.error}: ${event.message}")
+                            }
+
+                            else -> Unit
                         }
                     }
                 }
@@ -263,13 +281,13 @@ internal class E2EPeerClient(
         check(socket.send(payload)) {
             "WebSocket.send returned false for roomId=$roomId (errors=$wsErrors)"
         }
-        Log.i(TAG, "[BOB-WS] Sent inbound message: \"$content\" (id=${messageId.take(8)})")
+        Log.i(TAG, "[BOB-WS] Sending: \"$content\"")
         return messageId
     }
 
     override fun close() {
         if (webSocket != null) {
-            Log.i(TAG, "[BOB-WS] Closing /ws/chat connection")
+            Log.i(TAG, "[BOB-WS] Disconnected /ws/chat")
         }
         runCatching { webSocket?.close(1000, "Test finished") }
         webSocket = null
@@ -282,7 +300,6 @@ internal class E2EPeerClient(
         bearerToken: String,
         timeoutMs: Long = 15_000L,
     ) {
-        Log.i(TAG, "[BOB] Awaiting RabbitMQ UserEvent.Verified projection for $email...")
         val deadline = System.currentTimeMillis() + timeoutMs
         var lastStatus = -1
         var lastBody = ""
@@ -293,7 +310,6 @@ internal class E2EPeerClient(
             )
             if (status in 200..299) {
                 ContractJson.decodeFromString<ChatParticipantDto>(body)
-                Log.i(TAG, "[BOB] RabbitMQ participant projection ready for $email")
                 return
             }
             lastStatus = status
@@ -405,6 +421,7 @@ internal class E2EPeerClient(
 
     companion object {
         const val TAG = "E2E_PEER"
+        private const val SETUP_TAG = "E2E_SMOKE"
         const val DEFAULT_BOB_EMAIL = "bob@example.com"
         const val DEFAULT_BOB_DISPLAY_NAME = "Bob E2E"
         const val DEFAULT_BOB_PASSWORD = "BobPassword123!"

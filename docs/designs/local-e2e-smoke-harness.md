@@ -27,8 +27,8 @@ debugging:
   `--journey <all|happy-path|otp-recovery>`, pulls per-journey checkpoints and `logcat-e2e.txt` into
   gitignored `build/reports/e2e-smoke/<run-id>/`, generates `summary.md`, and supports
   `--record-demo` to synthesize a side-by-side showcase video (`e2e-demo-side-by-side.mp4` + `.gif`)
-  combining the live AVD screen recording with a real-time dark terminal stream of `E2E_SMOKE` and
-  `E2E_PEER` events.
+  combining the live AVD screen recording (Alice) with a real-time dark terminal stream of
+  headless Bob client (`E2E_PEER`) events.
 * **`scripts/e2e-ctl.sh`**: Exposes atomic host subcommands (`up`, `down`, `status`, `get-otp`,
   `ui-dump`, `screenshot`) so developers and AI agents can boot infrastructure or diagnose a broken
   run on demand without spending LLM tokens during normal test loops.
@@ -251,11 +251,13 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
 
 #### 4.2 Peer & Mailpit Driver with Live Telemetry (`E2EPeerClient.kt`)
 
-* **Structured `E2E_PEER` Logcat Stream**: Emits concise, human-readable telemetry events under tag
-  `E2E_PEER` (`[BOB] POST /api/auth/register`, `[MAILPIT] OTP fetched for <email>: <code>`,
-  `[BOB] RabbitMQ participant projection ready`, `[BOB-WS] Connected /ws/chat`,
-  `[BOB-WS] Sent inbound message`) used both for console diagnostics and `--record-demo` terminal
-  video synthesis.
+* **Bob Headless Client `E2E_PEER` Logcat Stream**: Emits concise client-perspective events under
+  tag `E2E_PEER` (`[BOB] Online as bob@example.com`, `[BOB] Joined direct room ... with <peer>`,
+  `[BOB] Latest msg from peer: "..."`, `[BOB-WS] Connected /ws/chat`,
+  `[BOB-WS] Sending: "..."`, `[BOB-WS] Server ACK: "..."`, `[BOB-WS] Received from peer: "..."`,
+  `[BOB-WS] Disconnected /ws/chat`). Alice's Mailpit OTP polling and FSM state logs remain scoped
+  to `E2E_SMOKE` so `--record-demo` renders **Bob's headless client exclusively** in the Terminal
+  pane without duplicating Alice's AVD UI or test setup noise.
 * **Mailpit Disambiguation (`fetchLatestOtp(email)`)**: Polls
   `GET http://localhost:8025/api/v1/messages`, filters summaries whose `To` array contains
   `<email>`, selects the newest message ID by `Created` timestamp, fetches
@@ -321,8 +323,12 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
      `OtpRecoverySmokeE2ETest`):
       * Clears package data (`adb shell pm clear io.github.neronguyen.chat`) so every journey begins
         from a clean unauthenticated state.
-      * When `--record-demo` is enabled and the active journey is `happy-path`, starts background
-        `adb shell screenrecord` to `/sdcard/Download/e2e-smoke/avd-raw.mp4`.
+     * When `--record-demo` is enabled and the active journey is `happy-path`, pre-builds and
+       installs `:app:installDebug` + `:app:installDebugAndroidTest` **before** starting
+       `screenrecord` to `/data/local/tmp/e2e-avd-raw.mp4`, emits an Android logcat anchor
+       `[RECORDER] Screen recording started`, and launches the test immediately via
+       `adb shell am instrument` so the AVD recording and terminal log timestamps stay lock-step
+       synchronized from `t = 0`.
       * Runs `:app:connectedDebugAndroidTest` with `-PBASE_URL=http://localhost:8080/`,
         `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`,
         `-Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true`, and
@@ -334,11 +340,13 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
      `build/reports/e2e-smoke/<run-id>/` and generates `summary.md` with per-journey checkpoint
      tables.
   4. When `--record-demo` is active and `ffmpeg` is available on the host, runs an embedded Python
-     renderer that parses real timestamps of `E2E_SMOKE` and `E2E_PEER` lines from
-     `logcat-e2e.txt`, renders a dark-themed live terminal video stream showing Bob's HTTP/WS
-     actions and FSM transitions in real time, and horizontally stacks (`hstack`) it beside the
-     AVD recording into `build/reports/e2e-smoke/<run-id>/e2e-demo-side-by-side.mp4` and
-     `e2e-demo-side-by-side.gif`.
+     renderer that anchors `t = 0` on the `E2E_SMOKE` `[RECORDER] Screen recording started`
+     timestamp
+     and parses **exclusively Bob's headless client (`E2E_PEER`)** events (`[BOB]` / `[BOB-WS]`)
+     from `logcat-happy-path.txt` (falling back to `logcat-e2e.txt`), renders a dark-themed live
+     terminal video stream (filtering out Alice's AVD FSM logs and test setup chatter), and
+     horizontally stacks (`hstack`) it beside the AVD recording into
+     `build/reports/e2e-smoke/<run-id>/e2e-demo-side-by-side.mp4` and `e2e-demo-side-by-side.gif`.
 
 ### 6. Verification Tier Boundaries
 

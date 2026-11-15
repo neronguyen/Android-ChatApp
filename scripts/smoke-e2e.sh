@@ -6,7 +6,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 APP_ID="io.github.neronguyen.chat"
 PERSISTENT_DEVICE_ARTIFACT_DIR="/sdcard/Download/e2e-smoke"
 DEVICE_ARTIFACT_DIR="/sdcard/Android/data/${APP_ID}/files/e2e-smoke"
-REMOTE_RAW_VIDEO="${PERSISTENT_DEVICE_ARTIFACT_DIR}/avd-raw.mp4"
+REMOTE_RAW_VIDEO="/data/local/tmp/e2e-avd-raw.mp4"
 
 JOURNEY="all"
 RECORD_DEMO=false
@@ -134,6 +134,7 @@ REPORT_DIR="${REPO_DIR}/build/reports/e2e-smoke/${RUN_ID}"
 mkdir -p "$REPORT_DIR"
 
 ARTIFACTS_PULLED=false
+DEMO_RENDERED=false
 TEST_EXIT=0
 SCREENRECORD_PID=""
 RECORD_START_EPOCH=""
@@ -192,10 +193,12 @@ start_screen_recording() {
     return 0
   fi
   echo "==> [DEMO RECORDER] Starting AVD screenrecord ($REMOTE_RAW_VIDEO)..."
-  adb shell "rm -f ${REMOTE_RAW_VIDEO}" >/dev/null 2>&1 || true
+  adb shell "rm -f ${REMOTE_RAW_VIDEO}" </dev/null >/dev/null 2>&1 || true
   RECORD_START_EPOCH="$(python3 -c 'import time; print(f"{time.time():.3f}")')"
-  adb shell screenrecord --bit-rate 6000000 --time-limit 180 "$REMOTE_RAW_VIDEO" >/dev/null 2>&1 &
+  adb shell "log -t E2E_SMOKE '[RECORDER] Screen recording started'" </dev/null >/dev/null 2>&1 || true
+  adb shell screenrecord --bit-rate 6000000 --time-limit 180 "$REMOTE_RAW_VIDEO" </dev/null >/dev/null 2>&1 &
   SCREENRECORD_PID=$!
+  sleep 0.3
 }
 
 stop_screen_recording() {
@@ -203,11 +206,11 @@ stop_screen_recording() {
     return 0
   fi
   echo "==> [DEMO RECORDER] Stopping AVD screenrecord and flushing MP4..."
-  adb shell "pkill -l INT screenrecord || kill -2 \$(pidof screenrecord)" >/dev/null 2>&1 || true
+  adb shell "pkill -INT screenrecord || pkill -2 screenrecord || kill -2 \$(pidof screenrecord)" </dev/null >/dev/null 2>&1 || true
 
   local waited=0
-  while [ "$waited" -lt 10 ]; do
-    if ! adb shell "pidof screenrecord" >/dev/null 2>&1; then
+  while [ "$waited" -lt 20 ]; do
+    if ! adb shell "pidof screenrecord" </dev/null >/dev/null 2>&1; then
       break
     fi
     sleep 0.5
@@ -218,11 +221,13 @@ stop_screen_recording() {
   SCREENRECORD_PID=""
   sleep 1
 
-  if adb pull "$REMOTE_RAW_VIDEO" "${REPORT_DIR}/avd-raw.mp4" >/dev/null 2>&1; then
+  if adb pull "$REMOTE_RAW_VIDEO" "${REPORT_DIR}/avd-raw.mp4" >/dev/null 2>&1 && [ -s "${REPORT_DIR}/avd-raw.mp4" ]; then
     echo "==> [DEMO RECORDER] Pulled raw AVD recording to ${REPORT_DIR}/avd-raw.mp4"
   else
-    echo "WARN: [DEMO RECORDER] Could not pull $REMOTE_RAW_VIDEO from device." >&2
+    echo "WARN: [DEMO RECORDER] Could not pull non-empty $REMOTE_RAW_VIDEO from device." >&2
+    rm -f "${REPORT_DIR}/avd-raw.mp4"
   fi
+  adb shell "rm -f ${REMOTE_RAW_VIDEO}" </dev/null >/dev/null 2>&1 || true
 }
 
 pull_journey_artifacts() {
@@ -257,11 +262,16 @@ pull_journey_artifacts() {
 }
 
 render_side_by_side_demo() {
+  if [ "$DEMO_RENDERED" = true ]; then
+    return 0
+  fi
+  DEMO_RENDERED=true
+
   if [ "$RECORD_DEMO" != true ]; then
     return 0
   fi
-  if [ ! -f "${REPORT_DIR}/avd-raw.mp4" ]; then
-    echo "WARN: [DEMO RECORDER] Skipping side-by-side synthesis because avd-raw.mp4 is missing." >&2
+  if [ ! -s "${REPORT_DIR}/avd-raw.mp4" ]; then
+    echo "WARN: [DEMO RECORDER] Skipping side-by-side synthesis because avd-raw.mp4 is missing or empty." >&2
     return 0
   fi
   if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
@@ -274,7 +284,7 @@ render_side_by_side_demo() {
     log_source="${REPORT_DIR}/logcat-e2e.txt"
   fi
 
-  echo "==> [DEMO RECORDER] Synthesizing side-by-side AVD + Live Peer/FSM Terminal video..."
+  echo "==> [DEMO RECORDER] Synthesizing side-by-side AVD (Alice) + Headless Peer Terminal (Bob) video..."
   python3 - "$REPORT_DIR" "$log_source" "${RECORD_START_EPOCH:-0}" <<'PY'
 import datetime
 import json
@@ -303,17 +313,22 @@ probe_cmd = [
 probe = json.loads(subprocess.check_output(probe_cmd, text=True))
 stream = (probe.get("streams") or [{}])[0]
 fmt = probe.get("format") or {}
-duration = float(stream.get("duration") or fmt.get("duration") or 30.0)
+raw_dur = stream.get("duration") or fmt.get("duration")
+try:
+    duration = float(raw_dur) if raw_dur and raw_dur != "N/A" else 30.0
+except (TypeError, ValueError):
+    duration = 30.0
 duration = max(duration, 3.0)
 
 target_h = 960
 term_w = 760
 
 log_pattern = re.compile(
-    r"^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+[VDIWEF]/(?:E2E_SMOKE|E2E_PEER)\s*\(\s*\d+\):\s*(.*)$"
+    r"^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d{3})\s+[VDIWEF]/(E2E_SMOKE|E2E_PEER)\s*\(\s*\d+\):\s*(.*)$"
 )
 
 events = []
+recorder_start_ts = None
 year = datetime.datetime.now().year
 if os.path.isfile(log_path):
     with open(log_path, "r", encoding="utf-8", errors="replace") as f:
@@ -321,19 +336,23 @@ if os.path.isfile(log_path):
             m = log_pattern.match(raw_line.strip())
             if not m:
                 continue
-            ts_str, msg = m.group(1), m.group(2).strip()
+            ts_str, log_tag, msg = m.group(1), m.group(2), m.group(3).strip()
             try:
                 dt = datetime.datetime.strptime(f"{year}-{ts_str}", "%Y-%m-%d %H:%M:%S.%f")
                 ts_sec = dt.timestamp()
             except ValueError:
                 ts_sec = 0.0
+            if log_tag == "E2E_SMOKE":
+                if msg.startswith("[RECORDER]") and recorder_start_ts is None:
+                    recorder_start_ts = ts_sec
+                continue
             events.append((ts_sec, ts_str.split()[1], msg))
 
 if events:
-    base_ts = events[0][0]
+    base_ts = recorder_start_ts if recorder_start_ts is not None else events[0][0]
     rel_events = [(max(0.0, min(duration - 0.1, ev[0] - base_ts)), ev[1], ev[2]) for ev in events]
 else:
-    rel_events = [(0.0, "00:00:00.000", "[FSM] Journey=happy-path START")]
+    rel_events = [(0.0, "00:00:00.000", "[BOB] Waiting for Bob peer events...")]
 
 # Deduplicate timestamps into discrete terminal keyframes
 keyframes = [(0.0, [])]
@@ -352,26 +371,45 @@ os.makedirs(frames_dir, exist_ok=True)
 
 
 def classify_color(msg):
-    if "FAIL" in msg:
+    if "Error" in msg or "FAIL" in msg:
         return (248, 81, 73)      # Red
-    if "PASS" in msg or "DONE" in msg:
+    if "Server ACK" in msg or "Connected" in msg or "Online" in msg:
         return (63, 185, 80)      # Green
-    if msg.startswith("[BOB-WS]"):
+    if "Sending" in msg:
         return (210, 168, 255)    # Purple
+    if "Received" in msg or "Latest msg" in msg:
+        return (240, 136, 62)     # Amber
+    if msg.startswith("[BOB-WS]"):
+        return (163, 113, 247)    # Light Purple
     if msg.startswith("[BOB]"):
         return (121, 192, 255)    # Blue
-    if msg.startswith("[MAILPIT]"):
-        return (240, 136, 62)     # Amber
-    if msg.startswith("[FSM]"):
-        return (86, 211, 100)     # Mint
     return (201, 209, 217)        # Default light gray
 
 
-# Try Pillow with system monospace TTF first; fall back to pure-Python 5x7 scaled bitmap renderer
+# Try Pillow with an actual monospace TTF font; otherwise fall back to pure-Python 5x7 scaled bitmap renderer
 use_pil = False
+pil_font_sm = None
+pil_font_md = None
 try:
     from PIL import Image, ImageDraw, ImageFont
-    use_pil = True
+    font_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+        "/usr/share/fonts/google-noto-vf/NotoSansMono[wght].ttf",
+        "/usr/share/fonts/noto/NotoSansMono-Regular.ttf",
+        "/usr/share/fonts/liberation-mono/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+        "/usr/share/fonts/truetype/ubuntu/UbuntuMono-R.ttf",
+    ]
+    for fp in font_candidates:
+        if os.path.exists(fp):
+            try:
+                pil_font_sm = ImageFont.truetype(fp, 14)
+                pil_font_md = ImageFont.truetype(fp, 15)
+                use_pil = True
+                break
+            except Exception:
+                continue
 except Exception:
     use_pil = False
 
@@ -455,37 +493,20 @@ def render_frame_pil(path, lines):
     draw.ellipse([40, 16, 54, 30], fill=(255, 189, 46))
     draw.ellipse([62, 16, 76, 30], fill=(39, 201, 63))
 
-    font_Candidates = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-        "/usr/share/fonts/google-noto-vf/NotoSansMono[wght].ttf",
-        "/usr/share/fonts/liberation-mono/LiberationMono-Regular.ttf",
-    ]
-    font_sm = None
-    font_md = None
-    for fp in font_Candidates:
-        if os.path.exists(fp):
-            font_sm = ImageFont.truetype(fp, 14)
-            font_md = ImageFont.truetype(fp, 15)
-            break
-    if font_sm is None:
-        font_sm = ImageFont.load_default()
-        font_md = font_sm
-
-    draw.text((96, 15), "nerochat-e2e — Live FSM & Peer Driver (Bob + Mailpit + WS)", fill=(139, 148, 158), font=font_md)
+    draw.text((96, 15), "Bob Client (Headless Peer - bob@example.com)", fill=(139, 148, 158), font=pil_font_md)
     y = 68
     for clock_str, msg in lines:
         color = classify_color(msg)
         display = f"{clock_str}  {msg}"
         if len(display) > 72:
             display = display[:69] + "..."
-        draw.text((20, y), display, fill=color, font=font_sm)
+        draw.text((20, y), display, fill=color, font=pil_font_sm)
         y += 36
     img.save(path)
 
 
 def render_frame_ppm(path, lines):
-    buf = bytearray((13, 17, 23) * (term_w * target_h))
+    buf = bytearray(bytes((13, 17, 23)) * (term_w * target_h))
 
     def fill_rect(x0, y0, x1, y1, rgb):
         r, g, b = rgb
@@ -513,7 +534,7 @@ def render_frame_ppm(path, lines):
     fill_rect(18, 18, 30, 30, (255, 95, 86))
     fill_rect(38, 18, 50, 30, (255, 189, 46))
     fill_rect(58, 18, 70, 30, (39, 201, 63))
-    draw_text(88, 17, "NEROCHAT E2E - LIVE FSM & PEER DRIVER", (139, 148, 158), scale=2)
+    draw_text(88, 17, "BOB CLIENT - HEADLESS PEER (BOB@EXAMPLE.COM)", (139, 148, 158), scale=2)
 
     y = 68
     for clock_str, msg in lines:
@@ -553,7 +574,7 @@ subprocess.run(
     [
         "ffmpeg", "-y", "-v", "error",
         "-f", "concat", "-safe", "0", "-i", concat_file,
-        "-vf", f"fps=15,scale={term_w}:{target_h}:flags=neighbor",
+        "-vf", f"fps=15,scale={term_w}:{target_h}:flags=neighbor,setsar=1",
         "-c:v", "libx264", "-pix_fmt", "yuv420p",
         term_mp4,
     ],
@@ -566,9 +587,10 @@ subprocess.run(
         "-i", raw_mp4,
         "-i", term_mp4,
         "-filter_complex",
-        f"[0:v]scale=-2:{target_h}[avd];[1:v]scale={term_w}:{target_h}[term];[avd][term]hstack=inputs=2[v]",
+        f"[0:v]fps=30,scale=-2:{target_h}:flags=lanczos,setsar=1[avd];[1:v]fps=30,scale={term_w}:{target_h},setsar=1[term];[avd][term]hstack=inputs=2[v]",
         "-map", "[v]",
         "-c:v", "libx264", "-preset", "fast", "-crf", "23", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart",
         "-shortest",
         out_mp4,
     ],
@@ -772,6 +794,13 @@ if [ "${CI:-false}" = "true" ]; then
   GRADLE_ARGS+=(--no-daemon)
 fi
 
+if [ "$RECORD_DEMO" = true ]; then
+  echo "==> [DEMO RECORDER] Pre-building and installing debug + androidTest APKs before recording..."
+  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" :app:installDebug :app:installDebugAndroidTest \
+    -PBASE_URL=http://localhost:8080/ \
+    "${GRADLE_EXTRA_ARGS[@]}"
+fi
+
 for j_id in "${SELECTED_JOURNEYS[@]}"; do
   test_fqcn="$(journey_test_class "$j_id")"
   echo "==> [TIER 3 E2E] Preparing clean device state for journey '${j_id}' (${test_fqcn})..."
@@ -780,21 +809,29 @@ for j_id in "${SELECTED_JOURNEYS[@]}"; do
 
   if [ "$j_id" = "happy-path" ] && [ "$RECORD_DEMO" = true ]; then
     start_screen_recording
-  fi
-
-  echo "==> [TIER 3 E2E] Running journey '${j_id}' (${test_fqcn})..."
-  set +e
-  "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" :app:connectedDebugAndroidTest \
-    -PBASE_URL=http://localhost:8080/ \
-    -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
-    -Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true \
-    -Pandroid.testInstrumentationRunnerArguments.class="$test_fqcn" \
-    "${GRADLE_EXTRA_ARGS[@]}"
-  j_rc=$?
-  set -e
-
-  if [ "$j_id" = "happy-path" ] && [ "$RECORD_DEMO" = true ]; then
+    echo "==> [TIER 3 E2E] Launching '${j_id}' (${test_fqcn}) directly via am instrument for zero-lag recording..."
+    set +e
+    INSTR_OUT="$(adb shell am instrument -w -e e2eSmoke true -e class "$test_fqcn" "${APP_ID}.test/androidx.test.runner.AndroidJUnitRunner" 2>&1 | tr -d '\r')"
+    am_rc=$?
+    set -e
+    printf '%s\n' "$INSTR_OUT"
+    if [ "$am_rc" -eq 0 ] && printf '%s\n' "$INSTR_OUT" | grep -qE '^OK \([1-9][0-9]* test'; then
+      j_rc=0
+    else
+      j_rc=1
+    fi
     stop_screen_recording
+  else
+    echo "==> [TIER 3 E2E] Running journey '${j_id}' (${test_fqcn})..."
+    set +e
+    "$REPO_DIR/gradlew" "${GRADLE_ARGS[@]}" :app:connectedDebugAndroidTest \
+      -PBASE_URL=http://localhost:8080/ \
+      -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true \
+      -Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true \
+      -Pandroid.testInstrumentationRunnerArguments.class="$test_fqcn" \
+      "${GRADLE_EXTRA_ARGS[@]}"
+    j_rc=$?
+    set -e
   fi
 
   JOURNEY_EXIT_CODES["$j_id"]="$j_rc"
