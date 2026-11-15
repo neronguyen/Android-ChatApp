@@ -102,7 +102,11 @@ fun AuthNavGraph(
                     backStack.add(AuthRoute.Register)
                 },
                 onNavigateToLogin = { email, bannerMessage ->
-                    backStack.popOrNavigateTo(AuthRoute.Login(email, bannerMessage))
+                    if (email != null || bannerMessage != null) {
+                        backStack.replaceWithLogin(AuthRoute.Login(email, bannerMessage))
+                    } else {
+                        backStack.popToLoginOrAdd(AuthRoute.Login())
+                    }
                 },
                 onNavigateToVerifyEmail = { email ->
                     backStack.add(AuthRoute.VerifyEmail(email))
@@ -141,10 +145,19 @@ private fun NavBackStack<NavKey>.pop() {
     }
 }
 
-private fun NavBackStack<NavKey>.popOrNavigateTo(defaultRoute: NavKey) {
-    if (size > 1) {
-        removeAt(lastIndex)
+private fun NavBackStack<NavKey>.replaceWithLogin(loginRoute: AuthRoute.Login) {
+    clear()
+    add(loginRoute)
+}
+
+private fun NavBackStack<NavKey>.popToLoginOrAdd(defaultRoute: AuthRoute.Login) {
+    val loginIndex = indexOfLast { it is AuthRoute.Login }
+    if (loginIndex >= 0) {
+        while (lastIndex > loginIndex) {
+            removeAt(lastIndex)
+        }
     } else {
+        clear()
         add(defaultRoute)
     }
 }

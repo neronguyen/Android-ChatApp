@@ -870,7 +870,9 @@ private fun ConversationComposerBar(
         ) {
             BasicTextField(
                 state = composerState,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("conversation_message_input"),
                 interactionSource = interactionSource,
                 lineLimits = TextFieldLineLimits.MultiLine(
                     minHeightInLines = 1,

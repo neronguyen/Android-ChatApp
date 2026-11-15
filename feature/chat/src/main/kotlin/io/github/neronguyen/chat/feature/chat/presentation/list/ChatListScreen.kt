@@ -132,7 +132,9 @@ fun ChatListScreen(
                     focusedElevation = 0.dp,
                     hoveredElevation = 0.dp,
                 ),
-                modifier = Modifier.size(56.dp),
+                modifier = Modifier
+                    .size(56.dp)
+                    .testTag("chat_list_new_chat_fab"),
             ) {
                 Icon(
                     imageVector = Icons.Outlined.Edit,

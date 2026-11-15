@@ -24,7 +24,9 @@ android {
             secretsFile.inputStream().use { properties.load(it) }
         }
 
-        val baseUrl = properties.getProperty("BASE_URL") ?: "http://localhost/"
+        val baseUrl = providers.gradleProperty("BASE_URL").orNull
+            ?: properties.getProperty("BASE_URL")
+            ?: "http://localhost/"
         buildConfigField(type = "String", name = "BASE_URL", value = "\"$baseUrl\"")
     }
 
