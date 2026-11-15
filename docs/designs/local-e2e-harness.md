@@ -1,4 +1,4 @@
-# Local E2E Smoke Harness & Agent Inspection CLI (A4)
+# Local E2E Harness & Service CLI (A4)
 
 * **Author:** Nero Nguyen
 * **Status:** Implemented
@@ -8,28 +8,33 @@
 
 ## Overview
 
-This design specifies **A4: Local E2E Smoke Harness & Agent Inspection CLI**, a deterministic,
-zero-token Tier 3 cross-boundary verification system spanning `KMP-ChatBackend` and
-`Android-ChatApp`. It executes modular Critical User Journeys (both Happy-Path and Stateful
-Negative/Recovery flows) on a real Android Virtual Device (`Medium_Phone_API_37.0`) connected over
-`adb reverse` to a real Spring Boot instance backed by PostgreSQL, Redis, RabbitMQ, and Mailpit.
+This design specifies **A4: Local E2E Harness & Service CLI**, a deterministic, zero-token Tier 3
+cross-boundary verification system spanning `KMP-ChatBackend` and `Android-ChatApp`. It executes
+modular Critical User Journeys (both Direct Chat and Stateful Negative/Recovery flows) on a real
+Android Virtual Device (`Medium_Phone_API_37.0`) connected over `adb reverse` to a real Spring Boot
+instance backed by PostgreSQL, Redis, RabbitMQ, and Mailpit.
 
-The system separates unattended regression execution, demo artifact generation, and interactive
-debugging:
+The system separates unattended regression execution, demo video recording, and interactive
+debugging into `scripts/e2e/`:
 
-* **Modular E2E Journey Architecture (`BaseE2EJourneyTest` + `FullStackSmokeE2ETest` +
-  `OtpRecoverySmokeE2ETest` in `:app:src/androidTest`)**: Shares a common harness base class that
-  enforces `-Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true`, manages per-journey
-  persistent artifact mirroring (`/sdcard/Download/e2e-smoke/<journey-id>/`), records checkpoint
-  PNGs, `uiautomator` XML dumps, and `steps.tsv` rows, captures `failure.png`/`failure.xml` on
-  unhandled exceptions, and restores device connectivity (`svc wifi/data enable`).
-* **`scripts/smoke-e2e.sh`**: Supports running the full suite or selective journeys via
-  `--journey <all|happy-path|otp-recovery>`, pulls per-journey checkpoints and `logcat-e2e.txt` into
-  gitignored `build/reports/e2e-smoke/<run-id>/`, generates `summary.md`, and supports
-  `--record-demo` to synthesize a side-by-side showcase video (`e2e-demo-side-by-side.mp4` + `.gif`)
-  combining the live AVD screen recording (Alice) with a real-time dark terminal stream of
-  headless Bob client (`E2E_PEER`) events.
-* **`scripts/e2e-ctl.sh`**: Exposes atomic host subcommands (`up`, `down`, `status`, `get-otp`,
+* **Modular E2E Journey Architecture (`BaseE2EJourneyTest` + `DirectChatE2ETest` +
+  `OtpRecoveryE2ETest` in `:app:src/androidTest`)**: Shares a common harness base class that
+  enforces `-Pandroid.testInstrumentationRunnerArguments.e2e=true`, derives `journeyId` in
+  `kebab-case` from `<Journey>E2ETest`, manages per-journey persistent artifact mirroring
+  (`/sdcard/Download/e2e/<journey>/`), records `steps.csv` rows (plus `failure.png` on unhandled
+  exceptions, or step PNGs when `--capture-steps` is passed), and restores device connectivity
+  (`svc wifi/data enable`).
+* **`scripts/e2e/verify.sh`**: Supports running the full suite or selective journeys via
+  `--journey <all|direct-chat|otp-recovery>`, overwrites per-journey `steps.csv`, `logcat.txt`, and
+  `failure.png` (on failure) into gitignored `build/reports/e2e/<journey>/`, generates fixed-width
+  `summary.md`, and publishes CI step summaries + failure annotations when `$GITHUB_STEP_SUMMARY` is
+  present.
+* **`scripts/e2e/record.sh`**: Dedicated local video recorder
+  (`--journey <direct-chat|otp-recovery>`)
+  that uses `ffmpeg` to synthesize `demo.mp4` and `demo.gif` into `build/reports/e2e/<journey>/`,
+  combining the live AVD screen recording with a real-time dark terminal stream of `E2E_PEER` (Bob)
+  or `E2E_TEST` FSM events via `ffmpeg`'s subtitle filter without external Python image libraries.
+* **`scripts/e2e/service.sh`**: Exposes atomic host subcommands (`up`, `down`, `status`, `get-otp`,
   `ui-dump`, `screenshot`) so developers and AI agents can boot infrastructure or diagnose a broken
   run on demand without spending LLM tokens during normal test loops.
 
@@ -60,11 +65,11 @@ seconds, but leave three cross-process integration boundaries unverified until m
 
 ## Goals
 
-* **G1 — Modular Zero-Token Deterministic E2E Journeys**: Execute both Happy-Path (`S0`–`S7`) and
-  Negative/Recovery (`N0`–`N2`) state machines deterministically with zero LLM calls via
+* **G1 — Modular Zero-Token Deterministic E2E Journeys**: Execute both Direct Chat (`S0`–`S7`) and
+  OTP Negative/Recovery (`N0`–`N2`) state machines deterministically with zero LLM calls via
   `:app:connectedDebugAndroidTest` gated by
-  `-Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true` and selectable via
-  `./scripts/smoke-e2e.sh --journey <all|happy-path|otp-recovery>`.
+  `-Pandroid.testInstrumentationRunnerArguments.e2e=true` and selectable via
+  `./scripts/e2e/verify.sh --journey <all|direct-chat|otp-recovery>`.
 * **G2 — Real Cross-Boundary & Async Coverage**: Verify real HTTP + Mailpit SMTP OTP delivery,
   Redis invalid-OTP rejection and client UI recovery, RabbitMQ `UserEvent.Verified` peer visibility
   (`bob@example.com`), bidirectional WebSocket delivery (`SENDING` -> `SENT` and peer inbound
@@ -77,15 +82,15 @@ seconds, but leave three cross-process integration boundaries unverified until m
   against warm Docker containers by clearing Android app data (`pm clear`) before each journey,
   using run-scoped `alice.<epoch>@example.com` accounts, and idempotently ensuring `bob@example.com`
   is registered and verified via Mailpit.
-* **G5 — Survivable Proof-of-Work, Side-by-Side Demo Video & Diagnostic CLI**: Preserve all device
+* **G5 — Survivable Diagnostics, Pure-ffmpeg Recorder & Service CLI**: Preserve device
   artifacts across AGP test completion using
   `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` plus mirroring to
-  `/sdcard/Download/e2e-smoke/<journey-id>/`, produce `build/reports/e2e-smoke/<run-id>/summary.md`,
-  optionally render `e2e-demo-side-by-side.mp4` (`--record-demo`), and provide `scripts/e2e-ctl.sh`
-  (`up`, `down`, `status`, `get-otp`, `ui-dump`, `screenshot`).
+  `/sdcard/Download/e2e/<journey>/`, produce `build/reports/e2e/summary.md`,
+  isolate video synthesis (`demo.mp4` / `demo.gif`) into `./scripts/e2e/record.sh`, and provide
+  `scripts/e2e/service.sh` (`up`, `down`, `status`, `get-otp`, `ui-dump`, `screenshot`).
 * **G6 — Preserved Tier 1/2 Speed**: Keep `./scripts/verify.sh` and `./scripts/verify.sh clean` 100%
-  emulator-free and Docker-free; isolate E2E execution to Tier 3 (`./scripts/smoke-e2e.sh`) for
-  local milestone checks and manual/nightly KVM CI workflows.
+  emulator-free and Docker-free; isolate E2E execution to Tier 3 (`./scripts/e2e/verify.sh`) for
+  local milestone checks and manual/nightly KVM CI workflows (`.github/workflows/e2e.yml`).
 
 ## Non-Goals
 
@@ -93,38 +98,37 @@ seconds, but leave three cross-process integration boundaries unverified until m
   Tier 1/2 Robolectric and Spring Testcontainers suites; Tier 3 focuses on stateful cross-boundary
   happy and recovery journeys.
 * **NG2 — LLM-Driven Runtime UI Navigation**: Using AI agent turns or `<journey>.xml` loops to
-  locate widgets or tap buttons during automated smoke runs is explicitly excluded.
+  locate widgets or tap buttons during automated E2E runs is explicitly excluded.
 * **NG3 — Test-Only Backend Auth/OTP Backdoors**: No special bypass endpoints, hardcoded OTPs, or
   direct SQL inserts skipping RabbitMQ `UserEvent.Verified` are exposed in `KMP-ChatBackend`
   production code.
-* **NG4 — Executing AVD Smoke on Every PR**: `./scripts/smoke-e2e.sh` does not run inside
-  `./scripts/verify.sh clean` or standard pull-request CI gates.
+* **NG4 — Executing AVD E2E on Every PR**: `./scripts/e2e/verify.sh` does not run inside
+  `./scripts/verify.sh clean` or standard pull-request CI gates (`.github/workflows/ci.yml`).
 
 ## Critical User Journeys (CUJs)
 
-### CUJ 1 (`FullStackSmokeE2ETest` /
-`--journey happy-path`): Zero-Token Full-Stack Account Lifecycle, Bidirectional WebSocket & Reconnect Catch-Up
+### CUJ 1 (`DirectChatE2ETest` /
+`--journey direct-chat`): Zero-Token Full-Stack Account Lifecycle, Bidirectional WebSocket & Reconnect Catch-Up
 
 * **Given**: Docker Compose (`postgres`, `redis`, `rabbitmq`, `mailpit`), `KMP-ChatBackend`
   (`--spring.profiles.active=dev,e2e`), and AVD `Medium_Phone_API_37.0` are running with
   `adb reverse tcp:8080 tcp:8080` and `adb reverse tcp:8025 tcp:8025`; app data is cleared
   (`pm clear`) and `:app` is built with `-PBASE_URL=http://localhost:8080/`.
-* **When**: `./scripts/smoke-e2e.sh --journey happy-path` (or `--journey all`) launches
-  `FullStackSmokeE2ETest`, driving `alice.<epoch>@example.com` through the 8-state FSM (`S0`–`S7`)
+* **When**: `./scripts/e2e/verify.sh --journey direct-chat` (or `--journey all`) launches
+  `DirectChatE2ETest`, driving `alice.<epoch>@example.com` through the 8-state FSM (`S0`–`S7`)
   while `E2EPeerClient` acts as verified peer `bob@example.com`.
 * **Then**: Every FSM transition satisfies its `ComposeTestRule` assertion within bounded timeouts,
-  8 checkpoint PNGs and `uiautomator` dumps are mirrored to
-  `/sdcard/Download/e2e-smoke/happy-path/` and pulled to
-  `build/reports/e2e-smoke/<run-id>/happy-path/`, and `summary.md` reports `PASS` with zero LLM
-  tokens consumed. When `--record-demo` is passed, `e2e-demo-side-by-side.mp4` (and `.gif`) is
-  synthesized alongside `summary.md`.
+  `steps.csv` and `logcat.txt` are stored under `build/reports/e2e/direct-chat/`
+  (`failure.png` on failure, or per-step PNGs if `--capture-steps` is passed), and `summary.md`
+  reports `PASS` with zero LLM tokens consumed. When `./scripts/e2e/record.sh --journey direct-chat`
+  is run locally, `demo.mp4` and `demo.gif` are synthesized in the same folder.
 
-### CUJ 2 (`OtpRecoverySmokeE2ETest` /
+### CUJ 2 (`OtpRecoveryE2ETest` /
 `--journey otp-recovery`): Cross-Boundary Invalid OTP Rejection & Stateful Recovery
 
 * **Given**: The E2E stack is active and `pm clear` has reset Android app state.
-* **When**: `./scripts/smoke-e2e.sh --journey otp-recovery` (or `--journey all`) launches
-  `OtpRecoverySmokeE2ETest`, executing the 3-state negative-and-recovery FSM (`N0`–`N2`):
+* **When**: `./scripts/e2e/verify.sh --journey otp-recovery` (or `--journey all`) launches
+  `OtpRecoveryE2ETest`, executing the 3-state negative-and-recovery FSM (`N0`–`N2`):
     1. `N0_REGISTER_AND_CHALLENGE`: Alice registers `alice.otp.<epoch>@example.com` and lands on
        `verify_email_screen`.
     2. `N1_INVALID_OTP_REJECTED`: Alice enters an invalid 6-digit OTP (`000000`, verified distinct
@@ -134,15 +138,15 @@ seconds, but leave three cross-process integration boundaries unverified until m
     3. `N2_VALID_OTP_RECOVERY_TO_LOGIN`: Alice clears/replaces the input with the real 6-digit OTP
        fetched from Mailpit (`fetchLatestOtp`), succeeds verification, and transitions to
        `login_screen` with `confirmation_banner` visible.
-* **Then**: All 3 checkpoints (`00_register_and_challenge`, `01_invalid_otp_rejected`,
-  `02_valid_otp_recovery_to_login`) are captured under
-  `build/reports/e2e-smoke/<run-id>/otp-recovery/` and recorded as `PASS` in `summary.md`.
+* **Then**: `steps.csv` and `logcat.txt` are stored under
+  `build/reports/e2e/otp-recovery/` and recorded as `PASS` in `summary.md`.
 
-### CUJ 3: Host Infrastructure Bring-Up & Live Agent Inspection (`./scripts/e2e-ctl.sh`)
+### CUJ 3: Host Infrastructure Bring-Up & Live Agent Inspection (`./scripts/e2e/service.sh`)
 
 * **Given**: A developer or AI agent needs to boot services once for iterative debugging or inspect
-  why a smoke state failed.
-* **When**: The caller invokes `./scripts/e2e-ctl.sh up`, `status`, `get-otp <email>`, `ui-dump`,
+  why a state failed.
+* **When**: The caller invokes `./scripts/e2e/service.sh up`, `status`, `get-otp <email>`,
+  `ui-dump`,
   `screenshot <path>`, or `down`.
 * **Then**: Services come up deterministically with health checks (`pg_isready`, `redis-cli ping`,
   `rabbitmq-diagnostics`, Mailpit HTTP, Backend `GET /v3/api-docs`, and `adb shell pm path android`
@@ -154,7 +158,7 @@ seconds, but leave three cross-process integration boundaries unverified until m
 ### 1. System Topology & Process Boundary Wiring
 
 `Android-ChatApp` acts as the leaf orchestrator pointing to `../KMP-ChatBackend` (overridable via
-`BACKEND_DIR`). Rather than duplicating Docker runtime logic inside `Android-ChatApp`,
+`E2E_BACKEND_DIR`). Rather than duplicating Docker runtime logic inside `Android-ChatApp`,
 `KMP-ChatBackend` owns `docker-compose.yml` and the unencrypted local/E2E Spring profile
 (`application-e2e.yaml`), while `Android-ChatApp` owns the debug client build configuration,
 modular instrumentation journey suite, and host CLI scripts.
@@ -168,11 +172,12 @@ modular instrumentation journey suite, and host CLI scripts.
 |   - BASE_URL=http://localhost:8080/      |       |   - /v3/api-docs (readiness probe)            |
 |                                          |       |   - /api/auth/*, /api/chat/*, /ws/chat        |
 |  BaseE2EJourneyTest (:app/androidTest)   |       |       |         |          |          |       |
-|   ├── FullStackSmokeE2ETest (S0..S7)     |==adb==|   Postgres   Redis   RabbitMQ   Mailpit (:8025)|
-|   └── OtpRecoverySmokeE2ETest (N0..N2)   |reverse|                                               |
-|   - E2EPeerClient (Mailpit + Bob + Logs) |8080   |  Host Scripts (Android-ChatApp/scripts/)      |
-|   - /sdcard/Download/e2e-smoke/<journey> |8025   |   - e2e-ctl.sh (up/down/status/otp/dump/shot) |
-+------------------------------------------+       |   - smoke-e2e.sh (--journey, --record-demo)   |
+|   ├── DirectChatE2ETest (S0..S7)         |==adb==|   Postgres   Redis   RabbitMQ   Mailpit (:8025)|
+|   └── OtpRecoveryE2ETest (N0..N2)        |reverse|                                               |
+|   - E2EPeerClient (Mailpit + Bob + Logs) |8080   |  Host Scripts (Android-ChatApp/scripts/e2e/)  |
+|   - /sdcard/Download/e2e/<journey>       |8025   |   - service.sh (up/down/status/otp/dump/shot) |
++------------------------------------------+       |   - verify.sh (--journey, --capture-steps)    |
+                                                   |   - record.sh (--journey)                     |
                                                    +-----------------------------------------------+
 ```
 
@@ -217,7 +222,7 @@ modular instrumentation journey suite, and host CLI scripts.
 * **Configuration-Cache-Safe URL Injection**: `core/network/build.gradle.kts` resolves
   `BASE_URL` in priority order:
   `providers.gradleProperty("BASE_URL").orNull ?: properties.getProperty("BASE_URL") ?: "http://localhost/"`,
-  preserving existing non-E2E build behavior while letting `smoke-e2e.sh` pass
+  preserving existing non-E2E build behavior while letting `scripts/e2e/verify.sh` pass
   `-PBASE_URL=http://localhost:8080/` cleanly. `ChatWebSocketClient.kt` derives
   `ws://.../ws/chat` directly from `BuildConfig.BASE_URL`.
 * **Minimal Determinism `testTag`s**: `.testTag("chat_list_new_chat_fab")` in
@@ -225,8 +230,9 @@ modular instrumentation journey suite, and host CLI scripts.
   `ComposeTestRule` to locate every interactive widget across `feature:auth` and `feature:chat`
   without modifying visual rendering or invalidating screenshot goldens.
 
-### 4. Modular E2E Journey Architecture (`BaseE2EJourneyTest`, `FullStackSmokeE2ETest`,
-`OtpRecoverySmokeE2ETest`)
+### 4. Modular E2E Journey Architecture (`BaseE2EJourneyTest`, `DirectChatE2ETest`,
+
+`OtpRecoveryE2ETest`)
 
 Rather than coupling infrastructure plumbing and state assertions inside a monolithic test class,
 `:app:src/androidTest/kotlin/io/github/neronguyen/chat/e2e/` is structured around three components:
@@ -234,20 +240,19 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
 #### 4.1 Shared Harness Base Class (`BaseE2EJourneyTest.kt`)
 
 * **Opt-In Instrumentation Guard**: Checks
-  `Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("e2eSmoke") == "true")` in
+  `Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("e2e") == "true")` in
   `@Before` so normal `./gradlew connectedDebugAndroidTest` runs skip E2E classes cleanly.
 * **Survivable Per-Journey Artifact Mirroring**: AGP's default `connectedDebugAndroidTest` lifecycle
   uninstalls the tested APK on completion, which deletes app-scoped storage under
   `/sdcard/Android/data/io.github.neronguyen.chat/files/`. To guarantee zero artifact loss,
-  `smoke-e2e.sh` passes `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` AND
-  `BaseE2EJourneyTest` mirrors every captured `.png`, `.xml`, and `steps.tsv` file immediately into
-  `/sdcard/Download/e2e-smoke/<journey-id>/`.
+  `scripts/e2e/verify.sh` passes `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`
+  AND `BaseE2EJourneyTest` mirrors `steps.csv` (and `failure.png` on error, or step PNGs when
+  `e2eCaptureSteps=true`) immediately into `/sdcard/Download/e2e/<journey>/`.
 * **Structured FSM Execution (`runJourney` & `step`)**: Wraps journey execution with structured
-  `E2E_SMOKE` logcat events (`[FSM] State transition -> <state> (<checkpoint>)`,
-  `[FSM] State <state> PASS (<elapsedMs>ms)`), automatic `recordCheckpoint` (PNG + `uiautomator`
-  XML + `steps.tsv` entry), automatic `failure.png` + `failure.xml` capture when any assertion
-  throws, and unconditional `restoreDeviceConnectivity()` (`svc wifi enable` + `svc data enable`) in
-  `@After`.
+  `E2E_TEST` logcat events (`[FSM] State transition -> <state> (<checkpoint>)`,
+  `[FSM] State <state> PASS (<elapsedMs>ms)`), `steps.csv` tracking, automatic `failure.png` capture
+  when any assertion throws, and unconditional `restoreDeviceConnectivity()` (`svc wifi enable` +
+  `svc data enable`) in `@After`.
 
 #### 4.2 Peer & Mailpit Driver with Live Telemetry (`E2EPeerClient.kt`)
 
@@ -256,8 +261,9 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
   `[BOB] Latest msg from peer: "..."`, `[BOB-WS] Connected /ws/chat`,
   `[BOB-WS] Sending: "..."`, `[BOB-WS] Server ACK: "..."`, `[BOB-WS] Received from peer: "..."`,
   `[BOB-WS] Disconnected /ws/chat`). Alice's Mailpit OTP polling and FSM state logs remain scoped
-  to `E2E_SMOKE` so `--record-demo` renders **Bob's headless client exclusively** in the Terminal
-  pane without duplicating Alice's AVD UI or test setup noise.
+  to `E2E_TEST` so `scripts/e2e/record.sh` renders **Bob's headless client exclusively** in the
+  Terminal pane for peer-enabled journeys (`DirectChatE2ETest`), or `E2E_TEST` FSM events for
+  single-client journeys (`OtpRecoveryE2ETest`).
 * **Mailpit Disambiguation (`fetchLatestOtp(email)`)**: Polls
   `GET http://localhost:8025/api/v1/messages`, filters summaries whose `To` array contains
   `<email>`, selects the newest message ID by `Created` timestamp, fetches
@@ -270,40 +276,39 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
   `POST /api/auth/resend-verification` on `409 Conflict`), fetches Bob's OTP from Mailpit, calls
   `POST /api/auth/verify-email`, logs Bob in, and polls
   `GET /api/chat/participants?email=bob@example.com`
-  until RabbitMQ's `UserEvent.Verified` projection completes. In `FullStackSmokeE2ETest`,
+  until RabbitMQ's `UserEvent.Verified` projection completes. In `DirectChatE2ETest`,
   `connectWebSocket()` runs immediately afterward (using an OkHttp WebSocket client configured with
   infinite `callTimeout`/`readTimeout` and `30s` `pingInterval`) so Bob remains online across
   `S0`–`S7` and logs real-time receipt of Alice's `S5` outbound messages.
 
-#### 4.3 Journey 1 — Happy-Path 8-State FSM (`FullStackSmokeE2ETest.kt`, `journeyId = "happy-path"`)
+#### 4.3 Journey 1 — Direct Chat 8-State FSM (`DirectChatE2ETest.kt`, `--journey direct-chat`)
 
-| State                             | Screen / Phase       | Triggering Action                                                                                                                                                                                                               | `ComposeTestRule` Post-Condition                                                                                                          | Saved Checkpoint (`happy-path/`)           |
-|:----------------------------------|:---------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------|:-------------------------------------------|
-| **`S0_REGISTER_FORM`**            | Register             | Navigate from `login_screen` (`register_button`), fill `alice.<epoch>@example.com`, display name, and strong password                                                                                                           | Inputs populated on `register_screen` without client validation errors                                                                    | `00_register_form.png` + `.xml`            |
-| **`S1_OTP_CHALLENGE`**            | Verify Email         | Tap `register_button`                                                                                                                                                                                                           | `verify_email_screen` & `otp_input_field` visible                                                                                         | `01_otp_challenge.png` + `.xml`            |
-| **`S2_LOGIN_VERIFIED`**           | Login Verified       | Fetch Alice's 6-digit OTP via `fetchLatestOtp(aliceEmail)`, type into `otp_input_field` (auto-submitting via `VerifyEmailScreen`'s `onComplete`)                                                                                | Redirected to `login_screen` with `confirmation_banner` visible                                                                           | `02_login_verified.png` + `.xml`           |
-| **`S3_CHAT_LIST_EMPTY`**          | Chat List            | Fill Alice credentials + tap `login_button`                                                                                                                                                                                     | `chat_list_screen` visible; sync error banner absent                                                                                      | `03_chat_list_empty.png` + `.xml`          |
-| **`S4_NEW_CHAT_FOUND_PEER`**      | New Chat Search      | Tap `chat_list_new_chat_fab`, type `bob@example.com` in `new_chat_email_field`, tap `new_chat_search_button`                                                                                                                    | `new_chat_searched_participant_card` visible (proving RabbitMQ `UserEvent.Verified` projection)                                           | `04_new_chat_found_peer.png` + `.xml`      |
-| **`S5_OUTBOUND_MESSAGE_SENT`**    | Conversation Send    | Enter `"Hello Bob from AVD"` in `new_chat_first_message_field` (required to enable submit), tap `new_chat_submit_direct_button`; then send `"Follow-up from AVD"` via `conversation_message_input` + `conversation_send_button` | Both outbound bubbles visible on `ConversationScreen` with status reconciled to `SENT`, and Bob's WebSocket logs receipt of both messages | `05_outbound_message_sent.png` + `.xml`    |
-| **`S6_INBOUND_MESSAGE_RECEIVED`** | Conversation Receive | `E2EPeerClient` resolves `roomId` via `GET /api/chat/rooms` and sends `WsClientMessage.NewMessage` (`"Reply from Bob over WS"`) over Bob's active WebSocket                                                                     | Bubble `"Reply from Bob over WS"` renders automatically on Alice's `ConversationScreen`                                                   | `06_inbound_message_received.png` + `.xml` |
-| **`S7_RECONNECT_CATCHUP_SYNC`**   | Offline & Catch-Up   | Run `UiDevice.executeShellCommand("svc wifi disable")` + `svc data disable`; confirm `sync_status_bar`; Bob sends `"Offline missed msg"` via WS; re-enable `svc wifi enable` + `svc data enable`                                | `sync_status_bar` clears back to quiet synced state and `"Offline missed msg"` renders in `ConversationScreen`                            | `07_reconnect_catchup_sync.png` + `.xml`   |
+| State                             | Screen / Phase       | Triggering Action                                                                                                                                                                                                               | `ComposeTestRule` Post-Condition                                                                                                          | Checkpoint ID (`steps.csv`)   |
+|:----------------------------------|:---------------------|:--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|:------------------------------------------------------------------------------------------------------------------------------------------|:------------------------------|
+| **`S0_REGISTER_FORM`**            | Register             | Navigate from `login_screen` (`register_button`), fill `alice.<epoch>@example.com`, display name, and strong password                                                                                                           | Inputs populated on `register_screen` without client validation errors                                                                    | `00_register_form`            |
+| **`S1_OTP_CHALLENGE`**            | Verify Email         | Tap `register_button`                                                                                                                                                                                                           | `verify_email_screen` & `otp_input_field` visible                                                                                         | `01_otp_challenge`            |
+| **`S2_LOGIN_VERIFIED`**           | Login Verified       | Fetch Alice's 6-digit OTP via `fetchLatestOtp(aliceEmail)`, type into `otp_input_field` (auto-submitting via `VerifyEmailScreen`'s `onComplete`)                                                                                | Redirected to `login_screen` with `confirmation_banner` visible                                                                           | `02_login_verified`           |
+| **`S3_CHAT_LIST_EMPTY`**          | Chat List            | Fill Alice credentials + tap `login_button`                                                                                                                                                                                     | `chat_list_screen` visible; sync error banner absent                                                                                      | `03_chat_list_empty`          |
+| **`S4_NEW_CHAT_FOUND_PEER`**      | New Chat Search      | Tap `chat_list_new_chat_fab`, type `bob@example.com` in `new_chat_email_field`, tap `new_chat_search_button`                                                                                                                    | `new_chat_searched_participant_card` visible (proving RabbitMQ `UserEvent.Verified` projection)                                           | `04_new_chat_found_peer`      |
+| **`S5_OUTBOUND_MESSAGE_SENT`**    | Conversation Send    | Enter `"Hello Bob from AVD"` in `new_chat_first_message_field` (required to enable submit), tap `new_chat_submit_direct_button`; then send `"Follow-up from AVD"` via `conversation_message_input` + `conversation_send_button` | Both outbound bubbles visible on `ConversationScreen` with status reconciled to `SENT`, and Bob's WebSocket logs receipt of both messages | `05_outbound_message_sent`    |
+| **`S6_INBOUND_MESSAGE_RECEIVED`** | Conversation Receive | `E2EPeerClient` resolves `roomId` via `GET /api/chat/rooms` and sends `WsClientMessage.NewMessage` (`"Reply from Bob over WS"`) over Bob's active WebSocket                                                                     | Bubble `"Reply from Bob over WS"` renders automatically on Alice's `ConversationScreen`                                                   | `06_inbound_message_received` |
+| **`S7_RECONNECT_CATCHUP_SYNC`**   | Offline & Catch-Up   | Run `UiDevice.executeShellCommand("svc wifi disable")` + `svc data disable`; confirm `sync_status_bar`; Bob sends `"Offline missed msg"` via WS; re-enable `svc wifi enable` + `svc data enable`                                | `sync_status_bar` clears back to quiet synced state and `"Offline missed msg"` renders in `ConversationScreen`                            | `07_reconnect_catchup_sync`   |
 
-#### 4.4 Journey 2 — Negative & Recovery OTP FSM (`OtpRecoverySmokeE2ETest.kt`,
-`journeyId = "otp-recovery"`)
+#### 4.4 Journey 2 — Negative & Recovery OTP FSM (`OtpRecoveryE2ETest.kt`, `--journey otp-recovery`)
 
-| State                                | Screen / Phase        | Triggering Action                                                                                                                  | `ComposeTestRule` Post-Condition                                                                                       | Saved Checkpoint (`otp-recovery/`)            |
-|:-------------------------------------|:----------------------|:-----------------------------------------------------------------------------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------|:----------------------------------------------|
-| **`N0_REGISTER_AND_CHALLENGE`**      | Register -> Challenge | Navigate to `register_screen`, submit `alice.otp.<epoch>@example.com`, display name, and password                                  | `verify_email_screen` & `otp_input_field` visible                                                                      | `00_register_and_challenge.png` + `.xml`      |
-| **`N1_INVALID_OTP_REJECTED`**        | Verify Email Error    | Enter wrong 6-digit code (`000000`, distinct from Mailpit OTP) into `otp_input_field`, triggering backend Redis verification check | Remains on `verify_email_screen`; `verify_email_error_text` and `retry_button` displayed (`Invalid verification code`) | `01_invalid_otp_rejected.png` + `.xml`        |
-| **`N2_VALID_OTP_RECOVERY_TO_LOGIN`** | Recovery -> Login     | Clear `otp_input_field` and enter valid 6-digit OTP fetched via `fetchLatestOtp(aliceEmail)`                                       | Verification succeeds; navigates to `login_screen` with `confirmation_banner` visible                                  | `02_valid_otp_recovery_to_login.png` + `.xml` |
+| State                                | Screen / Phase        | Triggering Action                                                                                                                  | `ComposeTestRule` Post-Condition                                                                                       | Checkpoint ID (`steps.csv`)      |
+|:-------------------------------------|:----------------------|:-----------------------------------------------------------------------------------------------------------------------------------|:-----------------------------------------------------------------------------------------------------------------------|:---------------------------------|
+| **`N0_REGISTER_AND_CHALLENGE`**      | Register -> Challenge | Navigate to `register_screen`, submit `alice.otp.<epoch>@example.com`, display name, and password                                  | `verify_email_screen` & `otp_input_field` visible                                                                      | `00_register_and_challenge`      |
+| **`N1_INVALID_OTP_REJECTED`**        | Verify Email Error    | Enter wrong 6-digit code (`000000`, distinct from Mailpit OTP) into `otp_input_field`, triggering backend Redis verification check | Remains on `verify_email_screen`; `verify_email_error_text` and `retry_button` displayed (`Invalid verification code`) | `01_invalid_otp_rejected`        |
+| **`N2_VALID_OTP_RECOVERY_TO_LOGIN`** | Recovery -> Login     | Clear `otp_input_field` and enter valid 6-digit OTP fetched via `fetchLatestOtp(aliceEmail)`                                       | Verification succeeds; navigates to `login_screen` with `confirmation_banner` visible                                  | `02_valid_otp_recovery_to_login` |
 
-### 5. Host Orchestration (`smoke-e2e.sh`), Video Synthesis (`--record-demo`), & Agent CLI (
-`e2e-ctl.sh`)
+### 5. Host Orchestration (`scripts/e2e/{service,verify,record}.sh`)
 
-* **`scripts/e2e-ctl.sh <command>`** (deterministic, zero-token host primitives):
-    * `up`: Starts `docker compose -f "${BACKEND_DIR}/docker-compose.yml" up -d --wait`; if `:8080`
+* **`scripts/e2e/service.sh <command>`** (deterministic, zero-token host primitives):
+    * `up`: Starts `docker compose -f "${E2E_BACKEND_DIR}/docker-compose.yml" up -d --wait`; if
+      `:8080`
       is not listening, launches
-      `(cd "${BACKEND_DIR}" && setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e')`
+      `(cd "${E2E_BACKEND_DIR}" && setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e')`
       in its own process group with PID/PGID stored in `/tmp/nerochat-e2e-backend.pid` and polls
       `http://localhost:8080/v3/api-docs` (`200 OK`); boots a phone AVD (auto-scoring phone form
       factors and highest API level when multiple AVDs exist, or `E2E_AVD_NAME` if set) if no
@@ -321,44 +326,42 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
       `android screen capture` (falling back to `adb shell uiautomator dump` / `screencap`) into
       explicit paths for developer or agent triage.
 * **
-  `scripts/smoke-e2e.sh [--journey <all|happy-path|otp-recovery>] [--record-demo] [--teardown] [--clean]`**:
-    1. Invokes `e2e-ctl.sh up`.
-  2. For each selected journey (`happy-path` -> `FullStackSmokeE2ETest`, `otp-recovery` ->
-     `OtpRecoverySmokeE2ETest`):
-      * Clears package data (`adb shell pm clear io.github.neronguyen.chat`) so every journey begins
-        from a clean unauthenticated state.
-     * When `--record-demo` is enabled and the active journey is `happy-path`, pre-builds and
-       installs `:app:installDebug` + `:app:installDebugAndroidTest` **before** starting
-       `screenrecord` to `/data/local/tmp/e2e-avd-raw.mp4`, emits an Android logcat anchor
-       `[RECORDER] Screen recording started`, and launches the test immediately via
-       `adb shell am instrument` so the AVD recording and terminal log timestamps stay lock-step
-       synchronized from `t = 0`.
-      * Runs `:app:connectedDebugAndroidTest` with `-PBASE_URL=http://localhost:8080/`,
-        `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`,
-        `-Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true`, and
-        `-Pandroid.testInstrumentationRunnerArguments.class=<fqcn>`.
-      * Stops `screenrecord` cleanly via `SIGINT` (`kill -2`) so the MP4 container flushes its
-        `moov` atom.
-  3. **Unconditionally** pulls `/sdcard/Download/e2e-smoke/<journey-id>/` and scoped logcat
-     (`E2E_SMOKE:V E2E_PEER:V TestRunner:I AndroidRuntime:E OkHttp:I`) into
-     `build/reports/e2e-smoke/<run-id>/` and generates `summary.md` with per-journey checkpoint
-     tables.
-  4. When `--record-demo` is active and `ffmpeg` is available on the host, runs an embedded Python
-     renderer that anchors `t = 0` on the `E2E_SMOKE` `[RECORDER] Screen recording started`
-     timestamp
-     and parses **exclusively Bob's headless client (`E2E_PEER`)** events (`[BOB]` / `[BOB-WS]`)
-     from `logcat-happy-path.txt` (falling back to `logcat-e2e.txt`), renders a dark-themed live
-     terminal video stream (filtering out Alice's AVD FSM logs and test setup chatter), and
-     horizontally stacks (`hstack`) it beside the AVD recording into
-     `build/reports/e2e-smoke/<run-id>/e2e-demo-side-by-side.mp4` and `e2e-demo-side-by-side.gif`.
+  `scripts/e2e/verify.sh [--journey <all|direct-chat|otp-recovery>] [--capture-steps] [--teardown] [--clean]`**:
+    1. Invokes `service.sh up`.
+    2. For each selected journey (`direct-chat` -> `DirectChatE2ETest`, `otp-recovery` ->
+       `OtpRecoveryE2ETest`):
+        * Clears package data (`adb shell pm clear io.github.neronguyen.chat`) and cleans
+          `build/reports/e2e/<journey>/`.
+        * Runs `:app:connectedDebugAndroidTest` with `-PBASE_URL=http://localhost:8080/`,
+          `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`,
+          `-Pandroid.testInstrumentationRunnerArguments.e2e=true`,
+          `-Pandroid.testInstrumentationRunnerArguments.class=<fqcn>` (and `e2eCaptureSteps=true`
+          only if `--capture-steps` is set).
+    3. Pulls `steps.csv`, `logcat.txt`, and `failure.png` (if failed) into
+       `build/reports/e2e/<journey>/` and writes a fixed-width aligned
+       `build/reports/e2e/summary.md` (plus `$GITHUB_STEP_SUMMARY` and `::error::` annotations
+       when running on GitHub Actions).
+* **
+  `scripts/e2e/record.sh [--journey <direct-chat|otp-recovery>] [--capture-steps] [--teardown] [--clean]`**:
+    1. Verifies `ffmpeg` and `ffprobe`, invokes `service.sh up`, and pre-installs
+       `:app:installDebug` + `:app:installDebugAndroidTest`.
+    2. Starts `adb shell screenrecord` to `/data/local/tmp/e2e-avd-raw.mp4`, emits the logcat
+       sync anchor `[RECORDER] Screen recording started`, and launches the selected journey via
+       `adb shell am instrument`.
+    3. Stops `screenrecord` cleanly via `SIGINT`, pulls `avd-raw.mp4`, `logcat.txt`, and
+       `steps.csv`,
+       and runs `ffmpeg` to synthesize `demo.mp4` and `demo.gif` directly into
+       `build/reports/e2e/<journey>/`.
 
 ### 6. Verification Tier Boundaries
 
-* **Tier 1 (`./scripts/verify.sh`)**: Affected-module unit tests (JVM, seconds).
-* **Tier 2 (`./scripts/verify.sh clean`)**: Full JVM unit tests, Robolectric UI tests, AGP Compose
-  screenshot tests, `ArchitectureKonsistTest`, and `lintDebug`. Enforced on every commit and PR CI.
-* **Tier 3 (`./scripts/smoke-e2e.sh`)**: Full-stack AVD + Spring Boot + Docker Compose E2E smoke.
-  Run on local milestone/release gates or manual/nightly KVM-enabled CI workflows (`e2e-smoke.yml`).
+* **Tier 1 (`./scripts/verify.sh`)**: Affected-module JVM tests (seconds).
+* **Tier 2 (`./scripts/verify.sh clean`)**: Full JVM unit tests, Robolectric UI behavior tests, AGP
+  Compose screenshot tests, `ArchitectureKonsistTest`, and `lintDebug`. Enforced on every commit and
+  PR CI (`.github/workflows/ci.yml`).
+* **Tier 3 (`./scripts/e2e/verify.sh`)**: Full-stack AVD + Spring Boot + Docker Compose E2E
+  verification. Run on local milestone/release gates or manual/nightly KVM-enabled CI workflows
+  (`.github/workflows/e2e.yml`).
 
 ## Alternatives Considered
 
@@ -375,13 +378,13 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
 
 ### Alternative B: Monolithic Single-Class E2E Test Without Shared Harness Base
 
-* **Pros**: Keeps all helper methods private inside `FullStackSmokeE2ETest.kt`.
-* **Cons**: Cannot add negative/recovery CUJs (such as `OtpRecoverySmokeE2ETest`) without
-  duplicating `UiDevice` screenshot/hierarchy capture, `/sdcard/Download/e2e-smoke` mirroring,
-  `steps.tsv` reporting, and `svc wifi/data` cleanup.
+* **Pros**: Keeps all helper methods private inside `DirectChatE2ETest.kt`.
+* **Cons**: Cannot add negative/recovery CUJs (such as `OtpRecoveryE2ETest`) without
+  duplicating `UiDevice` screenshot capture, `/sdcard/Download/e2e` mirroring,
+  `steps.csv` reporting, and `svc wifi/data` cleanup.
 * **Reason for Rejection**: Extracting `BaseE2EJourneyTest` keeps each journey class focused purely
   on its state machine transitions and allows selective or full-suite execution via
-  `--journey <all|happy-path|otp-recovery>`.
+  `--journey <all|direct-chat|otp-recovery>`.
 
 ### Alternative C: Full Docker Compose Including Containerized Spring Boot
 
@@ -416,16 +419,16 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
       solely when the `e2e` Spring profile is explicitly activated; no real user PII or production
       secrets are stored.
 * **Performance & Token Economics**:
-    * **Zero LLM tokens** consumed per `./scripts/smoke-e2e.sh` run.
-  * Target warm-container execution time is **60–150 seconds** across journeys (reusing warm
+    * **Zero LLM tokens** consumed per `./scripts/e2e/verify.sh` run.
+    * Target warm-container execution time is **60–150 seconds** across journeys (reusing warm
       Postgres/Redis/RabbitMQ/Mailpit containers and `alice.<epoch>@example.com` isolation rather
       than wiping volumes on every iteration).
 * **Repo Hygiene & Determinism**:
-    * `./scripts/smoke-e2e.sh` never edits `local.properties` or writes reports into tracked source
-      folders; all PNGs, XML dumps, `summary.md`, and `--record-demo` videos write strictly to
-      gitignored `build/reports/e2e-smoke/<run-id>/`.
+    * `./scripts/e2e/verify.sh` and `./scripts/e2e/record.sh` never edit `local.properties` or write
+      reports into tracked source folders; all `steps.csv`, `logcat.txt`, `failure.png`,
+      `summary.md`, and recorded videos write strictly to gitignored `build/reports/e2e/`.
     * `BaseE2EJourneyTest` subclasses skip automatically (`Assume.assumeTrue`) unless
-      `-Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true` is set, preventing unintended
+      `-Pandroid.testInstrumentationRunnerArguments.e2e=true` is set, preventing unintended
       failures during standard `./gradlew connectedDebugAndroidTest` invocations.
 
 --------------------------------------------------------------------------------
@@ -436,15 +439,15 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
   uninstalls the app APK after the test run finishes, erasing
   `/sdcard/Android/data/io.github.neronguyen.chat/files/`.
     * *Mitigation*: Pass `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` and mirror
-      every checkpoint artifact immediately to `/sdcard/Download/e2e-smoke/<journey-id>/`.
+      every checkpoint artifact immediately to `/sdcard/Download/e2e/<journey>/`.
 * **Package Manager Race After `sys.boot_completed=1`**: On cold AVD boots, `sys.boot_completed`
   flips to `1` several seconds before the Android `package` service accepts `pm clear` or APK
   installations.
-    * *Mitigation*: `e2e-ctl.sh up` polls `adb shell pm path android` until it succeeds after
+    * *Mitigation*: `service.sh up` polls `adb shell pm path android` until it succeeds after
       `sys.boot_completed=1`.
 * **Host Port Collisions & Stale Backend PIDs**: Ports `5432`, `6379`, `5672`, `8025`, or `8080` may
   already be bound by local dev services, or an unclean exit may leave
   `/tmp/nerochat-e2e-backend.pid` stale.
-    * *Mitigation*: `e2e-ctl.sh up` verifies live PID ownership + `/v3/api-docs` health before
+    * *Mitigation*: `service.sh up` verifies live PID ownership + `/v3/api-docs` health before
       spawning Spring Boot, fails fast with actionable port-conflict diagnostics if `:8080` is
-      occupied by an unrelated process, and `e2e-ctl.sh down` cleans stale PID files cleanly.
+      occupied by an unrelated process, and `service.sh down` cleans stale PID files cleanly.

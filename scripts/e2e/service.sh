@@ -1,15 +1,23 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-BACKEND_DIR="${BACKEND_DIR:-"$(cd "$REPO_DIR/.." && pwd)/KMP-ChatBackend"}"
-PID_FILE="${E2E_PID_FILE:-/tmp/nerochat-e2e-backend.pid}"
-BACKEND_LOG="${E2E_BACKEND_LOG:-/tmp/nerochat-e2e-backend.log}"
-EMULATOR_LOG="${E2E_EMULATOR_LOG:-/tmp/nerochat-e2e-emulator.log}"
-AVD_NAME="${E2E_AVD_NAME:-}"
-BACKEND_URL="${E2E_BACKEND_URL:-http://localhost:8080}"
-MAILPIT_URL="${E2E_MAILPIT_URL:-http://localhost:8025}"
+E2E_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$E2E_SCRIPT_DIR/../.." && pwd)"
+
+E2E_APP_ID="io.github.neronguyen.chat"
+E2E_PERSISTENT_DEVICE_DIR="/sdcard/Download/e2e"
+E2E_APP_DEVICE_DIR="/sdcard/Android/data/${E2E_APP_ID}/files/e2e"
+# shellcheck disable=SC2034
+E2E_ALL_JOURNEYS=("direct-chat" "otp-recovery")
+
+E2E_BACKEND_DIR="${E2E_BACKEND_DIR:-${BACKEND_DIR:-"$(cd "$REPO_DIR/.." && pwd)/KMP-ChatBackend"}}"
+E2E_PID_FILE="${E2E_PID_FILE:-/tmp/nerochat-e2e-backend.pid}"
+E2E_BACKEND_LOG="${E2E_BACKEND_LOG:-/tmp/nerochat-e2e-backend.log}"
+E2E_EMULATOR_LOG="${E2E_EMULATOR_LOG:-/tmp/nerochat-e2e-emulator.log}"
+E2E_AVD_NAME="${E2E_AVD_NAME:-}"
+E2E_BACKEND_URL="${E2E_BACKEND_URL:-http://localhost:8080}"
+E2E_MAILPIT_URL="${E2E_MAILPIT_URL:-http://localhost:8025}"
+E2E_HEADLESS="${E2E_HEADLESS:-${HEADLESS:-false}}"
 
 resolve_jdk21() {
   local resolved=""
@@ -66,6 +74,92 @@ resolve_android_sdk() {
   fi
 }
 
+normalize_journey() {
+  local raw="${1%.kt}"
+  case "$raw" in
+    all) echo "all" ;;
+    direct-chat|DirectChatE2ETest|DirectChat) echo "direct-chat" ;;
+    otp-recovery|OtpRecoveryE2ETest|OtpRecovery) echo "otp-recovery" ;;
+    *) return 1 ;;
+  esac
+}
+
+journey_class_name() {
+  local j_id="$1"
+  local pascal=""
+  local part
+  IFS='-' read -r -a parts <<<"$j_id"
+  for part in "${parts[@]}"; do
+    pascal+="${part^}"
+  done
+  echo "${pascal}E2ETest"
+}
+
+journey_test_fqcn() {
+  local cls
+  cls="$(journey_class_name "$1")"
+  echo "io.github.neronguyen.chat.e2e.${cls}"
+}
+
+journey_title() {
+  case "$1" in
+    direct-chat) echo "DirectChatE2ETest (direct-chat)" ;;
+    otp-recovery) echo "OtpRecoveryE2ETest (otp-recovery)" ;;
+    *) echo "$(journey_class_name "$1") ($1)" ;;
+  esac
+}
+
+journey_checkpoints() {
+  case "$1" in
+    direct-chat)
+      cat <<'EOF'
+00_register_form:S0_REGISTER_FORM
+01_otp_challenge:S1_OTP_CHALLENGE
+02_login_verified:S2_LOGIN_VERIFIED
+03_chat_list_empty:S3_CHAT_LIST_EMPTY
+04_new_chat_found_peer:S4_NEW_CHAT_FOUND_PEER
+05_outbound_message_sent:S5_OUTBOUND_MESSAGE_SENT
+06_inbound_message_received:S6_INBOUND_MESSAGE_RECEIVED
+07_reconnect_catchup_sync:S7_RECONNECT_CATCHUP_SYNC
+EOF
+      ;;
+    otp-recovery)
+      cat <<'EOF'
+00_register_and_challenge:N0_REGISTER_AND_CHALLENGE
+01_invalid_otp_rejected:N1_INVALID_OTP_REJECTED
+02_valid_otp_recovery_to_login:N2_VALID_OTP_RECOVERY_TO_LOGIN
+EOF
+      ;;
+  esac
+}
+
+pull_journey_artifacts() {
+  local j_id="$1"
+  local dest_dir="$2"
+  mkdir -p "$dest_dir"
+
+  if ! command -v adb >/dev/null 2>&1 || [ "$(adb get-state 2>/dev/null || true)" != "device" ]; then
+    return 0
+  fi
+
+  local remote_base
+  for remote_base in "$E2E_PERSISTENT_DEVICE_DIR" "$E2E_APP_DEVICE_DIR"; do
+    local remote_dir="${remote_base}/${j_id}"
+    rm -rf "${dest_dir}/_pulled"
+    if adb pull "$remote_dir" "${dest_dir}/_pulled" >/dev/null 2>&1 && [ -d "${dest_dir}/_pulled" ]; then
+      if [ -d "${dest_dir}/_pulled/${j_id}" ]; then
+        mv "${dest_dir}/_pulled/${j_id}"/* "${dest_dir}/" 2>/dev/null || true
+      else
+        mv "${dest_dir}/_pulled"/* "${dest_dir}/" 2>/dev/null || true
+      fi
+      rm -rf "${dest_dir}/_pulled"
+    fi
+    if [ -f "${dest_dir}/steps.csv" ] || [ -f "${dest_dir}/failure.png" ]; then
+      break
+    fi
+  done
+}
+
 require_tool() {
   local tool="$1"
   if ! command -v "$tool" >/dev/null 2>&1; then
@@ -75,9 +169,9 @@ require_tool() {
 }
 
 require_backend_dir() {
-  if [ ! -f "$BACKEND_DIR/docker-compose.yml" ]; then
-    echo "ERROR: KMP-ChatBackend docker-compose.yml not found at: $BACKEND_DIR/docker-compose.yml" >&2
-    echo "Set BACKEND_DIR=/path/to/KMP-ChatBackend if located elsewhere." >&2
+  if [ ! -f "$E2E_BACKEND_DIR/docker-compose.yml" ]; then
+    echo "ERROR: KMP-ChatBackend docker-compose.yml not found at: $E2E_BACKEND_DIR/docker-compose.yml" >&2
+    echo "Set E2E_BACKEND_DIR=/path/to/KMP-ChatBackend if located elsewhere." >&2
     exit 1
   fi
 }
@@ -91,16 +185,16 @@ port_8080_in_use() {
     lsof -iTCP:8080 -sTCP:LISTEN -t >/dev/null 2>&1
     return $?
   fi
-  curl -sf -o /dev/null --max-time 2 "$BACKEND_URL/v3/api-docs" 2>/dev/null
+  curl -sf -o /dev/null --max-time 2 "$E2E_BACKEND_URL/v3/api-docs" 2>/dev/null
 }
 
 read_pid_file() {
-  if [ ! -f "$PID_FILE" ]; then
+  if [ ! -f "$E2E_PID_FILE" ]; then
     return 1
   fi
   local pid pgid
-  pid="$(sed -n '1p' "$PID_FILE" 2>/dev/null || true)"
-  pgid="$(sed -n '2p' "$PID_FILE" 2>/dev/null || true)"
+  pid="$(sed -n '1p' "$E2E_PID_FILE" 2>/dev/null || true)"
+  pgid="$(sed -n '2p' "$E2E_PID_FILE" 2>/dev/null || true)"
   if [ -z "$pid" ]; then
     return 1
   fi
@@ -127,21 +221,21 @@ wait_for_backend_health() {
   local pid="$1"
 
   while [ "$elapsed" -lt "$timeout_s" ]; do
-    if curl -sf -o /dev/null --max-time 2 "$BACKEND_URL/v3/api-docs" 2>/dev/null; then
+    if curl -sf -o /dev/null --max-time 2 "$E2E_BACKEND_URL/v3/api-docs" 2>/dev/null; then
       return 0
     fi
     if [ -n "$pid" ] && ! kill -0 "$pid" 2>/dev/null; then
-      echo "ERROR: E2E backend process (PID $pid) exited prematurely. Tail of $BACKEND_LOG:" >&2
-      tail -n 40 "$BACKEND_LOG" >&2 || true
-      rm -f "$PID_FILE"
+      echo "ERROR: E2E backend process (PID $pid) exited prematurely. Tail of $E2E_BACKEND_LOG:" >&2
+      tail -n 40 "$E2E_BACKEND_LOG" >&2 || true
+      rm -f "$E2E_PID_FILE"
       return 1
     fi
     sleep 2
     elapsed=$((elapsed + 2))
   done
 
-  echo "ERROR: Timed out waiting for backend readiness at $BACKEND_URL/v3/api-docs after ${timeout_s}s." >&2
-  tail -n 40 "$BACKEND_LOG" >&2 || true
+  echo "ERROR: Timed out waiting for backend readiness at $E2E_BACKEND_URL/v3/api-docs after ${timeout_s}s." >&2
+  tail -n 40 "$E2E_BACKEND_LOG" >&2 || true
   return 1
 }
 
@@ -149,7 +243,7 @@ ensure_backend_up() {
   require_backend_dir
 
   echo "==> Starting KMP-ChatBackend Docker Compose dependencies..."
-  docker compose -f "$BACKEND_DIR/docker-compose.yml" up -d --wait
+  docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" up -d --wait
 
   local pid_info recorded_pid recorded_pgid
   if pid_info="$(read_pid_file)"; then
@@ -159,13 +253,13 @@ ensure_backend_up() {
       wait_for_backend_health "$recorded_pid"
       return 0
     else
-      echo "==> Removing stale backend PID file ($PID_FILE)..."
-      rm -f "$PID_FILE"
+      echo "==> Removing stale backend PID file ($E2E_PID_FILE)..."
+      rm -f "$E2E_PID_FILE"
     fi
   fi
 
   if port_8080_in_use; then
-    echo "ERROR: Port 8080 is already occupied by an unrelated process not tracked by $PID_FILE." >&2
+    echo "ERROR: Port 8080 is already occupied by an unrelated process not tracked by $E2E_PID_FILE." >&2
     if command -v lsof >/dev/null 2>&1; then
       lsof -iTCP:8080 -sTCP:LISTEN >&2 || true
     elif command -v ss >/dev/null 2>&1; then
@@ -177,16 +271,16 @@ ensure_backend_up() {
 
   echo "==> Launching KMP-ChatBackend (--spring.profiles.active=dev,e2e)..."
   (
-    cd "$BACKEND_DIR"
-    exec setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e' >"$BACKEND_LOG" 2>&1
+    cd "$E2E_BACKEND_DIR"
+    exec setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e' >"$E2E_BACKEND_LOG" 2>&1
   ) &
   local spawned_pid=$!
   local spawned_pgid
   spawned_pgid="$(ps -o pgid= -p "$spawned_pid" 2>/dev/null | tr -d ' ' || echo "$spawned_pid")"
-  printf "%s\n%s\n" "$spawned_pid" "$spawned_pgid" >"$PID_FILE"
+  printf "%s\n%s\n" "$spawned_pid" "$spawned_pgid" >"$E2E_PID_FILE"
 
   wait_for_backend_health "$spawned_pid"
-  echo "==> KMP-ChatBackend is healthy at $BACKEND_URL."
+  echo "==> KMP-ChatBackend is healthy at $E2E_BACKEND_URL."
 }
 
 resolve_avd_name() {
@@ -204,15 +298,15 @@ resolve_avd_name() {
     exit 1
   fi
 
-  if [ -n "$AVD_NAME" ]; then
+  if [ -n "$E2E_AVD_NAME" ]; then
     local avd
     for avd in "${avds[@]}"; do
-      if [ "$avd" = "$AVD_NAME" ]; then
+      if [ "$avd" = "$E2E_AVD_NAME" ]; then
         printf '%s\n' "$avd"
         return 0
       fi
     done
-    echo "ERROR: Configured E2E_AVD_NAME='$AVD_NAME' not found. Available AVDs:" >&2
+    echo "ERROR: Configured E2E_AVD_NAME='$E2E_AVD_NAME' not found. Available AVDs:" >&2
     printf '  %s\n' "${avds[@]}" >&2
     exit 1
   fi
@@ -269,12 +363,12 @@ ensure_emulator_and_reverse() {
     selected_avd="$(resolve_avd_name)"
 
     local emu_args=(-avd "$selected_avd" -no-snapshot-load -no-audio -no-boot-anim)
-    if [ "${HEADLESS:-false}" = "true" ] || [ "${CI:-false}" = "true" ]; then
+    if [ "$E2E_HEADLESS" = "true" ] || [ "${CI:-false}" = "true" ]; then
       emu_args+=(-no-window -gpu swiftshader_indirect)
     fi
 
     echo "==> Booting AVD '$selected_avd'..."
-    nohup emulator "${emu_args[@]}" >"$EMULATOR_LOG" 2>&1 &
+    nohup emulator "${emu_args[@]}" >"$E2E_EMULATOR_LOG" 2>&1 &
   else
     echo "==> Reusing online Android device ($device_serial)..."
   fi
@@ -321,7 +415,7 @@ cmd_up() {
   require_tool curl
   ensure_backend_up
   ensure_emulator_and_reverse
-  echo "==> E2E stack is UP."
+  echo "==> E2E services are UP."
 }
 
 cmd_down() {
@@ -355,9 +449,9 @@ cmd_down() {
         kill -KILL "-$recorded_pgid" 2>/dev/null || kill -KILL "$recorded_pid" 2>/dev/null || true
       fi
     else
-      echo "==> Cleaning stale PID file ($PID_FILE)..."
+      echo "==> Cleaning stale PID file ($E2E_PID_FILE)..."
     fi
-    rm -f "$PID_FILE"
+    rm -f "$E2E_PID_FILE"
   fi
 
   if command -v adb >/dev/null 2>&1 && adb get-state >/dev/null 2>&1; then
@@ -367,10 +461,10 @@ cmd_down() {
 
   if [ "$clean" = true ]; then
     echo "==> Tearing down Docker Compose stack and volumes..."
-    docker compose -f "$BACKEND_DIR/docker-compose.yml" down -v
+    docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" down -v
   else
     echo "==> Stopping Docker Compose stack (preserving warm volumes)..."
-    docker compose -f "$BACKEND_DIR/docker-compose.yml" stop
+    docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" stop
   fi
 }
 
@@ -382,10 +476,10 @@ cmd_status() {
 
   local overall=0
 
-  echo "==> E2E Stack Status:"
+  echo "==> E2E Service Status:"
 
   local compose_ps
-  compose_ps="$(docker compose -f "$BACKEND_DIR/docker-compose.yml" ps --format '{{.Service}}:{{.State}}:{{.Health}}' 2>/dev/null || true)"
+  compose_ps="$(docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" ps --format '{{.Service}}:{{.State}}:{{.Health}}' 2>/dev/null || true)"
   for svc in postgres redis rabbitmq mailpit; do
     local line
     line="$(printf '%s\n' "$compose_ps" | grep -E "^${svc}:" || true)"
@@ -397,17 +491,17 @@ cmd_status() {
     fi
   done
 
-  if curl -sf -o /dev/null --max-time 3 "$BACKEND_URL/v3/api-docs" 2>/dev/null; then
-    echo "  [PASS] Backend HTTP ($BACKEND_URL/v3/api-docs): 200 OK"
+  if curl -sf -o /dev/null --max-time 3 "$E2E_BACKEND_URL/v3/api-docs" 2>/dev/null; then
+    echo "  [PASS] Backend HTTP ($E2E_BACKEND_URL/v3/api-docs): 200 OK"
   else
-    echo "  [FAIL] Backend HTTP ($BACKEND_URL/v3/api-docs): unreachable"
+    echo "  [FAIL] Backend HTTP ($E2E_BACKEND_URL/v3/api-docs): unreachable"
     overall=1
   fi
 
-  if curl -sf -o /dev/null --max-time 3 "$MAILPIT_URL/api/v1/info" 2>/dev/null; then
-    echo "  [PASS] Mailpit API ($MAILPIT_URL/api/v1/info): 200 OK"
+  if curl -sf -o /dev/null --max-time 3 "$E2E_MAILPIT_URL/api/v1/info" 2>/dev/null; then
+    echo "  [PASS] Mailpit API ($E2E_MAILPIT_URL/api/v1/info): 200 OK"
   else
-    echo "  [FAIL] Mailpit API ($MAILPIT_URL/api/v1/info): unreachable"
+    echo "  [FAIL] Mailpit API ($E2E_MAILPIT_URL/api/v1/info): unreachable"
     overall=1
   fi
 
@@ -445,7 +539,7 @@ cmd_get_otp() {
   fi
   require_tool python3
 
-  python3 - "$MAILPIT_URL" "$email" <<'PY'
+  python3 - "$E2E_MAILPIT_URL" "$email" <<'PY'
 import json
 import re
 import sys
@@ -487,7 +581,7 @@ PY
 }
 
 cmd_ui_dump() {
-  local out_path="${1:-$REPO_DIR/build/reports/e2e-smoke/ui-dump.xml}"
+  local out_path="${1:-$REPO_DIR/build/reports/e2e/ui-dump.xml}"
   resolve_android_sdk
   require_tool adb
   mkdir -p "$(dirname "$out_path")"
@@ -506,7 +600,7 @@ cmd_ui_dump() {
 }
 
 cmd_screenshot() {
-  local out_path="${1:-$REPO_DIR/build/reports/e2e-smoke/screenshot.png}"
+  local out_path="${1:-$REPO_DIR/build/reports/e2e/screenshot.png}"
   resolve_android_sdk
   require_tool adb
   mkdir -p "$(dirname "$out_path")"
@@ -522,38 +616,40 @@ cmd_screenshot() {
   echo "$out_path"
 }
 
-usage() {
+service_usage() {
   cat <<EOF
 Usage: $(basename "$0") <command> [args]
 
 Commands:
   up                    Start Docker Compose deps, KMP-ChatBackend (dev,e2e), AVD, and adb reverse
   down [--clean]        Stop E2E backend, remove adb reverse, stop containers (--clean wipes volumes)
-  status                Verify Docker, Backend :8080, Mailpit :8025, AVD boot, and adb reverse (non-zero on failure)
+  status                Verify Docker, Backend :8080, Mailpit :8025, AVD boot, and adb reverse
   get-otp <email>       Print latest 6-digit OTP sent to <email> via Mailpit REST API
   ui-dump [out.xml]     Export live AVD UI hierarchy XML (or JSON via android layout if .json)
   screenshot [out.png]  Capture live AVD screenshot PNG
 EOF
 }
 
-COMMAND="${1:-}"
-if [ -z "$COMMAND" ]; then
-  usage >&2
-  exit 2
-fi
-shift
-
-case "$COMMAND" in
-  up) cmd_up "$@" ;;
-  down) cmd_down "$@" ;;
-  status) cmd_status "$@" ;;
-  get-otp) cmd_get_otp "$@" ;;
-  ui-dump) cmd_ui_dump "$@" ;;
-  screenshot) cmd_screenshot "$@" ;;
-  -h|--help|help) usage ;;
-  *)
-    echo "ERROR: Unknown command '$COMMAND'" >&2
-    usage >&2
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  COMMAND="${1:-}"
+  if [ -z "$COMMAND" ]; then
+    service_usage >&2
     exit 2
-    ;;
-esac
+  fi
+  shift
+
+  case "$COMMAND" in
+    up) cmd_up "$@" ;;
+    down) cmd_down "$@" ;;
+    status) cmd_status "$@" ;;
+    get-otp) cmd_get_otp "$@" ;;
+    ui-dump) cmd_ui_dump "$@" ;;
+    screenshot) cmd_screenshot "$@" ;;
+    -h|--help|help) service_usage ;;
+    *)
+      echo "ERROR: Unknown command '$COMMAND'" >&2
+      service_usage >&2
+      exit 2
+      ;;
+  esac
+fi

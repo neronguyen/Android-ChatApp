@@ -64,20 +64,17 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 - **OkHttp WebSocket & HTTP**: Network connections to `/ws/chat` and backend REST APIs.
 - **Android WorkManager**: Configured runtime for deferred background tasks and workers.
 
-## System Verification
+## System Verification (5-Layer Testing Pyramid)
 
 ```bash
-# Fast cached unit tests (Tier 1 - Inner loop)
-./scripts/verify.sh fast
+# Tier 1 — Fast selective JVM feedback on affected modules (Unit / Component / Feature)
+./scripts/verify.sh
 
-# Full clean unit tests & Android Lint gate (Tier 2 - Pre-commit)
+# Tier 2 — Full pre-merge gate: Unit, Robolectric UI, Compose Screenshot, Konsist & Lint (.github/workflows/ci.yml)
 ./scripts/verify.sh clean
 
-# Full-stack AVD + Spring Boot + Docker Compose E2E smoke (Tier 3)
-./scripts/smoke-e2e.sh --journey all
-./scripts/smoke-e2e.sh --journey happy-path --record-demo
-
-# Direct Gradle commands
-./gradlew testDebugUnitTest
-./gradlew assembleDebug
+# Tier 3 — Full-stack AVD + Spring Boot + Docker Compose E2E (.github/workflows/e2e.yml)
+./scripts/e2e/verify.sh --journey all
+./scripts/e2e/record.sh --journey direct-chat
+./scripts/e2e/service.sh status
 ```

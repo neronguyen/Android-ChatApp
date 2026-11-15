@@ -13,9 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class OtpRecoverySmokeE2ETest : BaseE2EJourneyTest() {
-
-    override val journeyId: String = "otp-recovery"
+class OtpRecoveryE2ETest : BaseE2EJourneyTest() {
 
     @Test
     fun otpRecoveryJourney_rejectsInvalidOtpAndRecoversWithValidCode() = runJourney {

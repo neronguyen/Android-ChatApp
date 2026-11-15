@@ -1,4 +1,4 @@
-name: Full-Stack E2E Smoke
+name: Android E2E
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ permissions:
   packages: read
 
 jobs:
-  e2e-smoke:
+  e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
@@ -46,12 +46,12 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      - name: Run Tier 3 E2E smoke suite on AVD
+      - name: Run Tier 3 E2E verification suite on AVD
         uses: reactivecircus/android-emulator-runner@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-          BACKEND_DIR: ${{ github.workspace }}/KMP-ChatBackend
+          E2E_BACKEND_DIR: ${{ github.workspace }}/KMP-ChatBackend
           CI: 'true'
         with:
           api-level: 36
@@ -59,13 +59,13 @@ jobs:
           profile: medium_phone
           emulator-options: -no-snapshot-load -no-audio -no-boot-anim -no-window -gpu swiftshader_indirect
           working-directory: Android-ChatApp
-          script: bash ./scripts/smoke-e2e.sh --teardown
+          script: bash ./scripts/e2e/verify.sh --teardown
 
-      - name: Upload E2E smoke artifacts
-        if: always()
+      - name: Upload E2E failure diagnostics
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: e2e-smoke-report
-          path: Android-ChatApp/build/reports/e2e-smoke/
+          name: e2e-failure-diagnostics
+          path: Android-ChatApp/build/reports/e2e/
           if-no-files-found: warn
           retention-days: 14

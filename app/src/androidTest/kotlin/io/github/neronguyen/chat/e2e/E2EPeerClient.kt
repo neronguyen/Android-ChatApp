@@ -457,7 +457,7 @@ internal class E2EPeerClient(
 
     companion object {
         const val TAG = "E2E_PEER"
-        private const val SETUP_TAG = "E2E_SMOKE"
+        private const val SETUP_TAG = "E2E_TEST"
         const val DEFAULT_BOB_EMAIL = "bob@example.com"
         const val DEFAULT_BOB_DISPLAY_NAME = "Bob E2E"
         const val DEFAULT_BOB_PASSWORD = "BobPassword123!"

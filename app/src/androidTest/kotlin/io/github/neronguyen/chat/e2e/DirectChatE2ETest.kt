@@ -20,12 +20,10 @@ import org.junit.runner.RunWith
 import io.github.neronguyen.chat.feature.chat.R as ChatR
 
 @RunWith(AndroidJUnit4::class)
-class FullStackSmokeE2ETest : BaseE2EJourneyTest() {
-
-    override val journeyId: String = "happy-path"
+class DirectChatE2ETest : BaseE2EJourneyTest() {
 
     @Test
-    fun fullStackSmokeJourney_completesAllEightStates() = runJourney {
+    fun directChatJourney_completesAllEightStates() = runJourney {
         val epoch = System.currentTimeMillis() / 1000L
         val aliceEmail = "alice.$epoch@example.com"
         val aliceDisplayName = "Alice E2E"
@@ -118,7 +116,7 @@ class FullStackSmokeE2ETest : BaseE2EJourneyTest() {
                     .fetchSemanticsNodes().size
                 val sendingCount = composeTestRule.onAllNodesWithText(sendingLabel)
                     .fetchSemanticsNodes().size
-                firstVisible && secondVisible && sentCount >= 2 && sendingCount == 0
+                firstVisible && secondVisible && (sentCount >= 2) && (sendingCount == 0)
             }
             composeTestRule.onNodeWithText(firstOutbound).assertIsDisplayed()
             composeTestRule.onNodeWithText(secondOutbound).assertIsDisplayed()
