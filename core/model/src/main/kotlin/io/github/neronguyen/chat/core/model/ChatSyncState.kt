@@ -6,7 +6,7 @@ sealed interface ChatSyncState {
     /** Inactive, unauthenticated, or awaiting sync trigger. */
     data object Idle : ChatSyncState
 
-    /** Device has no validated internet connectivity (NetworkMonitor.isOnline == false). */
+    /** Device has no internet connectivity (debounced NetworkMonitor.isOnline == false). */
     data object Offline : ChatSyncState
 
     /**

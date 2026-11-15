@@ -268,6 +268,20 @@ class RealtimeConnectionManagerTest {
     }
 
     @Test
+    fun `cold start offline prevents connection immediately`() = runTest {
+        val fakeDataSource = FakeChatRealtimeDataSource()
+        val networkMonitor = TestNetworkMonitor(initialOnline = false)
+        val manager = createManager(fakeDataSource, networkMonitor = networkMonitor)
+
+        val owner = FakeLifecycleOwner()
+        manager.onStart(owner)
+        testScheduler.runCurrent()
+
+        assertEquals(0, fakeDataSource.connectCalledCount)
+        assertEquals(RealtimeConnectionState.DISCONNECTED, manager.connectionState.first())
+    }
+
+    @Test
     fun `network flapping before Connected preserves retryAttempt backoff and resets only after Connected`() =
         runTest {
             var shouldSucceedConnect = false

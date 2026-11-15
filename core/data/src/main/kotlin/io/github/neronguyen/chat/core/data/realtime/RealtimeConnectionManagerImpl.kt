@@ -18,7 +18,6 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -86,7 +85,7 @@ internal class RealtimeConnectionManagerImpl @Inject constructor(
             combine(
                 isForeground,
                 tokenDataSource.authState.map { it is AuthState.Authenticated }.distinctUntilChanged(),
-                networkMonitor.isOnline.distinctUntilChanged()
+                networkMonitor.isOnline,
             ) { foreground, isAuthenticated, isOnline ->
                 if (!isAuthenticated) {
                     retryAttempt = 0

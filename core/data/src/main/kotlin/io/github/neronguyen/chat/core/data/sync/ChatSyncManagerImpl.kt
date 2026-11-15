@@ -53,9 +53,10 @@ internal class ChatSyncManagerImpl @Inject constructor(
 
     init {
         appScope.launch(ioDispatcher) {
-            networkMonitor.isOnline.collect { online ->
-                isOnline.store(online)
-            }
+            networkMonitor.isOnline
+                .collect { online ->
+                    isOnline.store(online)
+                }
         }
     }
 
@@ -83,7 +84,6 @@ internal class ChatSyncManagerImpl @Inject constructor(
 
     private suspend fun observeSyncCoordination() {
         networkMonitor.isOnline
-            .distinctUntilChanged()
             .collectLatest { isOnline ->
                 this@ChatSyncManagerImpl.isOnline.store(isOnline)
                 if (!isOnline) {

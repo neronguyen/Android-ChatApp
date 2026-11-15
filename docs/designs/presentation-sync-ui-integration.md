@@ -216,7 +216,7 @@ sealed interface ChatSyncState {
     /** Inactive, unauthenticated, or awaiting sync trigger. */
     data object Idle : ChatSyncState
 
-    /** Device has no validated internet connectivity (NetworkMonitor.isOnline == false). */
+    /** Device has no internet connectivity (debounced NetworkMonitor.isOnline == false). */
     data object Offline : ChatSyncState
 
     /** Realtime WebSocket is establishing a connection or in backoff retry delay. */
@@ -273,11 +273,12 @@ In `core/data/src/main/kotlin/io/github/neronguyen/chat/core/data/sync/ChatSyncM
   ```
 - **Concurrency & Cancellation Invariants**:
     - In `executeCatchUpSync()`, before updating `_syncState.value = ChatSyncState.Synced` or
-      `ChatSyncState.Failed`, check if `networkMonitor.isOnline.value == false`. If offline, leave
+      `ChatSyncState.Failed`, check if `isOnline.load() == false` (tracked from
+      `networkMonitor.isOnline.debounceOffline()`). If offline, leave
       `_syncState.value = ChatSyncState.Offline` to prevent clobbering airplane mode transitions.
     - In the `finally` block of `executeCatchUpSync()`, if the coroutine is cancelled while in
       `Syncing`, transition `_syncState.value` based on current reachability: `Offline` if
-      `!networkMonitor.isOnline.value`, or `Connecting` if socket is reconnecting. Never reset to
+      `!isOnline.load()`, or `Connecting` if socket is reconnecting. Never reset to
       `Idle`.
 
 ---

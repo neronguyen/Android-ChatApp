@@ -37,7 +37,12 @@ By resolving these concerns fully within `:core:data` and `:core:model`, present
 ## Goals
 
 1. **Modular WorkManager Extraction**: Extract all WorkManager implementations into an edge consumer module `:sync:work`. `:core:data` retains only a pure SPI interface (`ChatSyncScheduler`).
-2. **Proactive Network Reachability (`NetworkMonitor`) Internalization**: Encapsulate `NetworkMonitor` wrapping Android `ConnectivityManager` callbacks as `internal` to `:core:data`. Synchronously seed initial network state on cold start, debounce offline transitions by 300ms, and cancel backoff delays with 0ms delay on online recovery.
+2. **Proactive Network Reachability (`NetworkMonitor`) Internalization**: Encapsulate
+   `NetworkMonitor` wrapping Android `ConnectivityManager` callbacks (`NET_CAPABILITY_INTERNET`
+   tracking in `ConnectivityManagerNetworkMonitor` matching Now in Android) as `internal` to
+   `:core:data`. Synchronously seed initial network state on cold start, debounce offline
+   transitions by 300ms in consumers (`debounceOffline()`), and cancel backoff delays with 0ms delay
+   on online recovery.
 3. **Smoothed Foreground Reconnection Supervision**: In `RealtimeConnectionManagerImpl`, smooth `connectionState` during active foreground supervision so it continuously emits `RealtimeConnectionState.CONNECTING` across exponential backoff delays until `CONNECTED` is reached, eliminating banner flicker. Include a dead-man switch (timeout after 5 failures) allowing manual retry intervention via `reconnect()`.
 4. **Unified Event-Driven State Machine (`ChatSyncState`)**: Expand `ChatSyncState` in `:core:model` to include `Idle`, `Offline`, `Connecting`, `Syncing`, `Synced`, and `Failed(val error: DataError)`. Expose a single `StateFlow<ChatSyncState>` from `ChatSyncManager` coordinating network reachability, socket reconnection, and catch-up sync.
 5. **Safe Single-Flight Coalescing**: Repair the in-flight sync mutex in `ChatRoomRepositoryImpl` using `inFlightSync?.takeIf { it.isActive }` and decoupled `invokeOnCompletion` cleanup so cancellation is isolated to the caller and completed jobs are never reused.
@@ -64,7 +69,13 @@ By resolving these concerns fully within `:core:data` and `:core:model`, present
 User opens the app in Airplane Mode (`isOnline == false`). `NetworkMonitor` detects no active network. `ChatSyncManager.syncState` immediately resolves to `ChatSyncState.Offline`. The app does not attempt WebSocket connections or REST calls. Cached rooms and messages render instantly from Room SQLite.
 
 ### CUJ 2: WebSocket Drop & Automatic Reconnect Reconciliation
-While chatting, the user enters an elevator and loses cellular connection. `NetworkMonitor` detects the drop (debounced by 300ms). `RealtimeConnectionManagerImpl` pauses reconnection. Inbound pending messages for uncached rooms remain safely guarded. Upon exiting the elevator, `NetworkMonitor` emits `isOnline == true`. Active backoffs are cancelled immediately (0ms delay), `RealtimeConnectionManagerImpl` emits smoothed `CONNECTING`, the WebSocket reconnects, and `ChatSyncManagerImpl` runs `performCatchUpSync()`.
+
+While chatting, the user enters an elevator and loses cellular connection. `NetworkMonitor` detects
+the drop (debounced by 300ms in consumers via `debounceOffline()`). `RealtimeConnectionManagerImpl`
+pauses reconnection. Inbound pending messages for uncached rooms remain safely guarded. Upon exiting
+the elevator, `NetworkMonitor` emits `isOnline == true`. Active backoffs are cancelled immediately
+(0ms delay), `RealtimeConnectionManagerImpl` emits smoothed `CONNECTING`, the WebSocket reconnects,
+and `ChatSyncManagerImpl` runs `performCatchUpSync()`.
 
 ### CUJ 3: Server Outage & Coordinated Error Resolution
 The device has Wi-Fi (`isOnline == true`), but the backend API server is down. Reconnection backoff runs under active supervision, emitting `Connecting`. After 5 consecutive failed attempts, `RealtimeConnectionManagerImpl` transitions to `FAILED`, leading `ChatSyncManager` to transition to `ChatSyncState.Failed(DataError.Remote.Unavailable)`. Tapping retry triggers `reconnect()`, instantly transitioning state to `Connecting` and re-invoking connection and catch-up sync.
@@ -119,7 +130,7 @@ sealed interface ChatSyncState {
     /** Inactive, unauthenticated, or awaiting sync trigger. */
     data object Idle : ChatSyncState
 
-    /** Device has no validated internet connectivity (NetworkMonitor.isOnline == false). */
+    /** Device has no internet connectivity (debounced NetworkMonitor.isOnline == false). */
     data object Offline : ChatSyncState
 
     /**

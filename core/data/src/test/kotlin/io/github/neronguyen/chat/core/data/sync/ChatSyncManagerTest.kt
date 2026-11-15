@@ -117,6 +117,25 @@ class ChatSyncManagerTest {
     }
 
     @Test
+    fun `cold start offline transitions syncState to Offline immediately`() =
+        runTest(testDispatcher) {
+            fakeNetworkMonitor.setConnected(false)
+            val user = User(
+                id = "u1",
+                email = "u1@example.com",
+                displayName = "User 1",
+                isEmailVerified = true
+            )
+            fakeTokenDataSource.authStateFlow.value =
+                AuthState.Authenticated(user = user, accessToken = "token")
+
+            chatSyncManager.initialize()
+            testScheduler.runCurrent()
+
+        assertEquals(ChatSyncState.Offline, chatSyncManager.syncState.value)
+    }
+
+    @Test
     fun `when isOnline is true and connection is CONNECTING, syncState transitions to Connecting`() = runTest(testDispatcher) {
         val user = User(id = "u1", email = "u1@example.com", displayName = "User 1", isEmailVerified = true)
         fakeTokenDataSource.authStateFlow.value = AuthState.Authenticated(user = user, accessToken = "token")

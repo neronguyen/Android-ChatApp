@@ -9,7 +9,10 @@ Offline-first data repositories, real-time sync coordinator (`ChatRealtimeSyncMa
 - `[ChatMessageRepository.kt:ChatMessageRepository]`: Repository interface for observing messages, optimistic message dispatch (`sendMessage()`, `retryMessage()` returning `Either<DataError, Unit>`), cursor pagination, and soft deletion.
 - `[RealtimeConnectionManager.kt:RealtimeConnectionManager]`: Real-time engine supervising WebSocket connections with smoothed backoff, app lifecycle (`ProcessLifecycleOwner`), internal network reachability (`NetworkMonitor`), and `reconnect()` trigger.
 - `[ChatRealtimeSyncManager.kt:ChatRealtimeSyncManager]`: Reactive consumer processing incoming `WsServerEvent` frames and applying updates to `ChatDao` (with foreign-key buffering guard, disconnect sweep, and idempotent duplicate message reconciliation).
-- `[NetworkMonitor.kt:NetworkMonitor]`: Internal network reachability interface with cold-start seeding and asymmetric 300ms offline debounce.
+- `[NetworkMonitor.kt:NetworkMonitor]`: Internal network reachability interface backed by
+  `[DebouncedNetworkMonitor.kt:DebouncedNetworkMonitor]` (shared 300ms asymmetric offline debounce
+  decorator) wrapping `[ConnectivityManagerNetworkMonitor.kt:ConnectivityManagerNetworkMonitor]`
+  (raw OS `NET_CAPABILITY_INTERNET` availability matching Now in Android).
 - `[ChatSyncManager.kt:ChatSyncManager]`: Coordinates catch-up sync with bounded parallel prefetching (Semaphore 3), unified `retry(): Either<DataError, Unit>`, and exposes unified event-driven `syncState: StateFlow<ChatSyncState>`.
 - `[ChatSyncScheduler.kt:ChatSyncScheduler]`: SPI abstraction for edge background scheduling implemented by `:sync:work`.
 - `[DataModule.kt:DataModule]`: Hilt DI module binding repository, network monitor, and sync manager implementations.
