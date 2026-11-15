@@ -1,13 +1,20 @@
 package io.github.neronguyen.chat.feature.auth.presentation.verify
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import org.junit.Assert.assertEquals
@@ -144,5 +151,37 @@ class VerifyEmailScreenTest {
 
         composeTestRule.onNodeWithTag("verify_button").assertIsNotEnabled()
         composeTestRule.onNodeWithTag("verify_loading_indicator").assertIsDisplayed()
+    }
+
+    @Test
+    fun verifyEmailScreen_acceptsSixDigitOtpInput_andInvokesAutoVerify() {
+        val events = mutableListOf<VerifyEmailUiEvent>()
+        var code by mutableStateOf("")
+
+        composeTestRule.setContent {
+            ChatTheme {
+                VerifyEmailScreen(
+                    uiState = VerifyEmailUiState(
+                        email = "elena@example.com",
+                        code = code,
+                    ),
+                    onEvent = { event ->
+                        events.add(event)
+                        if (event is VerifyEmailUiEvent.CodeChanged) {
+                            code = event.code
+                        }
+                    },
+                    onNavigateToLogin = {},
+                )
+            }
+        }
+
+        composeTestRule.onNode(
+            hasSetTextAction() and hasAnyAncestor(hasTestTag("otp_input_field"))
+        ).performTextInput("123456")
+        composeTestRule.waitForIdle()
+
+        assertTrue(events.contains(VerifyEmailUiEvent.CodeChanged("123456")))
+        assertTrue(events.contains(VerifyEmailUiEvent.Verify))
     }
 }

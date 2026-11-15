@@ -119,6 +119,8 @@ Before proposing any plan or writing code, read and follow:
 | **Selective Diagram Sync**         | Tier 1 (Architecture Doc)  | `./scripts/sync-archify.sh` *(Auto-detects modified .archify.json, delivers HTML, checks layout, exports dual-theme PNGs)*                                                                                               |
 | **Verify Diagram Freshness**       | CI / Pre-Push              | `./scripts/sync-archify.sh --check`                                                                                                                                                                                      |
 | **Strict Clean Verification Gate** | CI / Pre-Merge Gate        | `./scripts/verify.sh clean` *(Full rerun: unit tests & lintDebug, CI enforces this)*                                                                                                                                     |
+| **Full-Stack E2E Smoke**           | Tier 3 (AVD + Backend)     | `./scripts/smoke-e2e.sh` *(Boots `KMP-ChatBackend` + Docker deps + AVD, runs 8-state `FullStackSmokeE2ETest`, pulls PNGs/XMLs + `summary.md` to `build/reports/e2e-smoke/`)*                                             |
+| **E2E Infra & Triage CLI**         | Tier 3 (Host Utility)      | `./scripts/e2e-ctl.sh {up\|down\|status\|get-otp\|ui-dump\|screenshot}` *(Manage E2E stack or inspect live AVD state)*                                                                                                   |
 | Fast re-run of tested modules      | Direct Gradle              | `./gradlew :core:common:test :core:database:testDebugUnitTest :core:network:testDebugUnitTest :core:data:testDebugUnitTest :sync:work:testDebugUnitTest :feature:auth:testDebugUnitTest :feature:chat:testDebugUnitTest` |
 | Run database module unit tests     | Direct Gradle              | `./gradlew :core:database:testDebugUnitTest`                                                                                                                                                                             |
 | Assemble debug APK                 | Direct Gradle              | `./gradlew assembleDebug`                                                                                                                                                                                                |
@@ -130,5 +132,8 @@ Before proposing any plan or writing code, read and follow:
 > - Use **Tier 1 (`./scripts/verify.sh` & `./scripts/sync-archify.sh`)** for rapid iterative
     feedback during development loops. Test execution is automatically scoped to affected modules (~
     3-10s).
-> - **CI Gate (`.github/workflows/ci.yml`)** strictly enforces `./scripts/sync-archify.sh --check`
-    and `./scripts/verify.sh clean` on every PR.
+> - **Tier 2 / CI Gate (`.github/workflows/ci.yml`)** strictly enforces
+    `./scripts/sync-archify.sh --check`
+    and `./scripts/verify.sh clean` on every PR (100% emulator-free and Docker-free).
+> - **Tier 3 (`./scripts/smoke-e2e.sh`)** exercises full-stack AVD + Spring Boot + Docker Compose
+    workflows on local milestones or manual/nightly KVM CI (`.github/workflows/e2e-smoke.yml`).

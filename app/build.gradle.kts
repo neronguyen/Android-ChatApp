@@ -20,6 +20,7 @@ android {
         targetSdk = 37
         versionCode = 1
         versionName = "0.1"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -107,4 +108,24 @@ dependencies {
     testImplementation(libs.androidx.compose.ui.test)
     testImplementation(libs.robolectric)
     debugImplementation(libs.androidx.compose.ui.testManifest)
+
+    // Instrumentation / E2E Testing
+    androidTestImplementation(platform(libs.androidx.compose.bom))
+    androidTestImplementation(libs.androidx.compose.ui.test)
+    androidTestImplementation(libs.androidx.test.ext.junit)
+    androidTestImplementation(libs.androidx.test.runner)
+    androidTestImplementation(libs.androidx.test.uiautomator)
+    androidTestImplementation(libs.okhttp)
+    androidTestImplementation(libs.kotlinx.serialization.json)
+    androidTestImplementation(libs.contract.common)
+    androidTestImplementation(libs.contract.auth)
+    androidTestImplementation(libs.contract.chat)
+
+    constraints {
+        androidTestImplementation(libs.androidx.test.espresso.core) {
+            because(
+                "Compose UI Test transitively pulls espresso-core 3.5.0, which crashes on Android 17 (API 37) because InputManager.getInstance() was removed",
+            )
+        }
+    }
 }

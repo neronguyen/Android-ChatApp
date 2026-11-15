@@ -1,7 +1,7 @@
 # Local E2E Smoke Harness & Agent Inspection CLI (A4)
 
 * **Author:** Nero Nguyen
-* **Status:** Approved
+* **Status:** Implemented
 * **Date:** 2026-11-15
 
 --------------------------------------------------------------------------------
@@ -37,11 +37,12 @@ seconds, but leave three cross-process integration boundaries unverified until m
    `core/network/build.gradle.kts` reads `BASE_URL` strictly from `local.properties`, forcing manual
    file edits that risk dirtying `git status` and tripping the clean-tree check in
    `./scripts/verify.sh clean`.
-2. **Async Multi-Service Infrastructure Chains**: Neither `KMP-ChatBackend/docker-compose.yml` nor
-   an unencrypted local SMTP/AMQP Spring profile exists yet (`application.yaml` enforces RabbitMQ
-   SSL and SMTP STARTTLS). As a result, full-stack flows involving Redis-backed 6-digit OTP
-   generation, Mailpit email delivery, and asynchronous RabbitMQ `UserEvent.Verified` projection
-   from `:user` to `:chat` cannot be tested together end-to-end against a compiled APK.
+2. **Async Multi-Service Infrastructure Chains**: Previously, neither
+   `KMP-ChatBackend/docker-compose.yml` nor an unencrypted local SMTP/AMQP Spring profile existed
+   (`application.yaml` enforces RabbitMQ SSL and SMTP STARTTLS). As a result, full-stack flows
+   involving Redis-backed 6-digit OTP generation, Mailpit email delivery, and asynchronous
+   RabbitMQ `UserEvent.Verified` projection from `:user` to `:chat` could not be tested together
+   end-to-end against a compiled APK.
 3. **Host-Out-of-Band Orchestration Without Token Waste**: Evaluating UI tests with an AI agent at
    runtime (`android` CLI XML journeys) consumes LLM tokens per step, introduces non-determinism,
    and cannot run unattended on CI runners. Conversely, pure manual `adb` scripts lack structured
@@ -82,9 +83,9 @@ seconds, but leave three cross-process integration boundaries unverified until m
 * **NG2 — LLM-Driven Runtime UI Navigation**: Using AI agent turns or `<journey>.xml` loops to
   locate widgets or tap buttons during automated smoke runs is explicitly excluded.
 * **NG3 — Test-Only Backend Auth/OTP Backdoors**: No special bypass endpoints, hardcoded OTPs, or
-  direct SQL inserts skipping RabbitMQ `UserEvent.Verified` will be added to `KMP-ChatBackend`
+  direct SQL inserts skipping RabbitMQ `UserEvent.Verified` are exposed in `KMP-ChatBackend`
   production code.
-* **NG4 — Executing AVD Smoke on Every PR**: `./scripts/smoke-e2e.sh` will not run inside
+* **NG4 — Executing AVD Smoke on Every PR**: `./scripts/smoke-e2e.sh` does not run inside
   `./scripts/verify.sh clean` or standard pull-request CI gates.
 
 ## Critical User Journeys (CUJs)
@@ -171,23 +172,24 @@ instrumentation test driver, and host CLI scripts.
     * Auth & Security (non-production E2E defaults):
       `jwt.secret=dGhpcy1pcy1hLWRldmVsb3BtZW50LW9ubHktMjU2LWJpdC1qd3Qtc2VjcmV0LWtleQ==` (valid
       HMAC-SHA256 key length), `otp.pepper=e2e-only-otp-pepper-value`,
-      `spring.jpa.hibernate.ddl-auto=update`, and IP rate limiting disabled.
+      `spring.jpa.hibernate.ddl-auto=update`, `hibernate.hbm2ddl.create_namespaces=true`, and IP
+      rate limiting disabled.
 
 ### 3. Android Debug Networking & Parameterized `BASE_URL`
 
-* **Debug-Only Cleartext Exemption**: Create `app/src/debug/AndroidManifest.xml` referencing
+* **Debug-Only Cleartext Exemption**: `app/src/debug/AndroidManifest.xml` references
   `app/src/debug/res/xml/network_security_config.xml` permitting `cleartextTrafficPermitted="true"`
   strictly for domains `localhost`, `127.0.0.1`, and `10.0.2.2`. Release APKs inherit zero manifest
   overrides and keep `cleartextTrafficPermitted="false"`.
-* **Configuration-Cache-Safe URL Injection**: Update `core/network/build.gradle.kts` to resolve
+* **Configuration-Cache-Safe URL Injection**: `core/network/build.gradle.kts` resolves
   `BASE_URL` in priority order:
   `providers.gradleProperty("BASE_URL").orNull ?: properties.getProperty("BASE_URL") ?: "http://localhost/"`,
   preserving existing non-E2E build behavior while letting `smoke-e2e.sh` pass
-  `-PBASE_URL=http://localhost:8080/` cleanly. `ChatWebSocketClient.kt` already derives
+  `-PBASE_URL=http://localhost:8080/` cleanly. `ChatWebSocketClient.kt` derives
   `ws://.../ws/chat` directly from `BuildConfig.BASE_URL`.
-* **Minimal Determinism `testTag`s**: Add `.testTag("chat_list_new_chat_fab")` in
-  `ChatListScreen.kt` and `.testTag("conversation_message_input")` in `ConversationScreen.kt` so
-  `ComposeTestRule` can locate every interactive widget across `feature:auth` and `feature:chat`
+* **Minimal Determinism `testTag`s**: `.testTag("chat_list_new_chat_fab")` in
+  `ChatListScreen.kt` and `.testTag("conversation_message_input")` in `ConversationScreen.kt` allow
+  `ComposeTestRule` to locate every interactive widget across `feature:auth` and `feature:chat`
   without modifying visual rendering or invalidating screenshot goldens.
 
 ### 4. Zero-Token 8-State FSM (`FullStackSmokeE2ETest` in `:app:src/androidTest`)
@@ -365,177 +367,3 @@ After every state checkpoint, a lightweight test helper captures `UiDevice.takeS
     * *Mitigation*: `fetchLatestOtp(email)` filters strictly by recipient `To` address and newest
       `Created` timestamp; `e2e-ctl.sh down --clean` runs `docker compose down -v` whenever a full
       reset is desired.
-
---------------------------------------------------------------------------------
-
-## Detailed Implementation Plan
-
-### Phase A: Backend E2E Infrastructure (`KMP-ChatBackend`)
-
-*Checkpoint*: `docker compose -f ../KMP-ChatBackend/docker-compose.yml config --quiet` succeeds and
-`./gradlew :app:bootRun --args='--spring.profiles.active=dev,e2e'` serves
-`GET http://localhost:8080/v3/api-docs` (`200 OK`).
-
-#### 1. `../KMP-ChatBackend/docker-compose.yml` (Create)
-
-* **Type / Scope**: Local & E2E Infrastructure Compose Definition (`KMP-ChatBackend`)
-* **Proposed Changes**: Define four pinned services (`postgres:17-alpine` on `5432`,
-  `redis:7-alpine` on `6379`, `rabbitmq:4-management-alpine` on `5672`/`15672`, and
-  `axllent/mailpit` on SMTP `1025` + HTTP/UI `8025`) with persistent named volumes, synchronized
-  local credentials (`nerochat` / `nerochat_e2e`), and service healthchecks (`pg_isready`,
-  `redis-cli ping`, `rabbitmq-diagnostics -q ping`, and
-  `wget --spider -q http://localhost:8025/api/v1/info`).
-
-#### 2. `../KMP-ChatBackend/app/src/main/resources/application-e2e.yaml` (Create)
-
-* **Type / Scope**: Spring Boot E2E Profile Configuration (`KMP-ChatBackend/:app`)
-* **Proposed Changes**: Override cloud-TLS defaults from `application.yaml` for loopback container
-  connections when launched with `--spring.profiles.active=dev,e2e` by setting Spring Boot property
-  keys directly (`spring.datasource.url`, `spring.datasource.username`,
-  `spring.datasource.password`, `spring.redis.redisson.config`, `spring.rabbitmq.host`,
-  `spring.rabbitmq.username`, `spring.rabbitmq.password`, `spring.rabbitmq.virtual-host`,
-  `spring.rabbitmq.ssl.enabled=false`, `spring.mail.host`, `spring.mail.port`,
-  `spring.mail.username`, `spring.mail.password`, `email.from`,
-  `spring.mail.properties.mail.smtp.auth=false`, `starttls.enable=false`, `starttls.required=false`,
-  `jwt.secret`, and `otp.pepper`).
-
-#### 3. `../KMP-ChatBackend/app/README.md`, `../KMP-ChatBackend/docs/README.md`,
-`../KMP-ChatBackend/AGENTS.md` (Modify)
-
-* **Type / Scope**: Backend Contracts & Documentation Index (`KMP-ChatBackend`)
-* **Proposed Changes**: Document the `e2e` Spring profile and `docker-compose.yml` prerequisites in
-  `app/README.md`, link this spec in `docs/README.md`, and note the Tier 3 local E2E startup entry
-  point in `AGENTS.md`.
-
-### Phase B: Android Debug Networking, Build Wiring & Minimal UI Semantics (`Android-ChatApp`)
-
-*Checkpoint*: `./scripts/verify.sh clean` passes (including `ArchitectureKonsistTest`, `lintDebug`,
-and all AGP Compose screenshot regression suites with zero golden updates).
-
-#### 4. `app/src/debug/res/xml/network_security_config.xml` &
-`app/src/debug/AndroidManifest.xml` (Create)
-
-* **Type / Scope**: Debug-Only Android Network Security Configuration (`:app`)
-* **Proposed Changes**: Configure `<network-security-config>` allowing
-  `<domain-config cleartextTrafficPermitted="true">` strictly for `localhost`, `127.0.0.1`, and
-  `10.0.2.2`, and attach `android:networkSecurityConfig="@xml/network_security_config"` via debug
-  manifest overlay without modifying `app/src/main/AndroidManifest.xml`.
-
-#### 5. `core/network/build.gradle.kts` (Modify)
-
-* **Type / Scope**: Gradle BuildConfig Parameterization (`:core:network`)
-* **Proposed Changes**: Update `defaultConfig` `BASE_URL` lookup to resolve
-  `providers.gradleProperty("BASE_URL").orNull ?: properties.getProperty("BASE_URL") ?: "http://localhost/"`,
-  keeping `local.properties` untouched and maintaining Gradle Configuration Cache compatibility.
-
-#### 6. `gradle/libs.versions.toml` & `app/build.gradle.kts` (Modify)
-
-* **Type / Scope**: Instrumentation Test Catalog & Dependencies (`:app`)
-* **Proposed Changes**: Register pinned versions in `[versions]` / `[libraries]`:
-  `androidx-test-ext-junit` (`"1.3.0"`), `androidx-test-runner` (`"1.7.0"`),
-  `androidx-test-uiautomator` (`"2.3.0"`), and `okhttp` (reusing existing `version.ref = "okhttp"`,
-  `"5.5.1"`). Set `testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"` in
-  `app/build.gradle.kts` `defaultConfig`. Add
-  `androidTestImplementation(platform(libs.androidx.compose.bom))`, `libs.androidx.compose.ui.test`,
-  `libs.androidx.test.ext.junit`, `libs.androidx.test.runner`, `libs.androidx.test.uiautomator`,
-  `libs.okhttp`, `libs.kotlinx.serialization.json`, `libs.contract.common`, `libs.contract.auth`,
-  and `libs.contract.chat`.
-
-#### 7.
-`feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/list/ChatListScreen.kt` &
-`feature/chat/src/main/kotlin/io/github/neronguyen/chat/feature/chat/presentation/conversation/ConversationScreen.kt` (Modify)
-
-* **Type / Scope**: Minimal UI Testability Semantics (`:feature:chat`)
-* **Proposed Changes**: Add `.testTag("chat_list_new_chat_fab")` on the primary
-  `FloatingActionButton` in `ChatListScreen` and `.testTag("conversation_message_input")` on the
-  composer `BasicTextField` in `ConversationScreen` with zero visual, token, or layout changes.
-
-### Phase C: Zero-Token Instrumentation FSM Driver (`Android-ChatApp`)
-
-*Checkpoint*: `./gradlew :app:compileDebugAndroidTestKotlin` succeeds cleanly and
-`:app:connectedDebugAndroidTest` skips `FullStackSmokeE2ETest` unless
-`-Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true` is passed.
-
-#### 8. `app/src/androidTest/kotlin/io/github/neronguyen/chat/e2e/FullStackSmokeE2ETest.kt` &
-`app/src/androidTest/kotlin/io/github/neronguyen/chat/e2e/E2EPeerClient.kt` (Create)
-
-* **Type / Scope**: Zero-Token Instrumentation FSM Test Driver (`:app:src/androidTest`)
-* **Proposed Changes**:
-    * Implement `E2EPeerClient` (`OkHttpClient` + `ContractJson` helper) providing:
-      `fetchLatestOtp(email)` (queries `GET /api/v1/messages`, filters `To` by `<email>`, fetches
-      newest `GET /api/v1/message/{ID}`, parses `\b\d{6}\b`), `ensureVerifiedPeerBob()`
-      (`POST /api/auth/login` -> fallback `register` / `409 resend-verification` ->
-      `fetchLatestOtp` -> `verify-email` -> `login`), `resolveDirectRoomId()`
-      (`GET /api/chat/rooms`), `connectWebSocket(token)`, and
-      `sendDirectTextMessage(roomId, content)`.
-    * Implement `FullStackSmokeE2ETest` gated by
-      `Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("e2eSmoke") == "true")`,
-      launching `MainActivity` via `createAndroidComposeRule<MainActivity>()`, executing
-      `S0_REGISTER_FORM` through `S7_RECONNECT_CATCHUP_SYNC` (including `otp_input_field`
-      auto-submit in `S2`, `new_chat_first_message_field` in `S5`, and `svc wifi/data` toggle in
-      `S7` wrapped with a `@After` / `try-finally` guard to re-enable
-      `svc wifi enable && svc data enable`), capturing `UiDevice.takeScreenshot` +
-      `UiDevice.dumpWindowHierarchy` at each checkpoint into
-      `/sdcard/Android/data/io.github.neronguyen.chat/files/e2e-smoke/`.
-
-### Phase D: Host Orchestration, Optional CI & Living Docs (`Android-ChatApp`)
-
-*Checkpoint*: `./scripts/smoke-e2e.sh` executes end-to-end, populates
-`build/reports/e2e-smoke/<run-id>/summary.md` with 8 PNGs, and leaves `git status --porcelain` clean
-across both repositories.
-
-#### 9. `scripts/e2e-ctl.sh` & `scripts/smoke-e2e.sh` (Create)
-
-* **Type / Scope**: Host Orchestration & Agent Inspection CLI (`Android-ChatApp/scripts/`)
-* **Proposed Changes**:
-    * `scripts/e2e-ctl.sh`: Subcommands `up`, `down [--clean]`, `status` (non-zero exit when
-      unhealthy), `get-otp <email>`, `ui-dump [path]`, and `screenshot [path]`. Launches Spring Boot
-      via `setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e'` in
-      `${BACKEND_DIR}`, manages `/tmp/nerochat-e2e-backend.pid` (process-group teardown on `down`),
-      polls `http://localhost:8080/v3/api-docs`, boots `Medium_Phone_API_37.0` if absent, and sets
-      `adb reverse tcp:8080 tcp:8080` + `tcp:8025 tcp:8025`.
-    * `scripts/smoke-e2e.sh`: Calls `e2e-ctl.sh up`, runs
-      `adb shell pm clear io.github.neronguyen.chat`, executes
-      `./gradlew :app:connectedDebugAndroidTest -PBASE_URL=http://localhost:8080/ -Pandroid.testInstrumentationRunnerArguments.e2eSmoke=true`
-      while trapping/capturing `TEST_EXIT=$?`, unconditionally pulls PNGs/XMLs into
-      `build/reports/e2e-smoke/<run-id>/` (`YYYYMMDD-HHMMSS`), writes `summary.md`, and exits with
-      `$TEST_EXIT` (supports `--teardown`).
-
-#### 10. `app/README.md`, `core/network/README.md`, `feature/chat/README.md`, `docs/README.md`,
-`AGENTS.md` (Modify)
-
-* **Type / Scope**: Living Contracts, Design Registry & Tier 3 Docs (`Android-ChatApp`)
-* **Proposed Changes**: Update impacted module contracts (`app/README.md`, `core/network/README.md`,
-  `feature/chat/README.md`), keep `docs/README.md` synced, and document Tier 3
-  (`./scripts/smoke-e2e.sh`) and `scripts/e2e-ctl.sh` in `AGENTS.md`.
-
-#### 11. `.github/workflows/e2e-smoke.yml` (Create — Optional CI Trigger)
-
-* **Type / Scope**: Manual / Nightly KVM Full-Stack CI Workflow (`Android-ChatApp`)
-* **Proposed Changes**: Define a `workflow_dispatch` / scheduled nightly job checking out
-  `KMP-ChatBackend` + `Android-ChatApp`, invoking `./scripts/smoke-e2e.sh --teardown`, and uploading
-  `build/reports/e2e-smoke/` as a workflow artifact (kept separate from `ci.yml` PR checks).
-
-### Verification Plan
-
-* **Backend Pre-Flight**: `docker compose -f ../KMP-ChatBackend/docker-compose.yml config --quiet`
-  validates compose schema; `./scripts/e2e-ctl.sh up && ./scripts/e2e-ctl.sh status` verifies
-  Postgres, Redis, RabbitMQ, Mailpit, and Spring Boot (`GET /v3/api-docs` HTTP `200`).
-* **Tier 2 Clean Gate (`KMP-ChatBackend` & `Android-ChatApp`)**:
-    * `KMP-ChatBackend`: `./scripts/verify.sh clean` passes with clean `git status`.
-    * `Android-ChatApp`: `./scripts/verify.sh clean` (all JVM unit tests, Robolectric UI tests,
-      `:core:ui` / `:feature:auth` / `:feature:chat` AGP screenshot regression suites,
-      `ArchitectureKonsistTest`, `lintDebug`) passes without modifying any screenshot reference
-      goldens.
-* **Tier 3 E2E Smoke Execution (`Android-ChatApp`)**:
-    * `./scripts/smoke-e2e.sh` completes `exit 0` with zero LLM tokens, executes all 8 FSM
-      checkpoints (`S0`–`S7`), populates `build/reports/e2e-smoke/<run-id>/summary.md` with 8 PNG
-      screenshots + UI hierarchy dumps, and leaves `git status --porcelain` clean across both
-      repositories.
-* **Diagnostic CLI Verification**: Verify `./scripts/e2e-ctl.sh get-otp <email>`,
-  `./scripts/e2e-ctl.sh ui-dump`, and `./scripts/e2e-ctl.sh screenshot` individually against a
-  running stack.
-
---------------------------------------------------------------------------------
-
-*Drafted with EGM*

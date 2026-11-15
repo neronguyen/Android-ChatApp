@@ -25,7 +25,8 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 - Consumes unified `ChatSyncState` via `ChatSyncManager` across `ChatListViewModel`, `ConversationViewModel`, and `AccountViewModel`; embeds `SyncStatusBar` for reachability/sync feedback.
 - Gates message transmission on `canSendMessage == (syncState is Synced || syncState is Syncing)` while preserving editable user input in `TextFieldState`.
 - Preserves banner dismissal across positive recovery (`Offline` -> `Connecting` -> `Syncing` -> `Synced`) and resets strictly on negative regressions (`Failed` or unexpected `Offline`).
-- Exposes deterministic `testTag` identifiers (`conversation_send_button`, `sync_status_bar`,
+- Exposes deterministic `testTag` identifiers (`chat_list_new_chat_fab`,
+  `conversation_message_input`, `conversation_send_button`, `sync_status_bar`,
   `new_chat_*`, `account_*`) across all chat screens covered by Robolectric `*ScreenTest` suites
   (`ChatListScreenTest`, `ConversationScreenTest`, `NewChatScreenTest`, `AccountScreenTest`).
 

@@ -18,6 +18,8 @@ Retrofit HTTP client infrastructure, authenticated OkHttp pipeline, token refres
 - Enforces strict callback isolation on superseded WebSocket connections.
 - Concurrent `401` failures trigger exactly one token refresh request under a synchronization mutex.
 - All JSON payloads are serialized using `ContractJson` (`kotlinx.serialization.json.Json` with `KMP-ChatContract` defaults) and `KMP-ChatContract` wire models.
+- `BuildConfig.BASE_URL` resolves Gradle property `BASE_URL` (`-PBASE_URL=...`) first, then
+  `local.properties` `BASE_URL`, falling back to `"http://localhost/"` (Configuration-Cache safe).
 - `[BASELINE-DEBT]`: Public data source interfaces leak wire DTOs (`UserDto`, `RegisterRequest`, etc.) across module boundaries (scheduled for domain model encapsulation in Track 4).
 
 ## Side Effects
