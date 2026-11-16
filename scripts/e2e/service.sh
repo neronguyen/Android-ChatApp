@@ -184,8 +184,8 @@ require_tool() {
 }
 
 require_backend_dir() {
-  if [ ! -f "$E2E_BACKEND_DIR/docker-compose.yml" ]; then
-    echo "ERROR: KMP-ChatBackend docker-compose.yml not found at: $E2E_BACKEND_DIR/docker-compose.yml" >&2
+  if [ ! -f "$E2E_BACKEND_DIR/docker-compose.e2e.yml" ]; then
+    echo "ERROR: KMP-ChatBackend docker-compose.e2e.yml not found at: $E2E_BACKEND_DIR/docker-compose.e2e.yml" >&2
     echo "Set E2E_BACKEND_DIR=/path/to/KMP-ChatBackend if located elsewhere." >&2
     exit 1
   fi
@@ -258,7 +258,7 @@ ensure_backend_up() {
   require_backend_dir
 
   echo "==> Starting KMP-ChatBackend Docker Compose dependencies..."
-  docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" up -d --wait
+  docker compose -f "$E2E_BACKEND_DIR/docker-compose.e2e.yml" up -d --wait
 
   local pid_info recorded_pid recorded_pgid
   if pid_info="$(read_pid_file)"; then
@@ -476,10 +476,10 @@ cmd_down() {
 
   if [ "$clean" = true ]; then
     echo "==> Tearing down Docker Compose stack and volumes..."
-    docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" down -v
+    docker compose -f "$E2E_BACKEND_DIR/docker-compose.e2e.yml" down -v
   else
     echo "==> Stopping Docker Compose stack (preserving warm volumes)..."
-    docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" stop
+    docker compose -f "$E2E_BACKEND_DIR/docker-compose.e2e.yml" stop
   fi
 }
 
@@ -494,7 +494,7 @@ cmd_status() {
   echo "==> E2E Service Status:"
 
   local compose_ps
-  compose_ps="$(docker compose -f "$E2E_BACKEND_DIR/docker-compose.yml" ps --format '{{.Service}}:{{.State}}:{{.Health}}' 2>/dev/null || true)"
+  compose_ps="$(docker compose -f "$E2E_BACKEND_DIR/docker-compose.e2e.yml" ps --format '{{.Service}}:{{.State}}:{{.Health}}' 2>/dev/null || true)"
   for svc in postgres redis rabbitmq mailpit; do
     local line
     line="$(printf '%s\n' "$compose_ps" | grep -E "^${svc}:" || true)"

@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Test
 import org.junit.runner.RunWith
+import io.github.neronguyen.chat.feature.auth.R as AuthR
 
 @RunWith(AndroidJUnit4::class)
 class OtpRecoveryE2ETest : BaseE2EJourneyTest() {
@@ -49,12 +50,14 @@ class OtpRecoveryE2ETest : BaseE2EJourneyTest() {
             composeTestRule.onNode(otpInputMatcher).performTextReplacement(invalidOtp)
 
             // Wait for backend Redis rejection to surface retry_button and error text on VerifyEmailScreen
+            val expectedInvalidOtpText =
+                composeTestRule.activity.getString(AuthR.string.error_invalid_otp_code)
             waitForTag("retry_button", timeoutMs = 20_000L)
             composeTestRule.onNodeWithTag("verify_email_screen").assertIsDisplayed()
             composeTestRule.onNodeWithTag("retry_button").assertIsDisplayed()
             composeTestRule.onNodeWithTag("verify_email_error_text")
                 .assertIsDisplayed()
-                .assertTextEquals("Invalid verification code")
+                .assertTextEquals(expectedInvalidOtpText)
         }
 
         step("02_valid_otp_recovery_to_login", "N2_VALID_OTP_RECOVERY_TO_LOGIN") {

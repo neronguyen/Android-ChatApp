@@ -10,8 +10,8 @@
 
 This design specifies **A4: Local E2E Harness & Service CLI**, a deterministic, zero-token Tier 3
 cross-boundary verification system spanning `KMP-ChatBackend` and `Android-ChatApp`. It executes
-modular Critical User Journeys (both Direct Chat and Stateful Negative/Recovery flows) on a real
-Android Virtual Device (`Medium_Phone_API_37.0`) connected over `adb reverse` to a real Spring Boot
+modular Critical User Journeys (both Direct Chat and Stateful Negative/Recovery flows) on an
+Android Virtual Device (API 37) connected over `adb reverse` to a real Spring Boot
 instance backed by PostgreSQL, Redis, RabbitMQ, and Mailpit.
 
 The system separates unattended regression execution, demo video recording, and interactive
@@ -52,7 +52,8 @@ seconds, but leave three cross-process integration boundaries unverified until m
    file edits that risk dirtying `git status` and tripping the clean-tree check in
    `./scripts/verify.sh clean`.
 2. **Async Multi-Service Infrastructure Chains (Happy & Unhappy Paths)**: Previously, neither
-   `KMP-ChatBackend/docker-compose.yml` nor an unencrypted local SMTP/AMQP Spring profile existed
+   `KMP-ChatBackend/docker-compose.e2e.yml` nor an unencrypted local SMTP/AMQP Spring profile
+   existed
    (`application.yaml` enforces RabbitMQ SSL and SMTP STARTTLS). Full-stack flows involving
    Redis-backed 6-digit OTP generation and rejection (`400 INVALID_VERIFICATION_CODE`), Mailpit
    email delivery, and asynchronous RabbitMQ `UserEvent.Verified` projection from `:user` to `:chat`
@@ -111,7 +112,7 @@ seconds, but leave three cross-process integration boundaries unverified until m
 `--journey direct-chat`): Zero-Token Full-Stack Account Lifecycle, Bidirectional WebSocket & Reconnect Catch-Up
 
 * **Given**: Docker Compose (`postgres`, `redis`, `rabbitmq`, `mailpit`), `KMP-ChatBackend`
-  (`--spring.profiles.active=dev,e2e`), and AVD `Medium_Phone_API_37.0` are running with
+  (`--spring.profiles.active=dev,e2e`), and an Android Virtual Device (API 37) are running with
   `adb reverse tcp:8080 tcp:8080` and `adb reverse tcp:8025 tcp:8025`; app data is cleared
   (`pm clear`) and `:app` is built with `-PBASE_URL=http://localhost:8080/`.
 * **When**: `./scripts/e2e/verify.sh --journey direct-chat` (or `--journey all`) launches
@@ -159,13 +160,13 @@ seconds, but leave three cross-process integration boundaries unverified until m
 
 `Android-ChatApp` acts as the leaf orchestrator pointing to `../KMP-ChatBackend` (overridable via
 `E2E_BACKEND_DIR`). Rather than duplicating Docker runtime logic inside `Android-ChatApp`,
-`KMP-ChatBackend` owns `docker-compose.yml` and the unencrypted local/E2E Spring profile
+`KMP-ChatBackend` owns `docker-compose.e2e.yml` and the unencrypted local/E2E Spring profile
 (`application-e2e.yaml`), while `Android-ChatApp` owns the debug client build configuration,
 modular instrumentation journey suite, and host CLI scripts.
 
 ```text
 +------------------------------------------+       +-----------------------------------------------+
-| AVD: Medium_Phone_API_37.0               |       | Host Machine                                  |
+| Android Virtual Device (AVD, API 37)     |       | Host Machine                                  |
 |                                          |       |                                               |
 |  :app (Debug APK)                        |       |  KMP-ChatBackend (Spring Boot :8080)          |
 |   - debug network_security_config        |       |   - Profile: dev,e2e                          |
@@ -183,7 +184,8 @@ modular instrumentation journey suite, and host CLI scripts.
 
 ### 2. Backend E2E Infrastructure (`KMP-ChatBackend`)
 
-* **`docker-compose.yml`**: Defines 4 pinned service containers with explicit healthchecks and host
+* **`docker-compose.e2e.yml`**: Defines 4 pinned service containers with explicit healthchecks and
+  host
   port bindings synchronized with `application-e2e.yaml`:
     * `postgres` (`postgres:17-alpine`, port `5432`, DB `nerochat`, user `nerochat`, password
       `nerochat_e2e`, healthcheck `pg_isready -U nerochat -d nerochat`)
@@ -243,8 +245,8 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
   `Assume.assumeTrue(InstrumentationRegistry.getArguments().getString("e2e") == "true")` in
   `@Before` so normal `./gradlew connectedDebugAndroidTest` runs skip E2E classes cleanly.
 * **Survivable Per-Journey Artifact Mirroring**: AGP's default `connectedDebugAndroidTest` lifecycle
-  uninstalls the tested APK on completion, which deletes app-scoped storage under
-  `/sdcard/Android/data/io.github.neronguyen.chat/files/`. To guarantee zero artifact loss,
+  uninstalls the tested APK on completion, which deletes app-internal storage under
+  `targetContext.filesDir` (`files/e2e/<journey>/`). To guarantee zero artifact loss,
   `scripts/e2e/verify.sh` passes `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`
   AND `BaseE2EJourneyTest` mirrors `steps.csv` (and `failure.png` on error, or step PNGs when
   `e2eCaptureSteps=true`) immediately into `/sdcard/Download/e2e/<journey>/`.
@@ -257,9 +259,10 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
 #### 4.2 Peer & Mailpit Driver with Live Telemetry (`E2EPeerClient.kt`)
 
 * **Bob Headless Client `E2E_PEER` Logcat Stream**: Emits concise client-perspective events under
-  tag `E2E_PEER` (`[BOB] Online as bob@example.com`, `[BOB] Joined direct room ... with <peer>`,
-  `[BOB] Latest msg from peer: "..."`, `[BOB-WS] Connected /ws/chat`,
-  `[BOB-WS] Sending: "..."`, `[BOB-WS] Server ACK: "..."`, `[BOB-WS] Received from peer: "..."`,
+  tag `E2E_PEER` (`[BOB] Online as bob@example.com`, `[BOB] Resolved room ... (REST)`,
+  `[BOB] Latest msg: "..."`, `[BOB-WS] Connected /ws/chat (listening)`,
+  `[BOB-WS] Peer opened room ...`, `[BOB-WS] User joined room ...`,
+  `[BOB-WS] Sending: "..."`, `[BOB-WS] Server ACK: "..."`, `[BOB-WS] Received: "..."`,
   `[BOB-WS] Disconnected /ws/chat`). Alice's Mailpit OTP polling and FSM state logs remain scoped
   to `E2E_TEST` so `scripts/e2e/record.sh` renders **Bob's headless client exclusively** in the
   Terminal pane for peer-enabled journeys (`DirectChatE2ETest`), or `E2E_TEST` FSM events for
@@ -305,7 +308,7 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
 ### 5. Host Orchestration (`scripts/e2e/{service,verify,record}.sh`)
 
 * **`scripts/e2e/service.sh <command>`** (deterministic, zero-token host primitives):
-    * `up`: Starts `docker compose -f "${E2E_BACKEND_DIR}/docker-compose.yml" up -d --wait`; if
+    * `up`: Starts `docker compose -f "${E2E_BACKEND_DIR}/docker-compose.e2e.yml" up -d --wait`; if
       `:8080`
       is not listening, launches
       `(cd "${E2E_BACKEND_DIR}" && setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e')`
@@ -322,9 +325,9 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
     * `get-otp <email>`: Queries `http://localhost:8025/api/v1/messages` +
       `GET /api/v1/message/{ID}` filtered by recipient `<email>` and extracts the latest 6-digit OTP
       via `r"\b(\d{6})\b"` (stripping `<style>` blocks and HTML tags on HTML fallback).
-    * `ui-dump [out.xml]` / `screenshot [out.png]`: Wraps `android layout` /
-      `android screen capture` (falling back to `adb shell uiautomator dump` / `screencap`) into
-      explicit paths for developer or agent triage.
+    * `ui-dump [out.xml]` / `screenshot [out.png]`: Wraps `android layout` (when output ends with
+      `.json`) / `android screen capture` (falling back to `adb shell uiautomator dump` /
+      `screencap`) into explicit paths for developer or agent triage.
 * **
   `scripts/e2e/verify.sh [--journey <all|direct-chat|otp-recovery>] [--capture-steps] [--teardown] [--clean]`**:
     1. Invokes `service.sh up`.
@@ -436,8 +439,8 @@ Rather than coupling infrastructure plumbing and state assertions inside a monol
 ## Risks & Mitigations
 
 * **AGP APK Uninstall Wiping App-Scoped Artifacts**: By default, `connectedDebugAndroidTest`
-  uninstalls the app APK after the test run finishes, erasing
-  `/sdcard/Android/data/io.github.neronguyen.chat/files/`.
+  uninstalls the app APK after the test run finishes, erasing `targetContext.filesDir`
+  (`files/e2e/<journey>/`).
     * *Mitigation*: Pass `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true` and mirror
       every checkpoint artifact immediately to `/sdcard/Download/e2e/<journey>/`.
 * **Package Manager Race After `sys.boot_completed=1`**: On cold AVD boots, `sys.boot_completed`

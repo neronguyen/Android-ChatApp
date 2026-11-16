@@ -33,9 +33,10 @@ Authentication and onboarding user experience built with Jetpack Compose, execut
 
 ## Verification
 
-- Unit & Robolectric UI tests: `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
+- Unit, Feature (Robolectric + Fakes), & UI tests:
+  `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
   (`LoginScreenTest`, `RegisterScreenTest`, `VerifyEmailScreenTest`, `ForgotPasswordScreenTest`,
-  `ResetPasswordScreenTest`)
+  `ResetPasswordScreenTest`, `AuthFeatureTest`)
 - Validate screenshots against references:
   `./gradlew :feature:auth:testDebugScreenshotTestDefaultTestSuite`
 - Update screenshot reference images:

@@ -35,7 +35,10 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 
 ## Verification
 
-- Unit & Robolectric UI tests: `./gradlew :feature:chat:testDebugUnitTest --rerun-tasks`
+- Unit, Feature (Robolectric + Fakes), & UI tests:
+  `./gradlew :feature:chat:testDebugUnitTest --rerun-tasks`
+  (`ChatListScreenTest`, `ConversationScreenTest`, `NewChatScreenTest`, `AccountScreenTest`,
+  `ChatFeatureTest`)
 - Validate screenshots against references:
   `./gradlew :feature:chat:testDebugScreenshotTestDefaultTestSuite`
 - Update screenshot reference images:
