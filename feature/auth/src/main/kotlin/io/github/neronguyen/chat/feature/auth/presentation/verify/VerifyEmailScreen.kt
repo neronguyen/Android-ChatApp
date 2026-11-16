@@ -94,7 +94,11 @@ fun VerifyEmailScreen(
             onValueChange = { onEvent(VerifyEmailUiEvent.CodeChanged(it)) },
             isError = hasActiveError,
             enabled = !uiState.isLoading,
-            onComplete = { onEvent(VerifyEmailUiEvent.Verify) },
+            onComplete = {
+                if (!hasActiveError) {
+                    onEvent(VerifyEmailUiEvent.Verify)
+                }
+            },
         )
 
         Spacer(modifier = Modifier.height(16.dp))

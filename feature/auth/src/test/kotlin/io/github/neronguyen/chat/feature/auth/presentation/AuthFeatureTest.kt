@@ -88,7 +88,7 @@ class AuthFeatureTest {
             .assertIsDisplayed()
             .assertTextEquals(str(CoreUiR.string.error_no_internet))
 
-        // Unverified email surfaces verification CTA (note: LoginScreen trims without lowercasing)
+        // Unverified email surfaces verification CTA and passes normalized lowercase email
         nextResponse = Either.Left(AuthError.EmailNotVerified)
         composeTestRule.onNodeWithTag("login_button").performClick()
         composeTestRule.waitForIdle()
@@ -99,7 +99,7 @@ class AuthFeatureTest {
         composeTestRule.onNodeWithTag("verify_email_prompt_button")
             .assertIsDisplayed()
             .performClick()
-        assertEquals("Elena@Example.com", verifyEmailTarget)
+        assertEquals("elena@example.com", verifyEmailTarget)
     }
 
     @Test
@@ -208,11 +208,11 @@ class AuthFeatureTest {
             hasSetTextAction() and hasAnyAncestor(hasTestTag("otp_input_field")),
         )
 
-        // Wrong 6-digit OTP auto-submits and surfaces retry + invalid code error
+        // Wrong 6-digit OTP auto-submits exactly once and surfaces retry + invalid code error
         otpInput.performTextReplacement("000000")
         composeTestRule.waitForIdle()
 
-        assertTrue(fakeRepo.verifyEmailCalls.contains("elena@example.com" to "000000"))
+        assertEquals(listOf("elena@example.com" to "000000"), fakeRepo.verifyEmailCalls)
         composeTestRule.onNodeWithTag("verify_email_error_text")
             .assertIsDisplayed()
             .assertTextEquals(str(R.string.error_invalid_otp_code))
@@ -228,12 +228,19 @@ class AuthFeatureTest {
             .assertIsDisplayed()
             .assertTextEquals(str(R.string.verification_code_resent))
 
-        // Replacing with valid 6-digit OTP triggers onVerifySuccess
+        // Replacing with valid 6-digit OTP submits once more and triggers onVerifySuccess
         otpInput.performTextReplacement("")
         composeTestRule.waitForIdle()
         otpInput.performTextReplacement("654321")
         composeTestRule.waitForIdle()
 
+        assertEquals(
+            listOf(
+                "elena@example.com" to "000000",
+                "elena@example.com" to "654321",
+            ),
+            fakeRepo.verifyEmailCalls,
+        )
         assertEquals(1, verifySuccessCount)
     }
 }

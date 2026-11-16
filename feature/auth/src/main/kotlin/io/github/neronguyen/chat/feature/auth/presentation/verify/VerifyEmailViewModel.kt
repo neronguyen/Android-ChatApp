@@ -85,9 +85,6 @@ class VerifyEmailViewModel @AssistedInject constructor(
                 authError = null,
             )
         }
-        if (sanitized.length == 6 && !_uiState.value.isLoading) {
-            verify()
-        }
     }
 
     private fun verify() {

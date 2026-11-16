@@ -42,6 +42,7 @@ import io.github.neronguyen.chat.core.ui.rememberMinLoading
 import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.util.asUiText
+import io.github.neronguyenvn.nerochat.contract.validation.EmailValidator
 
 @Composable
 fun LoginRoute(
@@ -176,7 +177,9 @@ fun LoginScreen(
         if (uiState.authError == AuthError.EmailNotVerified) {
             Spacer(modifier = Modifier.height(4.dp))
             TextButton(
-                onClick = { onNavigateToVerifyEmail(emailState.text.toString().trim()) },
+                onClick = {
+                    onNavigateToVerifyEmail(EmailValidator.normalize(emailState.text.toString()))
+                },
                 modifier = Modifier.testTag("verify_email_prompt_button"),
             ) {
                 Text(stringResource(R.string.verify_email_prompt))

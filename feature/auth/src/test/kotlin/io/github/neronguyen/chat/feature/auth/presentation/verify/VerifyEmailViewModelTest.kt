@@ -73,9 +73,16 @@ class VerifyEmailViewModelTest {
     }
 
     @Test
-    fun `entering 6th digit automatically triggers verify`() = runTest {
+    fun `code change stores sanitized digits without triggering duplicate verification`() =
+        runTest {
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
         testDispatcher.scheduler.advanceUntilIdle()
+
+            assertEquals("123456", viewModel.uiState.value.code)
+            assertEquals(0, fakeRepository.verifyCallCount)
+
+            viewModel.onEvent(VerifyEmailUiEvent.Verify)
+            testDispatcher.scheduler.advanceUntilIdle()
 
         assertEquals(1, fakeRepository.verifyCallCount)
         assertEquals(testEmail, fakeRepository.lastVerifyEmail)
@@ -111,6 +118,7 @@ class VerifyEmailViewModelTest {
     fun `when verify fails with InvalidCode error, authError is updated`() = runTest {
         fakeRepository.verifyResult = Either.Left(AuthError.InvalidCode)
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
+        viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -125,6 +133,7 @@ class VerifyEmailViewModelTest {
     fun `when verify fails with CodeExpired error, authError is updated`() = runTest {
         fakeRepository.verifyResult = Either.Left(AuthError.CodeExpired)
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
+        viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -137,6 +146,7 @@ class VerifyEmailViewModelTest {
     fun `when verify fails with MaxAttemptsExceeded error, authError is updated with retryAfterSeconds`() = runTest {
         fakeRepository.verifyResult = Either.Left(AuthError.MaxAttemptsExceeded(retryAfterSeconds = 300L))
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
+        viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.advanceUntilIdle()
 
@@ -158,6 +168,7 @@ class VerifyEmailViewModelTest {
         assertEquals(0, fakeRepository.verifyCallCount)
 
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
+        viewModel.onEvent(VerifyEmailUiEvent.Verify)
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.runCurrent()
