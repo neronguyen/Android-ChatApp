@@ -16,6 +16,18 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 | **[KMP-ChatBackend](https://github.com/neronguyen/KMP-NeroChatBackend)** | Modular monolith REST & WebSocket server | **Level 3** (Backend Components) | Kotlin, Spring Boot 4, PostgreSQL, Redis (Redisson), RabbitMQ |
 | **[Android-ChatApp](https://github.com/neronguyen/Android-NeroChatApp)** *(this repo)* | Native Android client with offline-first persistence and real-time sync | **Level 3** (Android Components) | Jetpack Compose, Navigation 3, Retrofit, OkHttp, Room, DataStore, Hilt, Arrow |
 
+### Full-Stack End-to-End Demo
+
+Recorded live via `./scripts/e2e/record.sh --journey direct-chat` against an API 37 AVD
+(`DirectChatE2ETest`), local Spring Boot backend (`dev,e2e`), PostgreSQL, Redis, RabbitMQ, and
+Mailpit (`adb reverse`): registration → Mailpit 6-digit OTP verification → RabbitMQ peer discovery →
+bidirectional WebSocket messaging (`SENDING` → `SENT` & inbound reply) → offline reconnect catch-up
+sync.
+
+<video src="docs/assets/e2e/direct-chat-demo.mp4" controls muted width="100%"></video>
+
+[Direct Chat & Reconnect Catch-Up E2E Demo (MP4)](docs/assets/e2e/direct-chat-demo.mp4)
+
 ### Android Component Architecture (C4 Level 3)
 
 > **Interactive Architecture Viewers**:
@@ -66,14 +78,30 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 
 ## System Verification (5-Layer Testing Pyramid)
 
+Organized after
+the [Android Scalable Testing Strategy](https://developer.android.com/training/testing/fundamentals/strategies):
+
+1. **Unit**: Pure logic, data-to-domain mappers, and coroutine utilities (`*MapperTest`,
+   `SingleFlightTest`, `ExponentialBackoffTest`).
+2. **Component**: Headless Robolectric UI semantics (`*ScreenTest`), AGP Compose Preview screenshot
+   regression suites (`*ScreenshotTest`), Room DAO (`ChatDaoTest`), and encrypted DataStore
+   (`PreferencesTokenDataSourceTest`).
+3. **Feature**: ViewModels (`*ViewModelTest`), repositories & real-time sync (`ChatSyncManagerTest`,
+   `ChatRealtimeSyncManagerTest`), and MockWebServer wire tests (`RetrofitNetworkWireTest`,
+   `ChatWebSocketClientTest`).
+4. **Application (Static)**: Architectural boundary rules (`ArchitectureKonsistTest`), module
+   dependency checks (`DataArchitectureTest`), and `lintDebug`.
+5. **End-to-End (E2E)**: Full-stack AVD journeys (`DirectChatE2ETest`, `OtpRecoveryE2ETest`) against
+   live Spring Boot + PostgreSQL, Redis, RabbitMQ, and Mailpit.
+
 ```bash
-# Tier 1 — Fast selective JVM feedback on affected modules (Unit / Component / Feature)
+# Layers 1–4 — Selective inner-loop JVM feedback on affected modules
 ./scripts/verify.sh
 
-# Tier 2 — Full pre-merge gate: Unit, Robolectric UI, Compose Screenshot, Konsist & Lint (.github/workflows/ci.yml)
+# Layers 1–4 — Full pre-merge clean gate (Unit, Robolectric UI, Compose Screenshots, Konsist & Lint)
 ./scripts/verify.sh clean
 
-# Tier 3 — Full-stack AVD + Spring Boot + Docker Compose E2E (.github/workflows/e2e.yml)
+# Layer 5 — Full-stack AVD + Spring Boot + Docker Compose E2E
 ./scripts/e2e/verify.sh --journey all
 ./scripts/e2e/record.sh --journey direct-chat
 ./scripts/e2e/service.sh status
