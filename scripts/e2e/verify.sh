@@ -286,14 +286,19 @@ finalize() {
   local rc=$?
   set +e
 
+  local summary_exit="$TEST_EXIT"
+  if [ "$rc" -ne 0 ] && [ "$TEST_EXIT" -eq 0 ]; then
+    summary_exit="$rc"
+  fi
+
   if [ "$ARTIFACTS_PULLED" = false ]; then
     for j_id in "${SELECTED_JOURNEYS[@]}"; do
       pull_journey_artifacts "$j_id" "${REPORT_DIR}/${j_id}"
     done
-    write_summary "$TEST_EXIT"
-    write_ci_step_summary "$TEST_EXIT"
+    write_summary "$summary_exit"
+    write_ci_step_summary "$summary_exit"
     ARTIFACTS_PULLED=true
-    print_console_diagnostics "$TEST_EXIT"
+    print_console_diagnostics "$summary_exit"
   fi
 
   if [ "$TEARDOWN" = true ]; then

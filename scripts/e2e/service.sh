@@ -284,10 +284,20 @@ ensure_backend_up() {
     exit 1
   fi
 
+  echo "==> Compiling KMP-ChatBackend (:app:classes)..."
+  if ! (
+    cd "$E2E_BACKEND_DIR"
+    ./gradlew --no-daemon :app:classes
+  ) >"$E2E_BACKEND_LOG" 2>&1; then
+    echo "ERROR: KMP-ChatBackend compilation failed. Tail of $E2E_BACKEND_LOG:" >&2
+    tail -n 40 "$E2E_BACKEND_LOG" >&2 || true
+    return 1
+  fi
+
   echo "==> Launching KMP-ChatBackend (--spring.profiles.active=dev,e2e)..."
   (
     cd "$E2E_BACKEND_DIR"
-    exec setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e' >"$E2E_BACKEND_LOG" 2>&1
+    exec setsid ./gradlew --no-daemon :app:bootRun --args='--spring.profiles.active=dev,e2e' >>"$E2E_BACKEND_LOG" 2>&1
   ) &
   local spawned_pid=$!
   local spawned_pgid
