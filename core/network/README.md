@@ -20,7 +20,7 @@ Retrofit HTTP client infrastructure, authenticated OkHttp pipeline, token refres
 - All JSON payloads are serialized using `ContractJson` (`kotlinx.serialization.json.Json` with `KMP-ChatContract` defaults) and `KMP-ChatContract` wire models.
 - `BuildConfig.BASE_URL` resolves Gradle property `BASE_URL` (`-PBASE_URL=...`) first, then
   `local.properties` `BASE_URL`, falling back to `"http://localhost/"` (Configuration-Cache safe).
-- `[BASELINE-DEBT]`: Public data source interfaces leak wire DTOs (`UserDto`, `RegisterRequest`, etc.) across module boundaries (scheduled for domain model encapsulation in Track 4).
+- **Boundary Design (Now in Android)**: `:core:network` remains decoupled from `:core:model` and exposes `KMP-ChatContract` wire DTOs (`UserDto`, `RegisterRequest`, etc.) strictly to `:core:data`, which serves as the single mapping layer between wire DTOs, Room entities, and domain models.
 
 ## Side Effects
 - Establishes HTTP network connections to backend REST endpoints.
