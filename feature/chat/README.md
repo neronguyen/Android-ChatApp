@@ -12,10 +12,12 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 - `[NewChatViewModel.kt:NewChatViewModel]`: ViewModel managing participant search with debounce and room creation requests.
 - `[AccountScreen.kt:AccountScreen]`: User profile and session management screen.
 - `[AccountViewModel.kt:AccountViewModel]`: ViewModel handling account display and logout dispatch.
-- `[ChatNavigation.kt:ChatNavGraph]`: Navigation 3 entrypoint integrating chat routes into the app navigation host.
+- `[ChatRoute.kt:ChatRoute]`: Serializable Navigation 3 `NavKey` destinations (`ChatList`, `NewChat`, `Conversation`, `Account`).
+- `[ChatNavigation.kt:ChatNavGraph]` & `[ChatNavigation.kt:chatSection]`: Navigation 3 entrypoint and `EntryProviderScope<NavKey>` extension integrating chat routes into the app navigation host.
+- `[ChatAvatar.kt:ChatAvatar]`, `[ConversationRow.kt:ConversationRow]`, `[ChatRoomUiMapper.kt:ChatRoomUiMapper]`, & `[ConversationUiMapper.kt:ConversationUiMapper]`: Reusable chat presentation components and UI mappers.
 
 ## Invariants
-- Depends only on `:core:ui`, `:core:model`, `:core:data` interfaces (`ChatRoomRepository`, `ChatMessageRepository`, `ChatSyncManager`), and `:validation:chat`.
+- Depends only on `:core:ui`, `:core:model`, `:core:data` interfaces (`AuthRepository`, `ChatRoomRepository`, `ChatMessageRepository`, `ChatSyncManager`), and `:validation:chat`.
 - Never imports wire DTOs (`:contract:*`) or database entities.
 - Consumes visual tokens exclusively via `MaterialTheme.colorScheme`, `MaterialTheme.typography`,
   and `MaterialTheme.shapes` (never hardcoded `Color(...)` literals or raw `Chat*` color constants).
@@ -37,8 +39,7 @@ Chat list, conversation messaging, new chat creation, and account settings user 
 
 - Unit, Feature (Robolectric + Fakes), & UI tests:
   `./gradlew :feature:chat:testDebugUnitTest --rerun-tasks`
-  (`ChatListScreenTest`, `ConversationScreenTest`, `NewChatScreenTest`, `AccountScreenTest`,
-  `ChatFeatureTest`)
+  (`*ViewModelTest`, `*UiMapperTest`, `*ScreenTest`, `ChatFeatureTest`)
 - Validate screenshots against references:
   `./gradlew :feature:chat:testDebugScreenshotTestDefaultTestSuite`
 - Update screenshot reference images:

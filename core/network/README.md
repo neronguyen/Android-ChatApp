@@ -8,11 +8,12 @@ Retrofit HTTP client infrastructure, authenticated OkHttp pipeline, token refres
 - `[ChatNetworkDataSource.kt:ChatNetworkDataSource]`: Interface defining HTTP chat room and message remote calls.
 - `[ChatRealtimeDataSource.kt:ChatRealtimeDataSource]`: Interface defining real-time WebSocket connection lifecycle and event stream.
 - `[ChatWebSocketClient.kt:ChatWebSocketClient]`: OkHttp WebSocket manager implementing `ChatRealtimeDataSource`, encoding `WsClientMessage` and decoding `WsServerEvent`.
-- `[SocketConnectionState.kt:SocketConnectionState]`: Network-level socket connection states (`Disconnected`, `Connecting`, `Connected`, `Failed`).
+- `[SocketConnectionState.kt:SocketConnectionState]`: Network-level socket connection states (`Disconnected`, `Connecting`, `Connected`, `AuthenticationFailed`, `Failed`).
+- `[NetworkError.kt:NetworkError]`: Sealed transport/HTTP error hierarchy returned by `AuthNetworkDataSource` and `ChatNetworkDataSource`.
 - `[TokenAuthenticator.kt:TokenAuthenticator]`: OkHttp `Authenticator` intercepting `401 Unauthorized` responses and executing synchronized single-flight token refresh.
 - `[AuthInterceptor.kt:AuthInterceptor]`: OkHttp `Interceptor` injecting `Authorization: Bearer <token>` headers.
-- `[TokenRefresher.kt:TokenRefresher]`: Boundary interface allowing network layer to trigger repository-level token refresh without circular dependencies.
-- `[NetworkModule.kt:NetworkModule]`: Hilt DI module providing Retrofit, OkHttp, and network data sources.
+- `[TokenProvider.kt:TokenProvider]` & `[TokenRefresher.kt:TokenRefresher]`: Boundary interfaces allowing the network layer to read and refresh access tokens without circular dependencies.
+- `[NetworkModule.kt:NetworkModule]` & `[NetworkQualifiers.kt]`: Hilt DI module and qualifiers (`BaseOkHttp`, `AuthenticatedOkHttp`, `RealtimeOkHttp`, `RefreshOkHttp`, `BaseUrl`) providing Retrofit, OkHttp, and network data sources.
 
 ## Invariants
 - Enforces strict callback isolation on superseded WebSocket connections.

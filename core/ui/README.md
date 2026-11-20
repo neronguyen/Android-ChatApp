@@ -50,6 +50,7 @@ All UI components use these semantic color tokens; never introduce component-spe
 | `touch target`             | `48 × 48 dp`             | Minimum interactive touch target for all buttons and icon buttons   |
 | `stroke`                   | `1.dp`                   | Outlines and essential borders                                      |
 | `typeface`                 | `Roboto` / Platform Sans | Medium for headers/titles, Regular for body/captions                |
+| `headline`                 | `22sp / 28sp`            | Large screen headers (`Typography.headlineMedium`)                  |
 | `title`                    | `22sp / 28sp`            | Screen titles (`Chats`, `Conversation`, `Account`)                  |
 | `heading`                  | `18sp / 24sp`            | Section headers and dialog titles                                   |
 | `body`                     | `16sp / 24sp`            | Message text and primary form inputs                                |

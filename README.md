@@ -13,8 +13,8 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 | Repository | Role | C4 Architecture Level | Tech Stack |
 |:---|:---|:---|:---|
 | **[KMP-ChatContract](https://github.com/neronguyen/KMP-ChatContract)** | Compile-time wire schema, error contracts, and shared validators | **Level 1** (System Context) & **Level 2** (Containers) | Pure Kotlin 2.4, `kotlinx.serialization`, `kotlinx-datetime` |
-| **[KMP-ChatBackend](https://github.com/neronguyen/KMP-NeroChatBackend)** | Modular monolith REST & WebSocket server | **Level 3** (Backend Components) | Kotlin, Spring Boot 4, PostgreSQL, Redis (Redisson), RabbitMQ |
-| **[Android-ChatApp](https://github.com/neronguyen/Android-NeroChatApp)** *(this repo)* | Native Android client with offline-first persistence and real-time sync | **Level 3** (Android Components) | Jetpack Compose, Navigation 3, Retrofit, OkHttp, Room, DataStore, Hilt, Arrow |
+| **[KMP-ChatBackend](https://github.com/neronguyen/KMP-ChatBackend)** | Modular monolith REST & WebSocket server | **Level 3** (Backend Components) | Kotlin, Spring Boot 4, PostgreSQL, Redis (Redisson), RabbitMQ |
+| **[Android-ChatApp](https://github.com/neronguyen/Android-ChatApp)** *(this repo)* | Native Android client with offline-first persistence and real-time sync | **Level 3** (Android Components) | Jetpack Compose, Navigation 3, Retrofit, OkHttp, Room, DataStore, Hilt, Arrow |
 
 ### Full-Stack End-to-End Demo
 
@@ -42,7 +42,7 @@ sync.
 
 ## Subdirectories & System Boundaries
 
-- [app](./app/README.md) - Application bootstrap, `MainActivity`, splash screen, and Navigation 3 root switcher.
+- [app](./app/README.md) - Application bootstrap, `MainActivity`, Hilt `Configuration.Provider`, and Navigation 3 root switcher.
 - [sync:work](./sync/work/README.md) - Edge Android WorkManager consumer (`ChatSyncWorker`,
   `WorkManagerSyncSchedulerImpl`).
 - [feature](./feature/README.md) - Root blueprint for presentation UI features.

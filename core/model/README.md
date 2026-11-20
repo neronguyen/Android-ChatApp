@@ -4,9 +4,10 @@
 Pure Kotlin client domain models and typed domain error hierarchies.
 
 ## Interface
-- `[User.kt:User]`: Pure client user domain model (`id`, `email`, `displayName`).
+- `[User.kt:User]`: Pure client user domain model (`id`, `email`, `displayName`, `isEmailVerified`).
 - `[AuthState.kt:AuthState]`: Sealed authentication state (`Unauthenticated`, `Authenticated(user: User, accessToken: String)`).
-- `[ChatRoom.kt:ChatRoom]`: Client chat room domain model (`id`, `type`, `name`, `participants`, `lastMessage`, `lastActivityAt`).
+- `[ChatRoom.kt:ChatRoom]`: Client chat room domain model (`id`, `type`, `name`, `creator`, `participants`, `lastMessage`, `lastActivityAt`).
+- `[ChatRoomType.kt:ChatRoomType]`: Room category enum (`DIRECT`, `GROUP`, `UNKNOWN`).
 - `[ChatMessage.kt:ChatMessage]`: Client message domain model (`id`, `roomId`, `senderId`, `content`, `timestamp: Instant`, `deliveryStatus: MessageDeliveryStatus`, `deletedAt`).
 - `[ChatParticipant.kt:ChatParticipant]`: Room participant domain model (`userId`, `email`, `displayName`, `profilePictureUrl`).
 - `[MessageDeliveryStatus.kt:MessageDeliveryStatus]`: Message lifecycle enum (`SENDING`, `SENT`, `FAILED`, `DELETED`).

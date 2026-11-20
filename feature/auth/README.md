@@ -16,7 +16,8 @@ Authentication and onboarding user experience built with Jetpack Compose, execut
 - `[ForgotPasswordViewModel.kt:ForgotPasswordViewModel]`: ViewModel managing password reset code dispatch.
 - `[ResetPasswordScreen.kt:ResetPasswordScreen]`: Jetpack Compose screen for entering 6-digit OTP and new password with validation gates.
 - `[ResetPasswordViewModel.kt:ResetPasswordViewModel]`: ViewModel managing OTP reset validation, mismatch protection, and cooldown timers.
-- `[AuthNavigation.kt:AuthNavGraph]`: Navigation 3 entrypoint integrating authentication routes into the app navigation host.
+- `[AuthRoute.kt:AuthRoute]`: Serializable Navigation 3 `NavKey` destinations (`Login`, `Register`, `VerifyEmail`, `ForgotPassword`, `ResetPassword`).
+- `[AuthNavigation.kt:AuthNavGraph]` & `[AuthNavigation.kt:authSection]`: Navigation 3 entrypoint and `EntryProviderScope<NavKey>` extension integrating authentication routes into the app navigation host.
 
 ## Invariants
 - Depends only on `:core:ui`, `:core:model`, `:core:data` repository interfaces, and `:validation:auth`.
@@ -37,8 +38,7 @@ Authentication and onboarding user experience built with Jetpack Compose, execut
 
 - Unit, Feature (Robolectric + Fakes), & UI tests:
   `./gradlew :feature:auth:testDebugUnitTest --rerun-tasks`
-  (`LoginScreenTest`, `RegisterScreenTest`, `VerifyEmailScreenTest`, `ForgotPasswordScreenTest`,
-  `ResetPasswordScreenTest`, `AuthFeatureTest`)
+  (`*ViewModelTest`, `*ScreenTest`, `AuthFeatureTest`)
 - Validate screenshots against references:
   `./gradlew :feature:auth:testDebugScreenshotTestDefaultTestSuite`
 - Update screenshot reference images:

@@ -76,9 +76,9 @@ developers author and verify UI changes directly inside the codebase through thr
       consume tokens exclusively through `MaterialTheme.colorScheme`, `MaterialTheme.typography`,
       and `MaterialTheme.shapes`.
     - Codify the preview and screenshot workflow in `AGENTS.md` Section 1.1 and module contracts
-      (`feature/auth/README.md`, `feature/chat/README.md`, `core/ui/README.md`), and back it with 3
-      new unit-time `Konsist` rules in `ArchitectureKonsistTest.kt` (bringing the suite from 5
-      existing boundary rules to 8 total):
+      (`feature/auth/README.md`, `feature/chat/README.md`, `core/ui/README.md`), and back it with
+      unit-time `Konsist` rules in `ArchitectureKonsistTest.kt` (expanding the UI guardrails
+      alongside `testTag`/`*ScreenTest`/`*ScreenshotTest` parity checks for 12 baseline rules):
         - Ban hardcoded `Color(...)` calls and framework `Color.*` constants (allowing only
           `Color.Transparent` and `Color.Unspecified`) outside `:core:ui` theme files.
         - Ban direct imports of raw `Chat*` color tokens, wildcard `core.ui.theme.*` imports, and
@@ -146,7 +146,7 @@ developers author and verify UI changes directly inside the codebase through thr
     * **Case B (Non-UI Logic/Refactor Task)**: The task modifies ViewModels, repositories, or
       non-visual state logic without requesting visual changes.
 * **Then**:
-    * In **Case A**, the updated reference PNGs under `<module>/src/screenshotTestDebug/reference/`
+    * In **Case A**, the updated reference PNGs under `<module>/src/screenshotTestDefaultDebug/reference/`
       are inspected and presented for user review, and `./scripts/verify.sh clean` passes.
     * In **Case B**, running `updateDebugScreenshotTestDefaultTestSuite` is prohibited, and any
       visual diff detected by `testDebugScreenshotTestDefaultTestSuite` during
@@ -182,7 +182,7 @@ developers author and verify UI changes directly inside the codebase through thr
 |     - No MaterialTheme { ... } wrapper|   |     - *ScreenshotTest delegates to    |
 |     - Every *Screen.kt has @Preview   |   |       internal *Preview() in src/main |
 |       function invoking ChatTheme     |   |     - Compares against committed      |
-|  2. Robolectric testTag Semantics     |   |       src/screenshotTestDebug/        |
+|  2. Robolectric testTag Semantics     |   |       src/screenshotTestDefaultDebug/ |
 |  3. Optional: android preview render  |   |       reference/**/*.png (Linux OS)   |
 +---------------------------------------+   +---------------------------------------+
 ```
@@ -210,9 +210,9 @@ developers author and verify UI changes directly inside the codebase through thr
 
 ### 2. Static Architectural Guardrails (`ArchitectureKonsistTest.kt`)
 
-Three new unit-time Konsist tests in
+Three primary UI theme/preview unit-time Konsist tests in
 `app/src/test/kotlin/io/github/neronguyen/chat/architecture/ArchitectureKonsistTest.kt` (joining the
-5 existing boundary rules for 8 rules total) enforce the UI boundaries. To avoid false positives on
+existing boundary and `testTag`/`*ScreenTest`/`*ScreenshotTest` parity rules) enforce the UI boundaries. To avoid false positives on
 comments, KDoc, or string literals, text-pattern checks run over comment-and-string-stripped source
 text or Konsist AST declarations:
 
@@ -245,7 +245,7 @@ text or Konsist AST declarations:
 * **Gradle Test Suite & Robolectric Configuration**:
     * `gradle/libs.versions.toml` already defines `screenshot = "0.0.1-alpha17"`,
       `androidx-compose-ui-tooling`, `screenshot-validation-api`, `robolectric`,
-      `androidx-compose-ui-test-junit4`, and `androidx-compose-ui-test-manifest`.
+      `androidx-compose-ui-test`, and `androidx-compose-ui-testManifest`.
     * Both `feature/auth/build.gradle.kts` and `feature/chat/build.gradle.kts` register the
       `"screenshotTest"` suite under `android.testOptions.screenshotTests.create("screenshotTest")`
       with `engineVersion = libs.versions.screenshot.get()`, `targetVariants.add("debug")`, and test
@@ -331,7 +331,7 @@ text or Konsist AST declarations:
 * **Golden Baseline Update Policy**:
     * *Permitted*: Only when a task explicitly modifies UI layouts, theme tokens, or `@Preview`
       states (`./scripts/verify.sh :<module>:updateDebugScreenshotTestDefaultTestSuite`), followed
-      by visual inspection of the diffed PNGs under `<module>/src/screenshotTestDebug/reference/`.
+      by visual inspection of the diffed PNGs under `<module>/src/screenshotTestDefaultDebug/reference/`.
       When shared tokens or components in `:core:ui` change visually, the developer/agent must also
       run `updateDebugScreenshotTestDefaultTestSuite` for `:feature:auth` and `:feature:chat` and
       inspect all cascading baseline diffs.
@@ -404,4 +404,4 @@ text or Konsist AST declarations:
 * **Repository Storage Footprint**:
     * Adding 16 mobile-viewport (`390x844` dp) reference PNGs across `:feature:auth` (8 images) and
       `:feature:chat` (8 images) adds ~300–600 KB of compressed PNG assets under
-      `src/screenshotTestDebug/reference/`.
+      `src/screenshotTestDefaultDebug/reference/`.

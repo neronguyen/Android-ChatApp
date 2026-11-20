@@ -46,7 +46,7 @@ By resolving these concerns fully within `:core:data` and `:core:model`, present
    on online recovery.
 3. **Smoothed Foreground Reconnection Supervision**: In `RealtimeConnectionManagerImpl`, smooth `connectionState` during active foreground supervision so it continuously emits `RealtimeConnectionState.CONNECTING` across exponential backoff delays until `CONNECTED` is reached, eliminating banner flicker. Include a dead-man switch (timeout after 5 failures) allowing manual retry intervention via `reconnect()`.
 4. **Unified Event-Driven State Machine (`ChatSyncState`)**: Expand `ChatSyncState` in `:core:model` to include `Idle`, `Offline`, `Connecting`, `Syncing`, `Synced`, and `Failed(val error: DataError)`. Expose a single `StateFlow<ChatSyncState>` from `ChatSyncManager` coordinating network reachability, socket reconnection, and catch-up sync.
-5. **Safe Single-Flight Coalescing**: Repair the in-flight sync mutex in `ChatRoomRepositoryImpl` using `inFlightSync?.takeIf { it.isActive }` and decoupled `invokeOnCompletion` cleanup so cancellation is isolated to the caller and completed jobs are never reused.
+5. **Safe Single-Flight Coalescing**: Coalesce concurrent room/message/catch-up syncs via `:core:common`'s `SingleFlight` and `KeyedSingleFlight` (`ChatRoomRepositoryImpl`, `ChatMessageRepositoryImpl`, `ChatRealtimeSyncManager`, `ChatSyncManagerImpl`), isolating caller cancellation and preventing stale `Deferred` reuse.
 6. **Bounded Parallel Catch-Up Prefetching**: Execute dirty-room prefetching concurrently using `Semaphore(3)` within `supervisorScope` in `ChatSyncManagerImpl.performCatchUpSync()`. Propagate failure if any room fails.
 
 ---

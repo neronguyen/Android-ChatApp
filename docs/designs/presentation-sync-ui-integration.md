@@ -109,9 +109,8 @@ message sending safeguards in the absence of an automatic background outbox, and
 4. **Room Metadata Alterations**:
    Participant membership and room creation contracts remain unchanged.
 5. **AGP Upgrade / AGP Test Suites**:
-   Upgrading AGP from `9.2.1` to `9.5.0-alpha03+` to use
-   `testOptions { screenshotTests.create(...) }` is a separate future decision. This slice uses the
-   deprecated standalone `com.android.compose.screenshot` plugin (superseded in AGP 9.5.1).
+   *(Historical slice note — subsequently superseded by AGP `9.5.1` native `screenshotTests` suites and `testDebugScreenshotTestDefaultTestSuite` / `updateDebugScreenshotTestDefaultTestSuite` in [`codebase-first-ui-architecture.md`](./codebase-first-ui-architecture.md).)* Upgrading AGP from `9.2.1` to `9.5.0-alpha03+` to use
+   `testOptions { screenshotTests.create(...) }` was deferred from this initial slice, which originally introduced the standalone `com.android.compose.screenshot` plugin.
 6. **Feature-Screen Screenshot Coverage**:
    Full screens in `:feature:chat` are not screenshot-tested in this slice (deferred to [
    `codebase-first-ui-architecture.md`](./codebase-first-ui-architecture.md)); behavior is covered
@@ -160,13 +159,13 @@ message sending safeguards in the absence of an automatic background outbox, and
 ### CUJ 5: Unintended Visual Change Is Caught Before Merge (Developer Journey)
 
 * **Given**: Approved `SyncStatusBar` reference images exist in
-  `core/ui/src/screenshotTestDebug/reference/`.
+  `core/ui/src/screenshotTestDefaultDebug/reference/` (originally `screenshotTestDebug/reference/` under the standalone plugin).
 * **When**: A developer changes shared tokens or `SyncStatusBar` layout (e.g. padding `12.dp` →
   `8.dp`) and opens a PR.
-* **Then**: `./scripts/verify.sh clean` (CI) runs `:core:ui:validateDebugScreenshotTest`, fails, and
+* **Then**: `./scripts/verify.sh clean` (CI) runs `:core:ui:testDebugScreenshotTestDefaultTestSuite`, fails, and
   produces an HTML report showing reference, actual, and diff images. The change merges only after
   the developer reviews the new rendering, regenerates references with
-  `updateDebugScreenshotTest`, and ticks the PR template's visual checklist.
+  `updateDebugScreenshotTestDefaultTestSuite`, and ticks the PR template's visual checklist.
 
 ---
 
@@ -490,7 +489,10 @@ workflow is:
 3. `updateDebugScreenshotTest` records the approved rendering as the reference image.
 4. From then on, `validateDebugScreenshotTest` catches unintended changes.
 
-**Tooling choice.** The project is on AGP `9.2.1`. The recommended AGP test-suite DSL
+> [!NOTE]
+> **Superseded Tooling**: This initial slice introduced screenshot testing on AGP `9.2.1` using the standalone `com.android.compose.screenshot` plugin (`validateDebugScreenshotTest` / `updateDebugScreenshotTest`). The repository has since migrated to AGP `9.5.1` native `screenshotTests` suites (`testDebugScreenshotTestDefaultTestSuite` / `updateDebugScreenshotTestDefaultTestSuite`, `src/screenshotTestDefaultDebug/reference/`) across `:core:ui`, `:feature:auth`, and `:feature:chat`; see [`codebase-first-ui-architecture.md`](./codebase-first-ui-architecture.md) for the current canonical harness.
+
+**Tooling choice (initial slice).** The project was on AGP `9.2.1`. The recommended AGP test-suite DSL
 (`testOptions { screenshotTests.create(...) }`) requires AGP `9.5.0-alpha03+`. This slice therefore
 uses the standalone `com.android.compose.screenshot` plugin (`0.0.1-alpha16`), which is deprecated.
 Migrating to test suites is deferred to the AGP upgrade (see Non-Goals and Alternative D).

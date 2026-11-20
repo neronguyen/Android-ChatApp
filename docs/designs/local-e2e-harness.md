@@ -55,7 +55,7 @@ seconds, but leave three cross-process integration boundaries unverified until m
    `KMP-ChatBackend/docker-compose.e2e.yml` nor an unencrypted local SMTP/AMQP Spring profile
    existed
    (`application.yaml` enforces RabbitMQ SSL and SMTP STARTTLS). Full-stack flows involving
-   Redis-backed 6-digit OTP generation and rejection (`400 INVALID_VERIFICATION_CODE`), Mailpit
+   Redis-backed 6-digit OTP generation and rejection (`400 AuthServerError.InvalidCode`), Mailpit
    email delivery, and asynchronous RabbitMQ `UserEvent.Verified` projection from `:user` to `:chat`
    could not be tested together end-to-end against a compiled APK.
 3. **Host-Out-of-Band Orchestration & Visual Proof Without Token Waste**: Evaluating UI tests with
@@ -133,7 +133,7 @@ seconds, but leave three cross-process integration boundaries unverified until m
     1. `N0_REGISTER_AND_CHALLENGE`: Alice registers `alice.otp.<epoch>@example.com` and lands on
        `verify_email_screen`.
     2. `N1_INVALID_OTP_REJECTED`: Alice enters an invalid 6-digit OTP (`000000`, verified distinct
-       from the real Mailpit OTP); Backend Redis rejects the code (`400 INVALID_VERIFICATION_CODE`),
+       from the real Mailpit OTP); Backend Redis rejects the code (`400 AuthServerError.InvalidCode`),
        and `verify_email_screen` renders `verify_email_error_text` and `retry_button` without
        crashing or hanging in a loading state.
     3. `N2_VALID_OTP_RECOVERY_TO_LOGIN`: Alice clears/replaces the input with the real 6-digit OTP
