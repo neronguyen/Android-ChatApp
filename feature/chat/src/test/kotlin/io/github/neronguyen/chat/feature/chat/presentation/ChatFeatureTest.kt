@@ -11,11 +11,17 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import arrow.core.Either
+import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
 import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.error.ChatError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
+import io.github.neronguyen.chat.core.testing.FakeChatMessageRepository
+import io.github.neronguyen.chat.core.testing.FakeChatRoomRepository
+import io.github.neronguyen.chat.core.testing.FakeChatSyncManager
+import io.github.neronguyen.chat.core.testing.TestFixtures
 import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.chat.R
 import io.github.neronguyen.chat.feature.chat.presentation.account.AccountRoute
@@ -50,7 +56,9 @@ class ChatFeatureTest {
 
     @Test
     fun newChatRoute_displaysSearchError_thenFindsPeerAndCreatesDirectRoom() {
-        val fakeAuthRepo = FakeChatAuthRepository()
+        val fakeAuthRepo = FakeAuthRepository(
+            initialAuthState = AuthState.Authenticated(TestFixtures.user(), "access-token"),
+        )
         val fakeRoomRepo = FakeChatRoomRepository()
         val bobId = "00000000-0000-0000-0000-000000000002"
         val bob = ChatParticipant(
@@ -117,7 +125,9 @@ class ChatFeatureTest {
                 ChatParticipant("user-bob", "bob@example.com", "Bob"),
             ),
         )
-        val fakeAuthRepo = FakeChatAuthRepository()
+        val fakeAuthRepo = FakeAuthRepository(
+            initialAuthState = AuthState.Authenticated(TestFixtures.user(), "access-token"),
+        )
         val fakeRoomRepo = FakeChatRoomRepository(initialRooms = listOf(room))
         val fakeMessageRepo = FakeChatMessageRepository()
         val fakeSyncManager = FakeChatSyncManager(initialState = ChatSyncState.Synced)
@@ -173,7 +183,9 @@ class ChatFeatureTest {
 
     @Test
     fun accountRoute_displaysSyncState_andConfirmsSignOut() {
-        val fakeAuthRepo = FakeChatAuthRepository()
+        val fakeAuthRepo = FakeAuthRepository(
+            initialAuthState = AuthState.Authenticated(TestFixtures.user(), "access-token"),
+        )
         val fakeSyncManager = FakeChatSyncManager(initialState = ChatSyncState.Synced)
         val viewModel = AccountViewModel(fakeAuthRepo, fakeSyncManager)
 

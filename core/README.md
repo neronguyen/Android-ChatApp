@@ -6,6 +6,7 @@ Intermediate blueprint grouping core foundation modules of Android-ChatApp (doma
 ## Subdirectories & Boundaries
 - [core:common](./common/README.md) - Coroutine dispatchers and application-scoped task management.
 - [core:model](./model/README.md) - Pure client domain models and error hierarchies.
+- [core:testing](./testing/README.md) - Test-only shared fakes and deterministic domain fixtures (`testImplementation` only).
 - [core:security](./security/README.md) - Hardware-backed Android KeyStore AES-256-GCM encryption.
 - [core:datastore](./datastore/README.md) - Encrypted Preferences DataStore for session tokens.
 - [core:database](./database/README.md) - Room SQLite Single Source of Truth (`ChatDatabase`, `ChatDao`).

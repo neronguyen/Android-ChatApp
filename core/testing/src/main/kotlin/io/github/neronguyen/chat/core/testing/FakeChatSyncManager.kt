@@ -1,4 +1,4 @@
-package io.github.neronguyen.chat.feature.chat.presentation
+package io.github.neronguyen.chat.core.testing
 
 import arrow.core.Either
 import io.github.neronguyen.chat.core.data.sync.ChatSyncManager
@@ -11,15 +11,20 @@ import kotlinx.coroutines.flow.asStateFlow
 class FakeChatSyncManager(
     initialState: ChatSyncState = ChatSyncState.Idle,
 ) : ChatSyncManager {
+
     val syncStateFlow = MutableStateFlow(initialState)
     override val syncState: StateFlow<ChatSyncState> = syncStateFlow.asStateFlow()
 
+    var initializeCallCount = 0
     var retryCallCount = 0
     var catchUpCallCount = 0
+
     var retryResult: Either<DataError, Unit> = Either.Right(Unit)
     var catchUpResult: Either<DataError, Unit> = Either.Right(Unit)
 
-    override fun initialize() {}
+    override fun initialize() {
+        initializeCallCount++
+    }
 
     override suspend fun performCatchUpSync(): Either<DataError, Unit> {
         catchUpCallCount++

@@ -2,17 +2,13 @@ package io.github.neronguyen.chat.feature.auth.presentation.register
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
-import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
 import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -98,7 +94,7 @@ class RegisterViewModelTest {
     @Test
     fun `two immediate submissions start only one register request`() = runTest {
         val completable = CompletableDeferred<Either<AuthError.Register, User>>()
-        fakeRepository.registerCompletable = completable
+        fakeRepository.registerHandler = { _, _, _ -> completable.await() }
 
         viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
         viewModel.displayNameState.setTextAndPlaceCursorAtEnd("Test User")
@@ -109,7 +105,7 @@ class RegisterViewModelTest {
 
         testScheduler.runCurrent()
 
-        assertEquals(1, fakeRepository.registerCallCount)
+        assertEquals(1, fakeRepository.registerCalls.size)
         assertTrue(viewModel.uiState.value.isLoading)
 
         completable.complete(Either.Right(User("1", "test@example.com", "Test User", false)))
@@ -122,7 +118,7 @@ class RegisterViewModelTest {
     @Test
     fun `submission during active request starts no additional request`() = runTest {
         val completable = CompletableDeferred<Either<AuthError.Register, User>>()
-        fakeRepository.registerCompletable = completable
+        fakeRepository.registerHandler = { _, _, _ -> completable.await() }
 
         viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
         viewModel.displayNameState.setTextAndPlaceCursorAtEnd("Test User")
@@ -130,12 +126,12 @@ class RegisterViewModelTest {
 
         viewModel.onEvent(RegisterUiEvent.Register)
         testScheduler.runCurrent()
-        assertEquals(1, fakeRepository.registerCallCount)
+        assertEquals(1, fakeRepository.registerCalls.size)
         assertTrue(viewModel.uiState.value.isLoading)
 
         viewModel.onEvent(RegisterUiEvent.Register)
         testScheduler.runCurrent()
-        assertEquals(1, fakeRepository.registerCallCount)
+        assertEquals(1, fakeRepository.registerCalls.size)
 
         completable.complete(Either.Right(User("1", "test@example.com", "Test User", false)))
         testScheduler.advanceUntilIdle()
@@ -151,7 +147,7 @@ class RegisterViewModelTest {
 
         viewModel.onEvent(RegisterUiEvent.Register)
 
-        assertEquals(0, fakeRepository.registerCallCount)
+        assertEquals(0, fakeRepository.registerCalls.size)
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals(AuthValidationError.EmptyEmail, viewModel.uiState.value.validationError)
     }
@@ -164,7 +160,7 @@ class RegisterViewModelTest {
 
         viewModel.onEvent(RegisterUiEvent.Register)
 
-        assertEquals(0, fakeRepository.registerCallCount)
+        assertEquals(0, fakeRepository.registerCalls.size)
         assertFalse(viewModel.uiState.value.isLoading)
         assertEquals(AuthValidationError.InvalidPassword, viewModel.uiState.value.validationError)
     }
@@ -172,7 +168,7 @@ class RegisterViewModelTest {
     @Test
     fun `after failed request, new submission can start another request`() = runTest {
         var completable = CompletableDeferred<Either<AuthError.Register, User>>()
-        fakeRepository.registerCompletable = completable
+        fakeRepository.registerHandler = { _, _, _ -> completable.await() }
 
         viewModel.emailState.setTextAndPlaceCursorAtEnd("test@example.com")
         viewModel.displayNameState.setTextAndPlaceCursorAtEnd("Test User")
@@ -180,7 +176,7 @@ class RegisterViewModelTest {
 
         viewModel.onEvent(RegisterUiEvent.Register)
         testScheduler.runCurrent()
-        assertEquals(1, fakeRepository.registerCallCount)
+        assertEquals(1, fakeRepository.registerCalls.size)
 
         completable.complete(Either.Left(AuthError.EmailAlreadyInUse))
         testScheduler.advanceUntilIdle()
@@ -189,11 +185,10 @@ class RegisterViewModelTest {
         assertEquals(AuthError.EmailAlreadyInUse, viewModel.uiState.value.authError)
 
         completable = CompletableDeferred()
-        fakeRepository.registerCompletable = completable
 
         viewModel.onEvent(RegisterUiEvent.Register)
         testScheduler.runCurrent()
-        assertEquals(2, fakeRepository.registerCallCount)
+        assertEquals(2, fakeRepository.registerCalls.size)
         assertTrue(viewModel.uiState.value.isLoading)
 
         completable.complete(Either.Right(User("1", "test@example.com", "Test User", false)))
@@ -202,47 +197,4 @@ class RegisterViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
         assertTrue(viewModel.uiState.value.isSuccess)
     }
-}
-
-private class FakeAuthRepository : AuthRepository {
-    var registerCallCount = 0
-    var registerCompletable: CompletableDeferred<Either<AuthError.Register, User>>? = null
-
-    override fun getAuthState(): Flow<AuthState> = flowOf(AuthState.Unauthenticated)
-
-    override suspend fun login(
-        email: String,
-        password: String,
-    ): Either<AuthError.Login, User> {
-        val user = User("1", email, "Test User", true)
-        return Either.Right(user)
-    }
-
-    override suspend fun register(
-        email: String,
-        displayName: String,
-        password: String,
-    ): Either<AuthError.Register, User> {
-        registerCallCount++
-        val completable = registerCompletable
-        return if (completable != null) {
-            completable.await()
-        } else {
-            Either.Right(User("1", email, displayName, false))
-        }
-    }
-
-    override suspend fun verifyEmail(email: String, code: String): Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-
-    override suspend fun resendVerification(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun forgotPassword(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun resetPassword(
-        email: String,
-        code: String,
-        newPassword: String,
-    ): Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-
-    override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
 }

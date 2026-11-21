@@ -1,17 +1,13 @@
 package io.github.neronguyen.chat.feature.auth.presentation.forgot
 
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.model.AuthState
-import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
 import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -69,7 +65,7 @@ class ForgotPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(0, fakeRepository.forgotPasswordCallCount)
+        assertEquals(0, fakeRepository.forgotPasswordCalls.size)
         assertEquals(AuthValidationError.EmptyEmail, viewModel.uiState.value.validationError)
         assertFalse(viewModel.uiState.value.isLoading)
     }
@@ -81,7 +77,7 @@ class ForgotPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(0, fakeRepository.forgotPasswordCallCount)
+        assertEquals(0, fakeRepository.forgotPasswordCalls.size)
         assertEquals(AuthValidationError.InvalidEmail, viewModel.uiState.value.validationError)
         assertFalse(viewModel.uiState.value.isLoading)
     }
@@ -93,8 +89,7 @@ class ForgotPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.forgotPasswordCallCount)
-        assertEquals("alice@example.com", fakeRepository.lastForgotPasswordEmail)
+        assertEquals(listOf("alice@example.com"), fakeRepository.forgotPasswordCalls)
         val state = viewModel.uiState.value
         assertTrue(state.isSuccess)
         assertEquals("alice@example.com", state.submittedEmail)
@@ -117,13 +112,13 @@ class ForgotPasswordViewModelTest {
 
     @Test
     fun `when repository returns error, authError is updated`() = runTest {
-        fakeRepository.forgotPasswordResult = Either.Left(DataError.Remote.Unavailable)
+        fakeRepository.forgotPasswordHandler = { Either.Left(DataError.Remote.Unavailable) }
         viewModel.onEvent(ForgotPasswordUiEvent.EmailChanged("alice@example.com"))
         viewModel.onEvent(ForgotPasswordUiEvent.Submit)
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.forgotPasswordCallCount)
+        assertEquals(1, fakeRepository.forgotPasswordCalls.size)
         val state = viewModel.uiState.value
         assertFalse(state.isSuccess)
         assertFalse(state.isLoading)
@@ -133,14 +128,14 @@ class ForgotPasswordViewModelTest {
     @Test
     fun `two immediate submissions start only one request`() = runTest {
         val completable = CompletableDeferred<Either<DataError, Unit>>()
-        fakeRepository.forgotPasswordCompletable = completable
+        fakeRepository.forgotPasswordHandler = { completable.await() }
 
         viewModel.onEvent(ForgotPasswordUiEvent.EmailChanged("alice@example.com"))
         viewModel.onEvent(ForgotPasswordUiEvent.Submit)
         viewModel.onEvent(ForgotPasswordUiEvent.Submit)
 
         testDispatcher.scheduler.runCurrent()
-        assertEquals(1, fakeRepository.forgotPasswordCallCount)
+        assertEquals(1, fakeRepository.forgotPasswordCalls.size)
         assertTrue(viewModel.uiState.value.isLoading)
 
         completable.complete(Either.Right(Unit))
@@ -149,45 +144,4 @@ class ForgotPasswordViewModelTest {
         assertFalse(viewModel.uiState.value.isLoading)
         assertTrue(viewModel.uiState.value.isSuccess)
     }
-}
-
-private class FakeAuthRepository : AuthRepository {
-    var forgotPasswordCallCount = 0
-    var lastForgotPasswordEmail: String? = null
-    var forgotPasswordResult: Either<DataError, Unit> = Either.Right(Unit)
-    var forgotPasswordCompletable: CompletableDeferred<Either<DataError, Unit>>? = null
-
-    override fun getAuthState(): Flow<AuthState> = flowOf(AuthState.Unauthenticated)
-
-    override suspend fun login(email: String, password: String): Either<AuthError.Login, User> =
-        Either.Right(User("1", email, "Test User", true))
-
-    override suspend fun register(
-        email: String,
-        displayName: String,
-        password: String,
-    ): Either<AuthError.Register, User> =
-        Either.Right(User("1", email, displayName, false))
-
-    override suspend fun verifyEmail(
-        email: String,
-        code: String,
-    ): Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-
-    override suspend fun resendVerification(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun forgotPassword(email: String): Either<DataError, Unit> {
-        forgotPasswordCallCount++
-        lastForgotPasswordEmail = email
-        val completable = forgotPasswordCompletable
-        return completable?.await() ?: forgotPasswordResult
-    }
-
-    override suspend fun resetPassword(
-        email: String,
-        code: String,
-        newPassword: String,
-    ): Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-
-    override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
 }

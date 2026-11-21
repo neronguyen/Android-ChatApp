@@ -250,6 +250,51 @@ class ArchitectureKonsistTest {
             }
     }
 
+    @Test
+    fun `no src main file imports core testing`() {
+        Konsist
+            .scopeFromProject()
+            .files
+            .filter { it.path.contains("/src/main/") && !it.path.contains("/core/testing/") }
+            .assertTrue { file ->
+                file.imports.none { import ->
+                    import.name.startsWith("io.github.neronguyen.chat.core.testing")
+                }
+            }
+    }
+
+    @Test
+    fun `hiltViewModel is only called inside Navigation files`() {
+        Konsist
+            .scopeFromProject()
+            .files
+            .filter { it.path.contains("/src/main/") && !it.path.endsWith("Navigation.kt") }
+            .assertTrue { file ->
+                val stripped = stripCommentsAndStrings(file.text)
+                file.imports.none { it.name.contains("hiltViewModel") } &&
+                    !Regex("""\bhiltViewModel\b""").containsMatchIn(stripped)
+            }
+    }
+
+    @Test
+    fun `only core network and core data import wire contract DTOs`() {
+        Konsist
+            .scopeFromProject()
+            .files
+            .filter { file ->
+                file.path.contains("/src/main/") &&
+                    !file.path.contains("/core/network/") &&
+                    !file.path.contains("/core/data/")
+            }
+            .assertTrue { file ->
+                file.imports.none { import ->
+                    import.name.matches(
+                        Regex("""io\.github\.neronguyenvn\.nerochat\.contract\.(auth|chat|common)\..*"""),
+                    )
+                }
+            }
+    }
+
     private fun featureScreenFiles(): List<KoFileDeclaration> {
         val screens = Konsist
             .scopeFromProject()

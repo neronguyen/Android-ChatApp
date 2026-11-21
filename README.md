@@ -55,6 +55,7 @@ sync.
   - [core:datastore](./core/datastore/README.md) - Encrypted Preferences DataStore for tokens and `AuthState`.
   - [core:security](./core/security/README.md) - Android KeyStore AES-256-GCM encryption manager.
   - [core:model](./core/model/README.md) - Pure Kotlin domain models and sealed error hierarchies.
+  - [core:testing](./core/testing/README.md) - Test-only shared fakes and deterministic domain fixtures (`testImplementation` only).
   - [core:ui](./core/ui/README.md) - Shared design system, theme, and common Compose components.
   - [core:common](./core/common/README.md) - Coroutine dispatchers and application-scoped task management.
 - [docs](./docs/README.md) - Unified C4 architecture, sequence/lifecycle/dataflow specifications,

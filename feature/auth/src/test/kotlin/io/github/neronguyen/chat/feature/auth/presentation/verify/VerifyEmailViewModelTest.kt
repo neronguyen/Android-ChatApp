@@ -2,17 +2,13 @@ package io.github.neronguyen.chat.feature.auth.presentation.verify
 
 import androidx.lifecycle.SavedStateHandle
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.model.AuthState
-import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
 import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidationError
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -75,20 +71,18 @@ class VerifyEmailViewModelTest {
     @Test
     fun `code change stores sanitized digits without triggering duplicate verification`() =
         runTest {
-        viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
-        testDispatcher.scheduler.advanceUntilIdle()
+            viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
+            testDispatcher.scheduler.advanceUntilIdle()
 
             assertEquals("123456", viewModel.uiState.value.code)
-            assertEquals(0, fakeRepository.verifyCallCount)
+            assertEquals(0, fakeRepository.verifyEmailCalls.size)
 
             viewModel.onEvent(VerifyEmailUiEvent.Verify)
             testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.verifyCallCount)
-        assertEquals(testEmail, fakeRepository.lastVerifyEmail)
-        assertEquals("123456", fakeRepository.lastVerifyCode)
-        assertTrue(viewModel.uiState.value.isSuccess)
-    }
+            assertEquals(listOf(testEmail to "123456"), fakeRepository.verifyEmailCalls)
+            assertTrue(viewModel.uiState.value.isSuccess)
+        }
 
     @Test
     fun `empty code sets EmptyOtpCode validation error and makes no repository call`() = runTest {
@@ -97,7 +91,7 @@ class VerifyEmailViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(0, fakeRepository.verifyCallCount)
+        assertEquals(0, fakeRepository.verifyEmailCalls.size)
         assertEquals(AuthValidationError.EmptyOtpCode, viewModel.uiState.value.validationError)
         assertFalse(viewModel.uiState.value.isLoading)
     }
@@ -109,20 +103,20 @@ class VerifyEmailViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(0, fakeRepository.verifyCallCount)
+        assertEquals(0, fakeRepository.verifyEmailCalls.size)
         assertEquals(AuthValidationError.InvalidOtpLength, viewModel.uiState.value.validationError)
         assertFalse(viewModel.uiState.value.isLoading)
     }
 
     @Test
     fun `when verify fails with InvalidCode error, authError is updated`() = runTest {
-        fakeRepository.verifyResult = Either.Left(AuthError.InvalidCode)
+        fakeRepository.verifyEmailHandler = { _, _ -> Either.Left(AuthError.InvalidCode) }
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.verifyCallCount)
+        assertEquals(1, fakeRepository.verifyEmailCalls.size)
         val state = viewModel.uiState.value
         assertFalse(state.isSuccess)
         assertFalse(state.isLoading)
@@ -131,7 +125,7 @@ class VerifyEmailViewModelTest {
 
     @Test
     fun `when verify fails with CodeExpired error, authError is updated`() = runTest {
-        fakeRepository.verifyResult = Either.Left(AuthError.CodeExpired)
+        fakeRepository.verifyEmailHandler = { _, _ -> Either.Left(AuthError.CodeExpired) }
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
@@ -144,7 +138,9 @@ class VerifyEmailViewModelTest {
 
     @Test
     fun `when verify fails with MaxAttemptsExceeded error, authError is updated with retryAfterSeconds`() = runTest {
-        fakeRepository.verifyResult = Either.Left(AuthError.MaxAttemptsExceeded(retryAfterSeconds = 300L))
+        fakeRepository.verifyEmailHandler = { _, _ ->
+            Either.Left(AuthError.MaxAttemptsExceeded(retryAfterSeconds = 300L))
+        }
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
@@ -158,21 +154,21 @@ class VerifyEmailViewModelTest {
     @Test
     fun `two immediate verify submissions start only one request`() = runTest {
         val completable = CompletableDeferred<Either<AuthError.VerifyEmail, Unit>>()
-        fakeRepository.verifyCompletable = completable
+        fakeRepository.verifyEmailHandler = { _, _ -> completable.await() }
 
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("12345"))
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.runCurrent()
-        assertEquals(0, fakeRepository.verifyCallCount)
+        assertEquals(0, fakeRepository.verifyEmailCalls.size)
 
         viewModel.onEvent(VerifyEmailUiEvent.CodeChanged("123456"))
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
         viewModel.onEvent(VerifyEmailUiEvent.Verify)
 
         testDispatcher.scheduler.runCurrent()
-        assertEquals(1, fakeRepository.verifyCallCount)
+        assertEquals(1, fakeRepository.verifyEmailCalls.size)
         assertTrue(viewModel.uiState.value.isLoading)
 
         completable.complete(Either.Right(Unit))
@@ -187,8 +183,7 @@ class VerifyEmailViewModelTest {
         viewModel.onEvent(VerifyEmailUiEvent.ResendCode)
 
         testDispatcher.scheduler.runCurrent()
-        assertEquals(1, fakeRepository.resendCallCount)
-        assertEquals(testEmail, fakeRepository.lastResendEmail)
+        assertEquals(listOf(testEmail), fakeRepository.resendVerificationCalls)
 
         val state = viewModel.uiState.value
         assertFalse(state.isResending)
@@ -207,7 +202,7 @@ class VerifyEmailViewModelTest {
         viewModel.onEvent(VerifyEmailUiEvent.ResendCode)
         testDispatcher.scheduler.runCurrent()
 
-        assertEquals(0, fakeRepository.resendCallCount)
+        assertEquals(0, fakeRepository.resendVerificationCalls.size)
 
         testDispatcher.scheduler.advanceTimeBy(15_000L)
         testDispatcher.scheduler.runCurrent()
@@ -219,7 +214,7 @@ class VerifyEmailViewModelTest {
 
         viewModel.onEvent(VerifyEmailUiEvent.ResendCode)
         testDispatcher.scheduler.runCurrent()
-        assertEquals(1, fakeRepository.resendCallCount)
+        assertEquals(1, fakeRepository.resendVerificationCalls.size)
         testDispatcher.scheduler.advanceUntilIdle()
     }
 
@@ -254,12 +249,12 @@ class VerifyEmailViewModelTest {
 
     @Test
     fun `when resend fails, authError is populated`() = runTest {
-        fakeRepository.resendResult = Either.Left(DataError.Remote.Unavailable)
+        fakeRepository.resendVerificationHandler = { Either.Left(DataError.Remote.Unavailable) }
         viewModel.onEvent(VerifyEmailUiEvent.ResendCode)
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.resendCallCount)
+        assertEquals(1, fakeRepository.resendVerificationCalls.size)
         val state = viewModel.uiState.value
         assertFalse(state.isResending)
         assertEquals(AuthError.Data(DataError.Remote.Unavailable), state.authError)
@@ -275,55 +270,4 @@ class VerifyEmailViewModelTest {
         viewModel.onEvent(VerifyEmailUiEvent.DismissInfo)
         assertNull(viewModel.uiState.value.infoMessage)
     }
-}
-
-private class FakeAuthRepository : AuthRepository {
-    var verifyCallCount = 0
-    var lastVerifyEmail: String? = null
-    var lastVerifyCode: String? = null
-    var verifyResult: Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-    var verifyCompletable: CompletableDeferred<Either<AuthError.VerifyEmail, Unit>>? = null
-
-    var resendCallCount = 0
-    var lastResendEmail: String? = null
-    var resendResult: Either<DataError, Unit> = Either.Right(Unit)
-
-    override fun getAuthState(): Flow<AuthState> = flowOf(AuthState.Unauthenticated)
-
-    override suspend fun login(email: String, password: String): Either<AuthError.Login, User> =
-        Either.Right(User("1", email, "Test User", true))
-
-    override suspend fun register(
-        email: String,
-        displayName: String,
-        password: String,
-    ): Either<AuthError.Register, User> =
-        Either.Right(User("1", email, displayName, false))
-
-    override suspend fun verifyEmail(
-        email: String,
-        code: String,
-    ): Either<AuthError.VerifyEmail, Unit> {
-        verifyCallCount++
-        lastVerifyEmail = email
-        lastVerifyCode = code
-        val completable = verifyCompletable
-        return completable?.await() ?: verifyResult
-    }
-
-    override suspend fun resendVerification(email: String): Either<DataError, Unit> {
-        resendCallCount++
-        lastResendEmail = email
-        return resendResult
-    }
-
-    override suspend fun forgotPassword(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun resetPassword(
-        email: String,
-        code: String,
-        newPassword: String,
-    ): Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-
-    override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
 }

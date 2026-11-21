@@ -82,6 +82,7 @@ dependencies {
     implementation(libs.androidx.navigation3.ui)
 
     // Unit Testing
+    testImplementation(projects.core.testing)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.turbine)

@@ -2,17 +2,11 @@ package io.github.neronguyen.chat.feature.auth.presentation.reset
 
 import androidx.lifecycle.SavedStateHandle
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.model.AuthState
-import io.github.neronguyen.chat.core.model.User
 import io.github.neronguyen.chat.core.model.error.AuthError
-import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
 import io.github.neronguyenvn.nerochat.contract.validation.auth.AuthValidationError
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -87,7 +81,7 @@ class ResetPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(0, fakeRepository.resetPasswordCallCount)
+        assertEquals(0, fakeRepository.resetPasswordCalls.size)
         assertTrue(viewModel.uiState.value.passwordsMismatch)
         assertFalse(viewModel.uiState.value.isLoading)
     }
@@ -101,7 +95,7 @@ class ResetPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(0, fakeRepository.resetPasswordCallCount)
+        assertEquals(0, fakeRepository.resetPasswordCalls.size)
         assertEquals(AuthValidationError.InvalidNewPassword, viewModel.uiState.value.validationError)
         assertFalse(viewModel.uiState.value.isLoading)
     }
@@ -115,17 +109,17 @@ class ResetPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.resetPasswordCallCount)
-        assertEquals(testEmail, fakeRepository.lastResetEmail)
-        assertEquals("123456", fakeRepository.lastResetCode)
-        assertEquals("Secret1234!", fakeRepository.lastResetPassword)
+        assertEquals(
+            listOf(Triple(testEmail, "123456", "Secret1234!")),
+            fakeRepository.resetPasswordCalls,
+        )
         assertTrue(viewModel.uiState.value.isSuccess)
         assertFalse(viewModel.uiState.value.isLoading)
     }
 
     @Test
     fun `when reset fails with SamePassword error, authError is updated`() = runTest {
-        fakeRepository.resetPasswordResult = Either.Left(AuthError.SamePassword)
+        fakeRepository.resetPasswordHandler = { _, _, _ -> Either.Left(AuthError.SamePassword) }
         viewModel.onEvent(ResetPasswordUiEvent.CodeChanged("123456"))
         viewModel.onEvent(ResetPasswordUiEvent.NewPasswordChanged("Secret1234!"))
         viewModel.onEvent(ResetPasswordUiEvent.ConfirmPasswordChanged("Secret1234!"))
@@ -133,7 +127,7 @@ class ResetPasswordViewModelTest {
 
         testDispatcher.scheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeRepository.resetPasswordCallCount)
+        assertEquals(1, fakeRepository.resetPasswordCalls.size)
         val state = viewModel.uiState.value
         assertFalse(state.isSuccess)
         assertEquals(AuthError.SamePassword, state.authError)
@@ -141,7 +135,7 @@ class ResetPasswordViewModelTest {
 
     @Test
     fun `when reset fails with InvalidCode error, authError is updated`() = runTest {
-        fakeRepository.resetPasswordResult = Either.Left(AuthError.InvalidCode)
+        fakeRepository.resetPasswordHandler = { _, _, _ -> Either.Left(AuthError.InvalidCode) }
         viewModel.onEvent(ResetPasswordUiEvent.CodeChanged("123456"))
         viewModel.onEvent(ResetPasswordUiEvent.NewPasswordChanged("Secret1234!"))
         viewModel.onEvent(ResetPasswordUiEvent.ConfirmPasswordChanged("Secret1234!"))
@@ -168,49 +162,4 @@ class ResetPasswordViewModelTest {
         assertEquals(35, recreated.uiState.value.resendCooldownSeconds)
         testDispatcher.scheduler.advanceUntilIdle()
     }
-}
-
-private class FakeAuthRepository : AuthRepository {
-    var resetPasswordCallCount = 0
-    var lastResetEmail: String? = null
-    var lastResetCode: String? = null
-    var lastResetPassword: String? = null
-    var resetPasswordResult: Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-    var resetPasswordCompletable: CompletableDeferred<Either<AuthError.ResetPassword, Unit>>? = null
-
-    override fun getAuthState(): Flow<AuthState> = flowOf(AuthState.Unauthenticated)
-
-    override suspend fun login(email: String, password: String): Either<AuthError.Login, User> =
-        Either.Right(User("1", email, "Test User", true))
-
-    override suspend fun register(
-        email: String,
-        displayName: String,
-        password: String,
-    ): Either<AuthError.Register, User> =
-        Either.Right(User("1", email, displayName, false))
-
-    override suspend fun verifyEmail(
-        email: String,
-        code: String,
-    ): Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-
-    override suspend fun resendVerification(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun forgotPassword(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun resetPassword(
-        email: String,
-        code: String,
-        newPassword: String,
-    ): Either<AuthError.ResetPassword, Unit> {
-        resetPasswordCallCount++
-        lastResetEmail = email
-        lastResetCode = code
-        lastResetPassword = newPassword
-        val completable = resetPasswordCompletable
-        return completable?.await() ?: resetPasswordResult
-    }
-
-    override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
 }

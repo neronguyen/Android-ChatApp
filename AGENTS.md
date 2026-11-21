@@ -84,6 +84,8 @@ Before proposing any plan or writing code, read and follow:
 - `:core:security`: Android KeyStore AES-256-GCM encryption manager.
 - `:core:model`: Pure Kotlin domain models (`User`, `ChatRoom`, `ChatMessage`, `ChatSyncState`,
   `RealtimeConnectionState`) and sealed error hierarchies (`AuthError`, `ChatError`, `DataError`).
+- `:core:testing`: Test-only shared fakes (`FakeAuthRepository`, `FakeChatRoomRepository`,
+  `FakeChatMessageRepository`, `FakeChatSyncManager`) and `TestFixtures` (`testImplementation` only).
 - `:core:common`: Coroutine dispatchers and concurrency utilities (`SingleFlight`,
   `KeyedSingleFlight`, `ExponentialBackoff`, `mapConcurrent`).
 

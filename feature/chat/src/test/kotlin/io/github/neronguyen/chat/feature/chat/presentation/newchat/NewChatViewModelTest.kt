@@ -1,21 +1,18 @@
 package io.github.neronguyen.chat.feature.chat.presentation.newchat
 
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatParticipant
 import io.github.neronguyen.chat.core.model.ChatRoom
 import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
+import io.github.neronguyen.chat.core.testing.FakeChatRoomRepository
 import io.github.neronguyenvn.nerochat.contract.validation.chat.ChatValidationError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -32,8 +29,9 @@ import org.junit.Test
 class NewChatViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private lateinit var fakeChatRoomRepository: FakeNewChatRoomRepository
-    private lateinit var fakeAuthRepository: FakeNewChatAuthRepository
+    private lateinit var fakeChatRoomRepository: FakeChatRoomRepository
+    private lateinit var fakeAuthRepository: FakeAuthRepository
+    private lateinit var participantsByEmail: MutableMap<String, Either<ChatError.FindParticipant, ChatParticipant>>
     private lateinit var viewModel: NewChatViewModel
 
     private val currentUser = User(
@@ -61,9 +59,35 @@ class NewChatViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        fakeChatRoomRepository = FakeNewChatRoomRepository()
-        fakeAuthRepository = FakeNewChatAuthRepository(
-            initialState = AuthState.Authenticated(currentUser, "token"),
+        participantsByEmail = mutableMapOf()
+        fakeChatRoomRepository = FakeChatRoomRepository().apply {
+            findParticipantHandler = { email ->
+                participantsByEmail[email] ?: Either.Left(ChatError.ParticipantNotFound)
+            }
+            createDirectRoomHandler = { _, _ ->
+                Either.Right(
+                    ChatRoom(
+                        id = "room-direct-1",
+                        type = ChatRoomType.DIRECT,
+                        creator = meParticipant,
+                        participants = listOf(meParticipant, elenaParticipant),
+                    ),
+                )
+            }
+            createGroupRoomHandler = { _, _ ->
+                Either.Right(
+                    ChatRoom(
+                        id = "room-group-1",
+                        type = ChatRoomType.GROUP,
+                        name = "Core Team",
+                        creator = meParticipant,
+                        participants = listOf(meParticipant, elenaParticipant),
+                    ),
+                )
+            }
+        }
+        fakeAuthRepository = FakeAuthRepository(
+            initialAuthState = AuthState.Authenticated(currentUser, "token"),
         )
         viewModel = NewChatViewModel(
             chatRoomRepository = fakeChatRoomRepository,
@@ -86,7 +110,7 @@ class NewChatViewModelTest {
                 ChatValidationError.EmptySearchEmail,
                 viewModel.uiState.value.validationError,
             )
-            assertEquals(0, fakeChatRoomRepository.searchEmails.size)
+            assertEquals(0, fakeChatRoomRepository.findParticipantCalls.size)
 
             viewModel.onEmailSearchQueryChanged("invalid-email")
             viewModel.onEvent(NewChatUiEvent.SearchByEmail)
@@ -94,7 +118,7 @@ class NewChatViewModelTest {
                 ChatValidationError.InvalidSearchEmail,
                 viewModel.uiState.value.validationError,
             )
-            assertEquals(0, fakeChatRoomRepository.searchEmails.size)
+            assertEquals(0, fakeChatRoomRepository.findParticipantCalls.size)
         }
 
     @Test
@@ -109,15 +133,14 @@ class NewChatViewModelTest {
             viewModel.uiState.value.validationError,
         )
         assertNull(viewModel.uiState.value.searchedParticipant)
-        assertEquals(0, fakeChatRoomRepository.searchEmails.size)
+        assertEquals(0, fakeChatRoomRepository.findParticipantCalls.size)
     }
 
     @Test
     fun `direct mode search auto-selects recipient, supports toggle unselect-select, and creates direct room`() =
         runTest {
             testScheduler.advanceUntilIdle()
-            fakeChatRoomRepository.participantsByEmail["elena@example.com"] =
-                Either.Right(elenaParticipant)
+            participantsByEmail["elena@example.com"] = Either.Right(elenaParticipant)
 
             viewModel.onEmailSearchQueryChanged("elena@example.com")
             viewModel.onEvent(NewChatUiEvent.SearchByEmail)
@@ -147,8 +170,10 @@ class NewChatViewModelTest {
             viewModel.onEvent(NewChatUiEvent.SubmitChat)
             testScheduler.advanceUntilIdle()
 
-            assertEquals(elenaParticipant.userId, fakeChatRoomRepository.lastDirectTargetUserId)
-            assertEquals("Hello Elena!", fakeChatRoomRepository.lastDirectMessage)
+            assertEquals(
+                listOf(elenaParticipant.userId to "Hello Elena!"),
+                fakeChatRoomRepository.createDirectRoomCalls,
+            )
             assertEquals("room-direct-1", viewModel.uiState.value.createdRoomId)
 
             viewModel.onChatCreatedHandled()
@@ -159,10 +184,8 @@ class NewChatViewModelTest {
     fun `group mode supports selecting and unselecting searched participant and removing selected participant chip`() =
         runTest {
             testScheduler.advanceUntilIdle()
-            fakeChatRoomRepository.participantsByEmail["elena@example.com"] =
-                Either.Right(elenaParticipant)
-            fakeChatRoomRepository.participantsByEmail["marcus@example.com"] =
-                Either.Right(marcusParticipant)
+            participantsByEmail["elena@example.com"] = Either.Right(elenaParticipant)
+            participantsByEmail["marcus@example.com"] = Either.Right(marcusParticipant)
 
             viewModel.onEvent(NewChatUiEvent.SelectMode(NewChatMode.GROUP))
             assertEquals(NewChatMode.GROUP, viewModel.uiState.value.mode)
@@ -237,16 +260,17 @@ class NewChatViewModelTest {
             viewModel.onEvent(NewChatUiEvent.SubmitChat)
             testScheduler.advanceUntilIdle()
 
-            assertEquals(listOf(elenaParticipant.userId, marcusParticipant.userId), fakeChatRoomRepository.lastGroupParticipantIds)
-            assertEquals("Core Team", fakeChatRoomRepository.lastGroupName)
+            assertEquals(
+                listOf(listOf(elenaParticipant.userId, marcusParticipant.userId) to "Core Team"),
+                fakeChatRoomRepository.createGroupRoomCalls,
+            )
             assertEquals("room-group-1", viewModel.uiState.value.createdRoomId)
         }
 
     @Test
     fun `search network error and create room network error are exposed in uiState`() = runTest {
         testScheduler.advanceUntilIdle()
-        fakeChatRoomRepository.participantsByEmail["missing@example.com"] =
-            Either.Left(ChatError.ParticipantNotFound)
+        participantsByEmail["missing@example.com"] = Either.Left(ChatError.ParticipantNotFound)
 
         viewModel.onEmailSearchQueryChanged("missing@example.com")
         viewModel.onEvent(NewChatUiEvent.SearchByEmail)
@@ -256,10 +280,10 @@ class NewChatViewModelTest {
         assertNull(viewModel.uiState.value.searchedParticipant)
 
         // Now succeed search, but fail direct room creation
-        fakeChatRoomRepository.participantsByEmail["elena@example.com"] =
-            Either.Right(elenaParticipant)
-        fakeChatRoomRepository.createDirectResult =
+        participantsByEmail["elena@example.com"] = Either.Right(elenaParticipant)
+        fakeChatRoomRepository.createDirectRoomHandler = { _, _ ->
             Either.Left(ChatError.Data(DataError.Connectivity.NoInternet))
+        }
 
         viewModel.onEmailSearchQueryChanged("elena@example.com")
         viewModel.onEvent(NewChatUiEvent.SearchByEmail)
@@ -288,8 +312,7 @@ class NewChatViewModelTest {
             )
 
             // Select recipient
-            fakeChatRoomRepository.participantsByEmail["elena@example.com"] =
-                Either.Right(elenaParticipant)
+            participantsByEmail["elena@example.com"] = Either.Right(elenaParticipant)
             viewModel.onEmailSearchQueryChanged("elena@example.com")
             viewModel.onEvent(NewChatUiEvent.SearchByEmail)
             testScheduler.advanceUntilIdle()
@@ -300,7 +323,7 @@ class NewChatViewModelTest {
                 ChatValidationError.EmptyFirstMessage,
                 viewModel.uiState.value.validationError,
             )
-            assertNull(fakeChatRoomRepository.lastDirectMessage)
+            assertTrue(fakeChatRoomRepository.createDirectRoomCalls.isEmpty())
         }
 
     @Test
@@ -308,8 +331,7 @@ class NewChatViewModelTest {
         testScheduler.advanceUntilIdle()
         viewModel.onEvent(NewChatUiEvent.SelectMode(NewChatMode.GROUP))
 
-        fakeChatRoomRepository.participantsByEmail["elena@example.com"] =
-            Either.Right(elenaParticipant)
+        participantsByEmail["elena@example.com"] = Either.Right(elenaParticipant)
         viewModel.onEmailSearchQueryChanged("elena@example.com")
         viewModel.onEvent(NewChatUiEvent.SearchByEmail)
         testScheduler.advanceUntilIdle()
@@ -324,119 +346,6 @@ class NewChatViewModelTest {
             ChatValidationError.TooFewGroupParticipants,
             viewModel.uiState.value.validationError,
         )
-        assertNull(fakeChatRoomRepository.lastGroupParticipantIds)
-    }
-
-    private inner class FakeNewChatRoomRepository : ChatRoomRepository {
-        val searchEmails = mutableListOf<String>()
-        val participantsByEmail =
-            mutableMapOf<String, Either<ChatError.FindParticipant, ChatParticipant>>()
-
-        var lastDirectTargetUserId: String? = null
-        var lastDirectMessage: String? = null
-        var createDirectResult: Either<ChatError.CreateRoom, ChatRoom> = Either.Right(
-            ChatRoom(
-                id = "room-direct-1",
-                type = ChatRoomType.DIRECT,
-                creator = meParticipant,
-                participants = listOf(meParticipant, elenaParticipant),
-            )
-        )
-
-        var lastGroupParticipantIds: List<String>? = null
-        var lastGroupName: String? = null
-        var createGroupResult: Either<ChatError.CreateRoom, ChatRoom> = Either.Right(
-            ChatRoom(
-                id = "room-group-1",
-                type = ChatRoomType.GROUP,
-                name = "Core Team",
-                creator = meParticipant,
-                participants = listOf(meParticipant, elenaParticipant),
-            )
-        )
-
-        override fun getChats(): Flow<List<ChatRoom>> = MutableStateFlow(emptyList())
-
-        override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
-            Either.Right(emptyList())
-
-        override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
-
-        override suspend fun findChatParticipantByEmail(
-            email: String,
-        ): Either<ChatError.FindParticipant, ChatParticipant> {
-            searchEmails.add(email)
-            return participantsByEmail[email] ?: Either.Left(ChatError.ParticipantNotFound)
-        }
-
-        override suspend fun createDirectChatRoom(
-            targetUserId: String,
-            message: String,
-        ): Either<ChatError.CreateRoom, ChatRoom> {
-            lastDirectTargetUserId = targetUserId
-            lastDirectMessage = message
-            return createDirectResult
-        }
-
-        override suspend fun createGroupChatRoom(
-            participantIds: List<String>,
-            name: String?,
-        ): Either<ChatError.CreateRoom, ChatRoom> {
-            lastGroupParticipantIds = participantIds
-            lastGroupName = name
-            return createGroupResult
-        }
-
-        override fun getChatRoom(roomId: String): Flow<ChatRoom?> =
-            kotlinx.coroutines.flow.emptyFlow()
-
-        override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> =
-            Either.Right(Unit)
-
-        override suspend fun addParticipantsToGroup(
-            roomId: String,
-            userIds: List<String>
-        ): Either<ChatError.AddParticipants, ChatRoom> = throw UnsupportedOperationException()
-
-        override suspend fun leaveChatRoom(roomId: String): Either<ChatError.LeaveRoom, Unit> =
-            Either.Right(Unit)
-    }
-
-
-    private class FakeNewChatAuthRepository(
-        initialState: AuthState,
-    ) : AuthRepository {
-        private val stateFlow = MutableStateFlow(initialState)
-
-        override fun getAuthState(): Flow<AuthState> = stateFlow
-
-        override suspend fun login(
-            email: String,
-            password: String,
-        ): Either<AuthError.Login, User> {
-            throw UnsupportedOperationException()
-        }
-
-        override suspend fun register(
-            email: String,
-            displayName: String,
-            password: String,
-        ): Either<AuthError.Register, User> {
-            throw UnsupportedOperationException()
-        }
-
-        override suspend fun verifyEmail(email: String, code: String): Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-
-        override suspend fun resendVerification(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-        override suspend fun forgotPassword(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-        override suspend fun resetPassword(
-            email: String,
-            code: String,
-            newPassword: String,
-        ): Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-
-        override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
+        assertTrue(fakeChatRoomRepository.createGroupRoomCalls.isEmpty())
     }
 }

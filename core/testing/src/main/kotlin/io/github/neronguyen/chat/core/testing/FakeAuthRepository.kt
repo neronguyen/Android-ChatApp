@@ -1,4 +1,4 @@
-package io.github.neronguyen.chat.feature.auth.presentation
+package io.github.neronguyen.chat.core.testing
 
 import arrow.core.Either
 import io.github.neronguyen.chat.core.data.repository.AuthRepository
@@ -10,7 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
-internal class FakeAuthRepository(
+class FakeAuthRepository(
     initialAuthState: AuthState = AuthState.Unauthenticated,
 ) : AuthRepository {
 
@@ -19,7 +19,7 @@ internal class FakeAuthRepository(
     var loginHandler: suspend (email: String, password: String) -> Either<AuthError.Login, User> =
         { email, _ ->
             Either.Right(
-                User(
+                TestFixtures.user(
                     id = "user-1",
                     email = email,
                     displayName = "Elena Rostova",
@@ -34,7 +34,7 @@ internal class FakeAuthRepository(
         password: String,
     ) -> Either<AuthError.Register, User> = { email, displayName, _ ->
         Either.Right(
-            User(
+            TestFixtures.user(
                 id = "user-1",
                 email = email,
                 displayName = displayName,
@@ -64,6 +64,9 @@ internal class FakeAuthRepository(
     val registerCalls = mutableListOf<Triple<String, String, String>>()
     val verifyEmailCalls = mutableListOf<Pair<String, String>>()
     val resendVerificationCalls = mutableListOf<String>()
+    val forgotPasswordCalls = mutableListOf<String>()
+    val resetPasswordCalls = mutableListOf<Triple<String, String, String>>()
+    var logoutCallCount = 0
 
     override fun getAuthState(): Flow<AuthState> = authStateFlow.asStateFlow()
 
@@ -83,7 +86,7 @@ internal class FakeAuthRepository(
 
     override suspend fun verifyEmail(
         email: String,
-        code: String
+        code: String,
     ): Either<AuthError.VerifyEmail, Unit> {
         verifyEmailCalls.add(email to code)
         return verifyEmailHandler(email, code)
@@ -94,14 +97,26 @@ internal class FakeAuthRepository(
         return resendVerificationHandler(email)
     }
 
-    override suspend fun forgotPassword(email: String): Either<DataError, Unit> =
-        forgotPasswordHandler(email)
+    override suspend fun forgotPassword(email: String): Either<DataError, Unit> {
+        forgotPasswordCalls.add(email)
+        return forgotPasswordHandler(email)
+    }
 
     override suspend fun resetPassword(
         email: String,
         code: String,
         newPassword: String,
-    ): Either<AuthError.ResetPassword, Unit> = resetPasswordHandler(email, code, newPassword)
+    ): Either<AuthError.ResetPassword, Unit> {
+        resetPasswordCalls.add(Triple(email, code, newPassword))
+        return resetPasswordHandler(email, code, newPassword)
+    }
 
-    override suspend fun logout(): Either<DataError, Unit> = logoutHandler()
+    override suspend fun logout(): Either<DataError, Unit> {
+        logoutCallCount++
+        val result = logoutHandler()
+        if (result.isRight()) {
+            authStateFlow.value = AuthState.Unauthenticated
+        }
+        return result
+    }
 }

@@ -2,9 +2,6 @@ package io.github.neronguyen.chat.feature.chat.presentation.conversation
 
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.data.repository.ChatMessageRepository
-import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
@@ -13,15 +10,15 @@ import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
-import io.github.neronguyen.chat.feature.chat.presentation.FakeChatSyncManager
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
+import io.github.neronguyen.chat.core.testing.FakeChatMessageRepository
+import io.github.neronguyen.chat.core.testing.FakeChatRoomRepository
+import io.github.neronguyen.chat.core.testing.FakeChatSyncManager
 import io.github.neronguyenvn.nerochat.contract.validation.chat.ChatValidationError
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -74,8 +71,10 @@ class ConversationViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        fakeChatRoomRepository = FakeChatRoomRepository(initialRoom = sampleRoom)
-        fakeChatMessageRepository = FakeChatMessageRepository()
+        fakeChatRoomRepository = FakeChatRoomRepository(initialRooms = listOf(sampleRoom))
+        fakeChatMessageRepository = FakeChatMessageRepository().apply {
+            syncRecentMessagesHandler = { Either.Right(true) }
+        }
         fakeChatSyncManager = FakeChatSyncManager(initialState = ChatSyncState.Synced)
         fakeAuthRepository = FakeAuthRepository(
             initialAuthState = AuthState.Authenticated(currentUser, "token"),
@@ -118,8 +117,8 @@ class ConversationViewModelTest {
         assertEquals("elena@example.com", viewModel.uiState.value.subtitle)
         assertEquals(ChatRoomType.DIRECT, viewModel.uiState.value.roomType)
         assertFalse(viewModel.uiState.value.isInitialLoading)
-        assertEquals(1, fakeChatRoomRepository.syncChatRoomCalls.size)
-        assertEquals(1, fakeChatMessageRepository.syncRecentMessagesCalls.size)
+        assertEquals(1, fakeChatRoomRepository.syncRoomCalls.size)
+        assertEquals(1, fakeChatMessageRepository.syncRecentCalls.size)
 
         val messageItems =
             viewModel.uiState.value.items.filterIsInstance<ConversationListItem.MessageItem>()
@@ -140,7 +139,7 @@ class ConversationViewModelTest {
         assertEquals(1, fakeChatMessageRepository.sentMessages.size)
         assertEquals(
             "room-123" to "Ready to review.",
-            fakeChatMessageRepository.sentMessages.first()
+            fakeChatMessageRepository.sentMessages.first(),
         )
     }
 
@@ -182,14 +181,14 @@ class ConversationViewModelTest {
 
     @Test
     fun `loadOlderMessages increments page and updates hasMoreOlderMessages`() = runTest {
-        fakeChatMessageRepository.loadOlderMessagesResult = Either.Right(false)
+        fakeChatMessageRepository.loadOlderMessagesHandler = { Either.Right(false) }
         testScheduler.advanceUntilIdle()
 
         viewModel.onEvent(ConversationUiEvent.LoadOlderMessages)
 
         testScheduler.advanceUntilIdle()
 
-        assertEquals(1, fakeChatMessageRepository.loadOlderMessagesCalls.size)
+        assertEquals(1, fakeChatMessageRepository.loadOlderCalls.size)
         assertFalse(viewModel.uiState.value.hasMoreOlderMessages)
         assertFalse(viewModel.uiState.value.isLoadingOlder)
     }
@@ -266,13 +265,13 @@ class ConversationViewModelTest {
 
         assertTrue(viewModel.uiState.value.hasLeftRoom)
         assertFalse(viewModel.uiState.value.isLeavingRoom)
-        assertEquals(1, fakeChatRoomRepository.leaveChatRoomCalls.size)
+        assertEquals(1, fakeChatRoomRepository.leaveRoomCalls.size)
     }
 
     @Test
     fun `leaveRoom on error sets actionError`() = runTest {
         val leaveError = ChatError.Data(DataError.Remote.Forbidden)
-        fakeChatRoomRepository.leaveChatRoomResult = Either.Left(leaveError)
+        fakeChatRoomRepository.leaveRoomHandler = { Either.Left(leaveError) }
         testScheduler.advanceUntilIdle()
 
         viewModel.onEvent(ConversationUiEvent.LeaveRoom)
@@ -335,8 +334,8 @@ class ConversationViewModelTest {
 
     @Test
     fun `searchParticipantByEmail and confirmAddParticipant invokes repository`() = runTest {
-        fakeChatRoomRepository.findParticipantResult = Either.Right(elenaParticipant)
-        fakeChatRoomRepository.addParticipantsResult = Either.Right(sampleRoom)
+        fakeChatRoomRepository.findParticipantHandler = { Either.Right(elenaParticipant) }
+        fakeChatRoomRepository.addParticipantsHandler = { _, _ -> Either.Right(sampleRoom) }
         testScheduler.advanceUntilIdle()
 
         viewModel.onEvent(ConversationUiEvent.OpenAddParticipantDialog)
@@ -357,134 +356,5 @@ class ConversationViewModelTest {
 
         assertEquals(1, fakeChatRoomRepository.addParticipantsCalls.size)
         assertNull(viewModel.uiState.value.addParticipantDialogState)
-    }
-
-    // --- Test Doubles ---
-
-    private class FakeChatRoomRepository(initialRoom: ChatRoom? = null) : ChatRoomRepository {
-        val roomFlow = MutableStateFlow(initialRoom)
-        val syncChatRoomCalls = mutableListOf<String>()
-        var syncChatRoomResult: Either<ChatError.SyncRoom, Unit> = Either.Right(Unit)
-
-        val leaveChatRoomCalls = mutableListOf<String>()
-        var leaveChatRoomResult: Either<ChatError.LeaveRoom, Unit> = Either.Right(Unit)
-
-        var findParticipantResult: Either<ChatError.FindParticipant, ChatParticipant> =
-            Either.Left(ChatError.ParticipantNotFound)
-        val addParticipantsCalls = mutableListOf<Pair<String, List<String>>>()
-        var addParticipantsResult: Either<ChatError.AddParticipants, ChatRoom> =
-            Either.Left(ChatError.ParticipantNotFound)
-
-        override fun getChatRoom(roomId: String): Flow<ChatRoom?> = roomFlow
-        override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> {
-            syncChatRoomCalls.add(roomId)
-            return syncChatRoomResult
-        }
-
-        override suspend fun leaveChatRoom(roomId: String): Either<ChatError.LeaveRoom, Unit> {
-            leaveChatRoomCalls.add(roomId)
-            return leaveChatRoomResult
-        }
-
-        override suspend fun findChatParticipantByEmail(email: String): Either<ChatError.FindParticipant, ChatParticipant> {
-            return findParticipantResult
-        }
-
-        override suspend fun addParticipantsToGroup(
-            roomId: String,
-            userIds: List<String>
-        ): Either<ChatError.AddParticipants, ChatRoom> {
-            addParticipantsCalls.add(roomId to userIds)
-            return addParticipantsResult
-        }
-
-        override fun getChats(): Flow<List<ChatRoom>> = MutableStateFlow(emptyList())
-        override suspend fun syncChats(): Either<DataError, Unit> = Either.Right(Unit)
-        override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> = Either.Right(emptyList())
-        override suspend fun createDirectChatRoom(
-            targetUserId: String,
-            message: String
-        ): Either<ChatError.CreateRoom, ChatRoom> =
-            Either.Left(ChatError.ParticipantNotFound)
-
-        override suspend fun createGroupChatRoom(
-            participantIds: List<String>,
-            name: String?
-        ): Either<ChatError.CreateRoom, ChatRoom> =
-            Either.Left(ChatError.ParticipantNotFound)
-    }
-
-    private class FakeChatMessageRepository : ChatMessageRepository {
-        val messagesFlow = MutableStateFlow<List<ChatMessage>>(emptyList())
-        val syncRecentMessagesCalls = mutableListOf<String>()
-        var syncRecentMessagesResult: Either<DataError, Boolean> = Either.Right(true)
-
-        val loadOlderMessagesCalls = mutableListOf<String>()
-        var loadOlderMessagesResult: Either<DataError, Boolean> = Either.Right(false)
-
-        val sentMessages = mutableListOf<Pair<String, String>>()
-        val retriedMessageIds = mutableListOf<String>()
-
-        val deletedMessageIds = mutableListOf<String>()
-        var deleteMessageResult: Either<ChatError.DeleteMessage, Unit> = Either.Right(Unit)
-
-        override fun getMessages(roomId: String, limit: Int): Flow<List<ChatMessage>> = messagesFlow
-
-        override suspend fun syncRecentMessages(roomId: String): Either<DataError, Boolean> {
-            syncRecentMessagesCalls.add(roomId)
-            return syncRecentMessagesResult
-        }
-
-        override suspend fun loadOlderMessages(roomId: String): Either<DataError, Boolean> {
-            loadOlderMessagesCalls.add(roomId)
-            return loadOlderMessagesResult
-        }
-
-        override suspend fun sendMessage(roomId: String, content: String): Either<DataError, Unit> {
-            sentMessages.add(roomId to content)
-            return Either.Right(Unit)
-        }
-
-        override suspend fun retryMessage(messageId: String): Either<DataError, Unit> {
-            retriedMessageIds.add(messageId)
-            return Either.Right(Unit)
-        }
-
-        override suspend fun deleteMessage(messageId: String): Either<ChatError.DeleteMessage, Unit> {
-            deletedMessageIds.add(messageId)
-            return deleteMessageResult
-        }
-    }
-
-    private class FakeAuthRepository(
-        initialAuthState: AuthState = AuthState.Unauthenticated,
-        private val user: User = User("user-me", "me@example.com", "Me", true),
-    ) : AuthRepository {
-        val authStateFlow = MutableStateFlow(initialAuthState)
-        override fun getAuthState(): Flow<AuthState> = authStateFlow
-        override suspend fun login(
-            email: String,
-            password: String
-        ): Either<AuthError.Login, User> = Either.Right(user)
-
-        override suspend fun register(
-            email: String,
-            displayName: String,
-            password: String
-        ): Either<AuthError.Register, User> = Either.Right(user)
-
-        override suspend fun verifyEmail(email: String, code: String): Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-
-        override suspend fun resendVerification(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-        override suspend fun forgotPassword(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-        override suspend fun resetPassword(
-            email: String,
-            code: String,
-            newPassword: String,
-        ): Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-
-        override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
     }
 }

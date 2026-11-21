@@ -78,6 +78,7 @@ include(":feature:chat")
 
 include(":core:common")
 include(":core:model")
+include(":core:testing")
 
 include(":core:data")
 include(":core:network")

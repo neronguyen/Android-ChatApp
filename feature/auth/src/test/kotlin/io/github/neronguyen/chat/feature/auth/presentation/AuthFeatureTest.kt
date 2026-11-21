@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTextReplacement
 import arrow.core.Either
 import io.github.neronguyen.chat.core.model.error.AuthError
 import io.github.neronguyen.chat.core.model.error.DataError
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
 import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
 import io.github.neronguyen.chat.feature.auth.presentation.login.LoginRoute

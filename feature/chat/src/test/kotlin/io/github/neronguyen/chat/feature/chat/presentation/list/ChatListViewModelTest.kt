@@ -1,8 +1,5 @@
 package io.github.neronguyen.chat.feature.chat.presentation.list
 
-import arrow.core.Either
-import io.github.neronguyen.chat.core.data.repository.AuthRepository
-import io.github.neronguyen.chat.core.data.repository.ChatRoomRepository
 import io.github.neronguyen.chat.core.model.AuthState
 import io.github.neronguyen.chat.core.model.ChatMessage
 import io.github.neronguyen.chat.core.model.ChatParticipant
@@ -11,14 +8,12 @@ import io.github.neronguyen.chat.core.model.ChatRoomType
 import io.github.neronguyen.chat.core.model.ChatSyncState
 import io.github.neronguyen.chat.core.model.MessageDeliveryStatus
 import io.github.neronguyen.chat.core.model.User
-import io.github.neronguyen.chat.core.model.error.AuthError
-import io.github.neronguyen.chat.core.model.error.ChatError
 import io.github.neronguyen.chat.core.model.error.DataError
-import io.github.neronguyen.chat.feature.chat.presentation.FakeChatSyncManager
+import io.github.neronguyen.chat.core.testing.FakeAuthRepository
+import io.github.neronguyen.chat.core.testing.FakeChatRoomRepository
+import io.github.neronguyen.chat.core.testing.FakeChatSyncManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
@@ -68,7 +63,7 @@ class ChatListViewModelTest {
         Dispatchers.setMain(testDispatcher)
         fakeChatRoomRepository = FakeChatRoomRepository()
         fakeAuthRepository = FakeAuthRepository(
-            initialState = AuthState.Authenticated(currentUser, "token"),
+            initialAuthState = AuthState.Authenticated(currentUser, "token"),
         )
         fakeChatSyncManager = FakeChatSyncManager(initialState = ChatSyncState.Synced)
     }
@@ -279,89 +274,4 @@ class ChatListViewModelTest {
             zoneIdProvider = { ZoneId.of("UTC") }
         }
     }
-}
-
-private class FakeChatRoomRepository : ChatRoomRepository {
-    val roomsFlow = MutableStateFlow<List<ChatRoom>>(emptyList())
-    var syncCallCount = 0
-
-    override fun getChats(): Flow<List<ChatRoom>> = roomsFlow
-
-    override suspend fun syncChatsAndGetChangedRooms(): Either<DataError, List<String>> =
-        Either.Right(emptyList())
-
-    override suspend fun syncChats(): Either<DataError, Unit> {
-        syncCallCount++
-        return Either.Right(Unit)
-    }
-
-    override suspend fun findChatParticipantByEmail(
-        email: String,
-    ): Either<ChatError.FindParticipant, ChatParticipant> {
-        throw UnsupportedOperationException()
-    }
-
-    override suspend fun createDirectChatRoom(
-        targetUserId: String,
-        message: String,
-    ): Either<ChatError.CreateRoom, ChatRoom> {
-        throw UnsupportedOperationException()
-    }
-
-    override suspend fun createGroupChatRoom(
-        participantIds: List<String>,
-        name: String?,
-    ): Either<ChatError.CreateRoom, ChatRoom> {
-        throw UnsupportedOperationException()
-    }
-
-    override fun getChatRoom(roomId: String): Flow<ChatRoom?> = kotlinx.coroutines.flow.emptyFlow()
-
-    override suspend fun syncChatRoom(roomId: String): Either<ChatError.SyncRoom, Unit> =
-        Either.Right(Unit)
-
-    override suspend fun addParticipantsToGroup(
-        roomId: String,
-        userIds: List<String>
-    ): Either<ChatError.AddParticipants, ChatRoom> = throw UnsupportedOperationException()
-
-    override suspend fun leaveChatRoom(roomId: String): Either<ChatError.LeaveRoom, Unit> =
-        Either.Right(Unit)
-}
-
-private class FakeAuthRepository(
-    initialState: AuthState,
-) : AuthRepository {
-    private val stateFlow = MutableStateFlow(initialState)
-
-    override fun getAuthState(): Flow<AuthState> = stateFlow
-
-    override suspend fun login(
-        email: String,
-        password: String,
-    ): Either<AuthError.Login, User> {
-        throw UnsupportedOperationException()
-    }
-
-    override suspend fun register(
-        email: String,
-        displayName: String,
-        password: String,
-    ): Either<AuthError.Register, User> {
-        throw UnsupportedOperationException()
-    }
-
-    override suspend fun verifyEmail(email: String, code: String): Either<AuthError.VerifyEmail, Unit> = Either.Right(Unit)
-
-    override suspend fun resendVerification(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun forgotPassword(email: String): Either<DataError, Unit> = Either.Right(Unit)
-
-    override suspend fun resetPassword(
-        email: String,
-        code: String,
-        newPassword: String,
-    ): Either<AuthError.ResetPassword, Unit> = Either.Right(Unit)
-
-    override suspend fun logout(): Either<DataError, Unit> = Either.Right(Unit)
 }

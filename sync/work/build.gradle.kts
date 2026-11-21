@@ -45,6 +45,7 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     // Unit Testing
+    testImplementation(projects.core.testing)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)
 }
