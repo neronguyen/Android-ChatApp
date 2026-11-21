@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,11 +42,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import io.github.neronguyen.chat.core.ui.theme.ChatBorder
-import io.github.neronguyen.chat.core.ui.theme.ChatError
-import io.github.neronguyen.chat.core.ui.theme.ChatPrimary
-import io.github.neronguyen.chat.core.ui.theme.ChatSurface
-import io.github.neronguyen.chat.core.ui.theme.ChatText
 import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 
 private const val DEFAULT_CELL_COUNT = 6
@@ -139,7 +135,7 @@ fun OtpInputField(
                     }
                 },
             ),
-            cursorBrush = SolidColor(ChatPrimary),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
             modifier = Modifier
                 .size(1.dp)
                 .alpha(0.01f)
@@ -177,10 +173,10 @@ private fun OtpCell(
     modifier: Modifier = Modifier,
 ) {
     val borderColor = when {
-        isError -> ChatError
-        isCurrent -> ChatPrimary
-        digit.isNotEmpty() -> ChatPrimary.copy(alpha = 0.6f)
-        else -> ChatBorder
+        isError -> MaterialTheme.colorScheme.error
+        isCurrent -> MaterialTheme.colorScheme.primary
+        digit.isNotEmpty() -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+        else -> MaterialTheme.colorScheme.outline
     }
     val borderWidth = if (isCurrent || isError) 2.dp else 1.dp
 
@@ -189,14 +185,14 @@ private fun OtpCell(
             .width(CellWidth)
             .height(CellHeight)
             .testTag("otp_cell_$index")
-            .background(ChatSurface, RoundedCornerShape(CellCornerRadius))
+            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(CellCornerRadius))
             .border(borderWidth, borderColor, RoundedCornerShape(CellCornerRadius)),
         contentAlignment = Alignment.Center,
     ) {
         if (digit.isNotEmpty()) {
             Text(
                 text = digit,
-                color = if (isError) ChatError else ChatText,
+                color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onBackground,
                 fontSize = 22.sp,
                 lineHeight = 28.sp,
                 fontWeight = FontWeight.Medium,
@@ -208,7 +204,7 @@ private fun OtpCell(
                     .width(2.dp)
                     .height(24.dp)
                     .alpha(cursorAlpha)
-                    .background(ChatPrimary),
+                    .background(MaterialTheme.colorScheme.primary),
             )
         }
     }
