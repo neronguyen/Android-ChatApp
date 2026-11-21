@@ -16,17 +16,28 @@ Native Android client for the end-to-end chat project — built with Jetpack Com
 | **[KMP-ChatBackend](https://github.com/neronguyen/KMP-ChatBackend)** | Modular monolith REST & WebSocket server | **Level 3** (Backend Components) | Kotlin, Spring Boot 4, PostgreSQL, Redis (Redisson), RabbitMQ |
 | **[Android-ChatApp](https://github.com/neronguyen/Android-ChatApp)** *(this repo)* | Native Android client with offline-first persistence and real-time sync | **Level 3** (Android Components) | Jetpack Compose, Navigation 3, Retrofit, OkHttp, Room, DataStore, Hilt, Arrow |
 
-### Full-Stack End-to-End Demo
+### Full-Stack End-to-End Demos
 
-Recorded live via `./scripts/e2e/record.sh --journey direct-chat` against an API 37 AVD
-(`DirectChatE2ETest`), local Spring Boot backend (`dev,e2e`), PostgreSQL, Redis, RabbitMQ, and
-Mailpit (`adb reverse`): registration → Mailpit 6-digit OTP verification → RabbitMQ peer discovery →
-bidirectional WebSocket messaging (`SENDING` → `SENT` & inbound reply) → offline reconnect catch-up
-sync.
+Recorded live against an API 37 AVD, local Spring Boot backend (`dev,e2e`), PostgreSQL, Redis,
+RabbitMQ, and Mailpit (`adb reverse`):
 
-<video src="docs/assets/e2e/direct-chat-demo.mp4" controls muted width="100%"></video>
+#### 1. Direct Chat & Reconnect Catch-Up (`direct-chat`)
+
+Recorded via `./scripts/e2e/record.sh --journey direct-chat` (`DirectChatE2ETest`): registration →
+Mailpit 6-digit OTP verification → RabbitMQ peer discovery → bidirectional WebSocket messaging
+(`SENDING` → `SENT` & inbound reply) → offline reconnect catch-up sync.
+
+https://github.com/user-attachments/assets/6304cb6a-1222-4139-a0da-bc3c6934b073
 
 [Direct Chat & Reconnect Catch-Up E2E Demo (MP4)](docs/assets/e2e/direct-chat-demo.mp4)
+
+#### 2. OTP Rejection & Recovery (`otp-recovery`)
+
+Recorded via `./scripts/e2e/record.sh --journey otp-recovery` (`OtpRecoveryE2ETest`): registration →
+Mailpit 6-digit OTP challenge → invalid OTP rejection via Redis (`retry_button` & error state) →
+valid OTP recovery to login confirmation banner.
+
+https://github.com/user-attachments/assets/341bd145-806b-4cf3-bfe1-92ad5a200105
 
 ### Android Component Architecture (C4 Level 3)
 
