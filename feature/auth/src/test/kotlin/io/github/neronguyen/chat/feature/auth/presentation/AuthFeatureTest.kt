@@ -1,6 +1,8 @@
 package io.github.neronguyen.chat.feature.auth.presentation
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
@@ -17,10 +19,14 @@ import io.github.neronguyen.chat.core.model.error.DataError
 import io.github.neronguyen.chat.core.testing.FakeAuthRepository
 import io.github.neronguyen.chat.core.ui.theme.ChatTheme
 import io.github.neronguyen.chat.feature.auth.R
+import io.github.neronguyen.chat.feature.auth.presentation.forgot.ForgotPasswordRoute
+import io.github.neronguyen.chat.feature.auth.presentation.forgot.ForgotPasswordViewModel
 import io.github.neronguyen.chat.feature.auth.presentation.login.LoginRoute
 import io.github.neronguyen.chat.feature.auth.presentation.login.LoginViewModel
 import io.github.neronguyen.chat.feature.auth.presentation.register.RegisterRoute
 import io.github.neronguyen.chat.feature.auth.presentation.register.RegisterViewModel
+import io.github.neronguyen.chat.feature.auth.presentation.reset.ResetPasswordRoute
+import io.github.neronguyen.chat.feature.auth.presentation.reset.ResetPasswordViewModel
 import io.github.neronguyen.chat.feature.auth.presentation.verify.VerifyEmailRoute
 import io.github.neronguyen.chat.feature.auth.presentation.verify.VerifyEmailViewModel
 import org.junit.Assert.assertEquals
@@ -243,5 +249,124 @@ class AuthFeatureTest {
             fakeRepo.verifyEmailCalls,
         )
         assertEquals(1, verifySuccessCount)
+    }
+
+    @Test
+    fun forgotPasswordRoute_validatesEmail_surfacesNetworkError_andNavigatesOnSuccess() {
+        val fakeRepo = FakeAuthRepository()
+        val viewModel = ForgotPasswordViewModel(fakeRepo)
+        var resetEmailTarget: String? = null
+        var nextResult: Either<DataError, Unit> = Either.Left(DataError.Connectivity.NoInternet)
+        fakeRepo.forgotPasswordHandler = { nextResult }
+
+        composeTestRule.setContent {
+            ChatTheme {
+                ForgotPasswordRoute(
+                    viewModel = viewModel,
+                    onNavigateToResetPassword = { resetEmailTarget = it },
+                    onNavigateToLogin = {},
+                )
+            }
+        }
+
+        // Invalid email fails validation without calling repository
+        composeTestRule.onNodeWithTag("email_field").performTextInput("not-an-email")
+        composeTestRule.onNodeWithTag("submit_button").performClick()
+        composeTestRule.waitForIdle()
+
+        assertTrue(fakeRepo.forgotPasswordCalls.isEmpty())
+        composeTestRule.onNodeWithTag("forgot_password_error_text")
+            .assertIsDisplayed()
+            .assertTextEquals(str(R.string.error_invalid_email))
+
+        // Valid email with network error renders connectivity error
+        composeTestRule.onNodeWithTag("email_field").performTextReplacement("  Elena@Example.com ")
+        composeTestRule.onNodeWithTag("submit_button").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(listOf("elena@example.com"), fakeRepo.forgotPasswordCalls)
+        composeTestRule.onNodeWithTag("forgot_password_error_text")
+            .assertIsDisplayed()
+            .assertTextEquals(str(CoreUiR.string.error_no_internet))
+        assertEquals(null, resetEmailTarget)
+
+        // Successful request triggers navigation to ResetPassword(normalizedEmail)
+        nextResult = Either.Right(Unit)
+        composeTestRule.onNodeWithTag("submit_button").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals("elena@example.com", resetEmailTarget)
+    }
+
+    @Test
+    fun resetPasswordRoute_handlesMismatch_serverErrors_resendCooldown_andSuccess() {
+        val fakeRepo = FakeAuthRepository()
+        val viewModel = ResetPasswordViewModel("elena@example.com", fakeRepo)
+        var resetSuccessCount = 0
+        var nextResult: Either<AuthError.ResetPassword, Unit> = Either.Left(AuthError.InvalidCode)
+        fakeRepo.resetPasswordHandler = { _, _, _ -> nextResult }
+
+        composeTestRule.setContent {
+            ChatTheme {
+                ResetPasswordRoute(
+                    viewModel = viewModel,
+                    onResetSuccess = { resetSuccessCount++ },
+                    onNavigateToLogin = {},
+                )
+            }
+        }
+
+        val otpInput = composeTestRule.onNode(
+            hasSetTextAction() and hasAnyAncestor(hasTestTag("otp_input_field")),
+        )
+
+        // Mismatched passwords keep CTA disabled
+        otpInput.performTextReplacement("123456")
+        composeTestRule.onNodeWithTag("new_password_field").performTextInput("NewPass123!")
+        composeTestRule.onNodeWithTag("confirm_password_field").performTextInput("Mismatch123!")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reset_password_button").assertIsNotEnabled()
+
+        // Matching passwords enable CTA and surface each server error accurately
+        composeTestRule.onNodeWithTag("confirm_password_field").performTextReplacement("NewPass123!")
+        composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithTag("reset_password_button").assertIsEnabled()
+
+        val errorCases = listOf(
+            AuthError.InvalidCode to str(R.string.error_invalid_otp_code),
+            AuthError.CodeExpired to str(R.string.error_otp_expired),
+            AuthError.MaxAttemptsExceeded(retryAfterSeconds = 120) to
+                str(R.string.error_max_attempts_exceeded_with_cooldown, 120),
+            AuthError.SamePassword to str(R.string.error_same_password),
+        )
+
+        for ((error, expectedText) in errorCases) {
+            nextResult = Either.Left(error)
+            composeTestRule.onNodeWithTag("reset_password_button").performClick()
+            composeTestRule.waitForIdle()
+
+            composeTestRule.onNodeWithTag("reset_password_error_text")
+                .assertIsDisplayed()
+                .assertTextEquals(expectedText)
+            assertEquals(0, resetSuccessCount)
+        }
+
+        // Resend code calls forgotPassword and enters cooldown state
+        composeTestRule.onNodeWithTag("resend_button").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(listOf("elena@example.com"), fakeRepo.forgotPasswordCalls)
+        composeTestRule.onNodeWithTag("reset_password_info_text")
+            .assertIsDisplayed()
+            .assertTextEquals(str(R.string.reset_code_resent))
+        composeTestRule.onNodeWithTag("resend_button").assertIsNotEnabled()
+
+        // Successful reset triggers onResetSuccess
+        nextResult = Either.Right(Unit)
+        composeTestRule.onNodeWithTag("reset_password_button").performClick()
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, resetSuccessCount)
+        assertEquals(5, fakeRepo.resetPasswordCalls.size)
     }
 }

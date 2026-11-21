@@ -26,6 +26,22 @@ import io.github.neronguyen.chat.feature.auth.presentation.reset.ResetPasswordVi
 import io.github.neronguyen.chat.feature.auth.presentation.verify.VerifyEmailRoute
 import io.github.neronguyen.chat.feature.auth.presentation.verify.VerifyEmailViewModel
 
+internal class AuthNavViewModelProviders(
+    val loginViewModel: @Composable () -> LoginViewModel = { hiltViewModel() },
+    val registerViewModel: @Composable () -> RegisterViewModel = { hiltViewModel() },
+    val verifyEmailViewModel: @Composable (email: String) -> VerifyEmailViewModel = { email ->
+        hiltViewModel<VerifyEmailViewModel, VerifyEmailViewModel.Factory> { factory ->
+            factory.create(email)
+        }
+    },
+    val forgotPasswordViewModel: @Composable () -> ForgotPasswordViewModel = { hiltViewModel() },
+    val resetPasswordViewModel: @Composable (email: String) -> ResetPasswordViewModel = { email ->
+        hiltViewModel<ResetPasswordViewModel, ResetPasswordViewModel.Factory> { factory ->
+            factory.create(email)
+        }
+    },
+)
+
 fun EntryProviderScope<NavKey>.authSection(
     onAuthSuccess: () -> Unit,
     onNavigateToRegister: () -> Unit,
@@ -34,8 +50,28 @@ fun EntryProviderScope<NavKey>.authSection(
     onNavigateToForgotPassword: () -> Unit,
     onNavigateToResetPassword: (email: String) -> Unit,
 ) {
+    authSection(
+        onAuthSuccess = onAuthSuccess,
+        onNavigateToRegister = onNavigateToRegister,
+        onNavigateToLogin = onNavigateToLogin,
+        onNavigateToVerifyEmail = onNavigateToVerifyEmail,
+        onNavigateToForgotPassword = onNavigateToForgotPassword,
+        onNavigateToResetPassword = onNavigateToResetPassword,
+        viewModelProviders = AuthNavViewModelProviders(),
+    )
+}
+
+internal fun EntryProviderScope<NavKey>.authSection(
+    onAuthSuccess: () -> Unit,
+    onNavigateToRegister: () -> Unit,
+    onNavigateToLogin: (email: String?, bannerMessage: String?) -> Unit,
+    onNavigateToVerifyEmail: (email: String) -> Unit,
+    onNavigateToForgotPassword: () -> Unit,
+    onNavigateToResetPassword: (email: String) -> Unit,
+    viewModelProviders: AuthNavViewModelProviders,
+) {
     entry<AuthRoute.Login> { route ->
-        val viewModel: LoginViewModel = hiltViewModel()
+        val viewModel = viewModelProviders.loginViewModel()
         LoginRoute(
             viewModel = viewModel,
             onNavigateToRegister = onNavigateToRegister,
@@ -47,7 +83,7 @@ fun EntryProviderScope<NavKey>.authSection(
         )
     }
     entry<AuthRoute.Register> {
-        val viewModel: RegisterViewModel = hiltViewModel()
+        val viewModel = viewModelProviders.registerViewModel()
         RegisterRoute(
             viewModel = viewModel,
             onNavigateToLogin = { onNavigateToLogin(null, null) },
@@ -55,9 +91,7 @@ fun EntryProviderScope<NavKey>.authSection(
         )
     }
     entry<AuthRoute.VerifyEmail> { route ->
-        val viewModel = hiltViewModel<VerifyEmailViewModel, VerifyEmailViewModel.Factory> { factory ->
-            factory.create(route.email)
-        }
+        val viewModel = viewModelProviders.verifyEmailViewModel(route.email)
         val verifiedBanner = stringResource(R.string.email_verified_banner)
         VerifyEmailRoute(
             viewModel = viewModel,
@@ -66,7 +100,7 @@ fun EntryProviderScope<NavKey>.authSection(
         )
     }
     entry<AuthRoute.ForgotPassword> {
-        val viewModel: ForgotPasswordViewModel = hiltViewModel()
+        val viewModel = viewModelProviders.forgotPasswordViewModel()
         ForgotPasswordRoute(
             viewModel = viewModel,
             onNavigateToResetPassword = onNavigateToResetPassword,
@@ -74,9 +108,7 @@ fun EntryProviderScope<NavKey>.authSection(
         )
     }
     entry<AuthRoute.ResetPassword> { route ->
-        val viewModel = hiltViewModel<ResetPasswordViewModel, ResetPasswordViewModel.Factory> { factory ->
-            factory.create(route.email)
-        }
+        val viewModel = viewModelProviders.resetPasswordViewModel(route.email)
         val resetBanner = stringResource(R.string.password_reset_banner)
         ResetPasswordRoute(
             viewModel = viewModel,
@@ -92,9 +124,24 @@ fun AuthNavGraph(
     modifier: Modifier = Modifier,
     startRoute: AuthRoute = AuthRoute.Login(),
 ) {
+    AuthNavGraph(
+        onAuthSuccess = onAuthSuccess,
+        modifier = modifier,
+        startRoute = startRoute,
+        viewModelProviders = remember { AuthNavViewModelProviders() },
+    )
+}
+
+@Composable
+internal fun AuthNavGraph(
+    onAuthSuccess: () -> Unit,
+    viewModelProviders: AuthNavViewModelProviders,
+    modifier: Modifier = Modifier,
+    startRoute: AuthRoute = AuthRoute.Login(),
+) {
     val backStack = rememberNavBackStack(startRoute)
 
-    val entryProvider = remember(onAuthSuccess) {
+    val entryProvider = remember(backStack, onAuthSuccess, viewModelProviders) {
         entryProvider {
             authSection(
                 onAuthSuccess = onAuthSuccess,
@@ -117,6 +164,7 @@ fun AuthNavGraph(
                 onNavigateToResetPassword = { email ->
                     backStack.add(AuthRoute.ResetPassword(email))
                 },
+                viewModelProviders = viewModelProviders,
             )
         }
     }

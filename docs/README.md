@@ -17,6 +17,7 @@ design documents.
 |-----------------------------------|--------------|-----------|----------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------|
 | **Android App Components**        | C4 Level 3   | `[AS-IS]` | [`android-components.archify.json`](./architecture/specifications/android-components.archify.json) | [`c4-android-components.html`](./architecture/interactive/c4-android-components.html) | [Dark](./architecture/assets/AndroidComponents.png) · [Light](./architecture/assets/AndroidComponents.light.png) |
 | **Quiet Messaging Design System** | Visual SSOT  | `[AS-IS]` | [`designs/design-system.md`](designs/design-system.md)                                             | N/A (Markdown Specification)                                                          | Semantic Tokens & Theme Contract                                                                                 |
+| **User-Perspective Feature Map**  | Testing Map  | `[AS-IS]` | [`FEATURE_MAP.md`](FEATURE_MAP.md)                                                                 | N/A (Markdown Specification)                                                          | User Screen → Route → ViewModel → `testTag` → Verification Suite                                                 |
 
 ---
 

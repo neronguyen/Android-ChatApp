@@ -27,7 +27,7 @@ Android application entrypoint, composition root, Hilt `Configuration.Provider`,
 
 ## Verification
 
-- Unit & Konsist tests: `./gradlew :app:testDebugUnitTest --rerun-tasks`
+- Unit, Hilt Navigation, & Konsist tests: `./gradlew :app:testDebugUnitTest --rerun-tasks` (`ArchitectureKonsistTest`, `MainActivityNavigationTest`)
 - Compile instrumentation tests: `./gradlew :app:compileDebugAndroidTestKotlin`
 - Full-stack Tier 3 AVD verification:
   `./scripts/e2e/verify.sh [--journey <all|direct-chat|otp-recovery>] [--capture-steps]`

@@ -22,6 +22,17 @@ import io.github.neronguyen.chat.feature.chat.presentation.list.ChatListViewMode
 import io.github.neronguyen.chat.feature.chat.presentation.newchat.NewChatRoute
 import io.github.neronguyen.chat.feature.chat.presentation.newchat.NewChatViewModel
 
+internal class ChatNavViewModelProviders(
+    val chatListViewModel: @Composable () -> ChatListViewModel = { hiltViewModel() },
+    val newChatViewModel: @Composable () -> NewChatViewModel = { hiltViewModel() },
+    val conversationViewModel: @Composable (roomId: String) -> ConversationViewModel = { roomId ->
+        hiltViewModel<ConversationViewModel, ConversationViewModel.Factory> { factory ->
+            factory.create(roomId)
+        }
+    },
+    val accountViewModel: @Composable () -> AccountViewModel = { hiltViewModel() },
+)
+
 fun EntryProviderScope<NavKey>.chatSection(
     onOpenConversation: (roomId: String) -> Unit,
     onNewChatClick: () -> Unit,
@@ -29,8 +40,26 @@ fun EntryProviderScope<NavKey>.chatSection(
     onBackClick: () -> Unit = {},
     onChatCreated: (roomId: String) -> Unit = onOpenConversation,
 ) {
+    chatSection(
+        onOpenConversation = onOpenConversation,
+        onNewChatClick = onNewChatClick,
+        onAccountClick = onAccountClick,
+        onBackClick = onBackClick,
+        onChatCreated = onChatCreated,
+        viewModelProviders = ChatNavViewModelProviders(),
+    )
+}
+
+internal fun EntryProviderScope<NavKey>.chatSection(
+    onOpenConversation: (roomId: String) -> Unit,
+    onNewChatClick: () -> Unit,
+    onAccountClick: () -> Unit,
+    onBackClick: () -> Unit = {},
+    onChatCreated: (roomId: String) -> Unit = onOpenConversation,
+    viewModelProviders: ChatNavViewModelProviders,
+) {
     entry<ChatRoute.ChatList> {
-        val viewModel: ChatListViewModel = hiltViewModel()
+        val viewModel = viewModelProviders.chatListViewModel()
         ChatListRoute(
             viewModel = viewModel,
             onOpenConversation = onOpenConversation,
@@ -40,7 +69,7 @@ fun EntryProviderScope<NavKey>.chatSection(
     }
 
     entry<ChatRoute.NewChat> {
-        val viewModel: NewChatViewModel = hiltViewModel()
+        val viewModel = viewModelProviders.newChatViewModel()
         NewChatRoute(
             viewModel = viewModel,
             onBackClick = onBackClick,
@@ -49,10 +78,7 @@ fun EntryProviderScope<NavKey>.chatSection(
     }
 
     entry<ChatRoute.Conversation> { route ->
-        val viewModel =
-            hiltViewModel<ConversationViewModel, ConversationViewModel.Factory> { factory ->
-                factory.create(route.roomId)
-            }
+        val viewModel = viewModelProviders.conversationViewModel(route.roomId)
         ConversationRoute(
             viewModel = viewModel,
             onBackClick = onBackClick,
@@ -60,7 +86,7 @@ fun EntryProviderScope<NavKey>.chatSection(
     }
 
     entry<ChatRoute.Account> {
-        val viewModel: AccountViewModel = hiltViewModel()
+        val viewModel = viewModelProviders.accountViewModel()
         AccountRoute(
             viewModel = viewModel,
             onBackClick = onBackClick,
@@ -75,9 +101,26 @@ fun ChatNavGraph(
     onOpenConversation: (roomId: String) -> Unit = {},
     onAccountClick: () -> Unit = {},
 ) {
+    ChatNavGraph(
+        modifier = modifier,
+        startRoute = startRoute,
+        onOpenConversation = onOpenConversation,
+        onAccountClick = onAccountClick,
+        viewModelProviders = remember { ChatNavViewModelProviders() },
+    )
+}
+
+@Composable
+internal fun ChatNavGraph(
+    viewModelProviders: ChatNavViewModelProviders,
+    modifier: Modifier = Modifier,
+    startRoute: ChatRoute = ChatRoute.ChatList,
+    onOpenConversation: (roomId: String) -> Unit = {},
+    onAccountClick: () -> Unit = {},
+) {
     val backStack = rememberNavBackStack(startRoute)
 
-    val entryProvider = remember(backStack, onOpenConversation, onAccountClick) {
+    val entryProvider = remember(backStack, onOpenConversation, onAccountClick, viewModelProviders) {
         entryProvider {
             chatSection(
                 onOpenConversation = { roomId ->
@@ -105,6 +148,7 @@ fun ChatNavGraph(
                     }
                     onOpenConversation(roomId)
                 },
+                viewModelProviders = viewModelProviders,
             )
         }
     }

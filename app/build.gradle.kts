@@ -99,6 +99,9 @@ dependencies {
     implementation(libs.androidx.work.ktx)
 
     // Local Unit Testing
+    testImplementation(projects.core.testing)
+    testImplementation(libs.hilt.android.testing)
+    kspTest(libs.hilt.compiler)
     testImplementation(libs.konsist)
     testImplementation(libs.kotlin.test.junit)
     testImplementation(libs.kotlinx.coroutines.test)

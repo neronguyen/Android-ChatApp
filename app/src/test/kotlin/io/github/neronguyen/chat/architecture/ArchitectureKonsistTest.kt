@@ -295,6 +295,31 @@ class ArchitectureKonsistTest {
             }
     }
 
+    @Test
+    fun `every feature Route is exercised in a FeatureTest`() {
+        val featureTests = Konsist
+            .scopeFromProject()
+            .files
+            .filter { it.path.contains("/feature/") && it.path.endsWith("FeatureTest.kt") }
+        assertTrue("Expected *FeatureTest.kt files in Konsist scope", featureTests.isNotEmpty())
+
+        val routeFunctions = featureScreenFiles()
+            .flatMap { it.functions() }
+            .filter { it.name.endsWith("Route") }
+        assertTrue("Expected *Route functions in Konsist scope", routeFunctions.isNotEmpty())
+
+        val strippedTests = featureTests.joinToString("\n") { stripCommentsAndStrings(it.text) }
+        val uncoveredRoutes = routeFunctions
+            .map { it.name }
+            .distinct()
+            .filterNot { routeName -> Regex("""\b$routeName\b""").containsMatchIn(strippedTests) }
+
+        assertTrue(
+            "Every *Route must be exercised in a *FeatureTest.kt, missing: $uncoveredRoutes",
+            uncoveredRoutes.isEmpty(),
+        )
+    }
+
     private fun featureScreenFiles(): List<KoFileDeclaration> {
         val screens = Konsist
             .scopeFromProject()
