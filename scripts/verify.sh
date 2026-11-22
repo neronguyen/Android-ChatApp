@@ -16,8 +16,10 @@ if [ -z "$RESOLVED_JDK" ] && command -v java >/dev/null 2>&1 && java -version 2>
   RESOLVED_JDK="$(dirname "$(dirname "$JAVA_BIN")")"
 fi
 
-if [ -z "$RESOLVED_JDK" ] && [ -d "${HOME}/.gradle/jdks" ]; then
-  CANDIDATE_JDK="$(find "${HOME}/.gradle/jdks" -maxdepth 1 -type d -name "*-21-*" 2>/dev/null | head -n 1 || true)"
+SOURCE_GRADLE_HOME="${GRADLE_USER_HOME:-${HOME}/.gradle}"
+
+if [ -z "$RESOLVED_JDK" ] && [ -d "${SOURCE_GRADLE_HOME}/jdks" ]; then
+  CANDIDATE_JDK="$(find "${SOURCE_GRADLE_HOME}/jdks" -maxdepth 1 -type d -name "*-21-*" 2>/dev/null | head -n 1 || true)"
   if [ -n "$CANDIDATE_JDK" ] && [ -x "$CANDIDATE_JDK/bin/java" ]; then
     RESOLVED_JDK="$CANDIDATE_JDK"
   fi
@@ -30,7 +32,9 @@ fi
 
 # Resolve Android SDK dynamically if ANDROID_HOME is not set
 if [ -z "${ANDROID_HOME:-}" ]; then
-  if [ -d "${HOME}/Android/Sdk" ]; then
+  if [ -d "${HOME}/.local/share/android/sdk" ]; then
+    export ANDROID_HOME="${HOME}/.local/share/android/sdk"
+  elif [ -d "${HOME}/Android/Sdk" ]; then
     export ANDROID_HOME="${HOME}/Android/Sdk"
   elif [ -d "${HOME}/.android/sdk" ]; then
     export ANDROID_HOME="${HOME}/.android/sdk"
@@ -43,18 +47,30 @@ GRADLE_ARGS=(-p "$REPO_DIR")
 if [ "$IS_CI" = "true" ]; then
   GRADLE_ARGS+=(--no-daemon)
 else
-  export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/tmp/android-home}"
+  if [ -n "${ANDROID_USER_HOME:-}" ] && [ ! -w "${ANDROID_USER_HOME}" ]; then
+    export ANDROID_USER_HOME="/tmp/android-home"
+  else
+    export ANDROID_USER_HOME="${ANDROID_USER_HOME:-/tmp/android-home}"
+  fi
   mkdir -p "$ANDROID_USER_HOME"
 
-  export GRADLE_RO_DEP_CACHE="${GRADLE_RO_DEP_CACHE:-${HOME}/.gradle/caches}"
-  GRADLE_USER_HOME="${GRADLE_USER_HOME:-/tmp/gradle-ro-home}"
-  mkdir -p "$GRADLE_USER_HOME"
-  if [ -d "${HOME}/.gradle/jdks" ] && [ ! -e "$GRADLE_USER_HOME/jdks" ]; then
-    ln -sfn "${HOME}/.gradle/jdks" "$GRADLE_USER_HOME/jdks"
+  if [ -d "$SOURCE_GRADLE_HOME" ] && [ -w "$SOURCE_GRADLE_HOME" ]; then
+    GRADLE_USER_HOME="$SOURCE_GRADLE_HOME"
+  else
+    unset _JAVA_OPTIONS
+    export GRADLE_RO_DEP_CACHE="${GRADLE_RO_DEP_CACHE:-${SOURCE_GRADLE_HOME}/caches}"
+    GRADLE_USER_HOME="/tmp/gradle-ro-home"
+    mkdir -p "$GRADLE_USER_HOME"
+    if [ -d "${SOURCE_GRADLE_HOME}/jdks" ] && [ ! -e "$GRADLE_USER_HOME/jdks" ]; then
+      ln -sfn "${SOURCE_GRADLE_HOME}/jdks" "$GRADLE_USER_HOME/jdks"
+    fi
+    if [ -d "${SOURCE_GRADLE_HOME}/wrapper" ] && [ ! -d "$GRADLE_USER_HOME/wrapper" ]; then
+      cp -as "${SOURCE_GRADLE_HOME}/wrapper" "$GRADLE_USER_HOME/wrapper"
+      find "$GRADLE_USER_HOME/wrapper" -name "*.lck" -delete
+    fi
+    GRADLE_ARGS+=(-Pkotlin.compiler.execution.strategy=in-process)
   fi
-  if [ -d "${HOME}/.gradle/wrapper" ] && [ ! -e "$GRADLE_USER_HOME/wrapper" ]; then
-    ln -sfn "${HOME}/.gradle/wrapper" "$GRADLE_USER_HOME/wrapper"
-  fi
+  export GRADLE_USER_HOME
   GRADLE_ARGS+=(--gradle-user-home="$GRADLE_USER_HOME")
 fi
 
