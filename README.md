@@ -29,8 +29,6 @@ Mailpit 6-digit OTP verification → RabbitMQ peer discovery → bidirectional W
 
 https://github.com/user-attachments/assets/6304cb6a-1222-4139-a0da-bc3c6934b073
 
-[Direct Chat & Reconnect Catch-Up E2E Demo (MP4)](docs/assets/e2e/direct-chat-demo.mp4)
-
 #### 2. OTP Rejection & Recovery (`otp-recovery`)
 
 Recorded via `./scripts/e2e/record.sh --journey otp-recovery` (`OtpRecoveryE2ETest`): registration →
