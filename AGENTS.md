@@ -5,8 +5,8 @@
 Before proposing any plan or writing code, read and follow:
 
 1. **Global Agent Rules**: `~/.gemini/config/AGENTS.md` (Git commit sign-off, `Assisted-by:` attribution, and Conventional Commits).
-2. **Ecosystem Governance**: `../KMP-ChatContract/docs/GOVERNANCE.md` (EGM applicability gate, unified EGM + Archify `[PLANNED]` → `[AS-IS]` lifecycle, post-implementation scaffolding pruning, and Archify CLI).
-3. **Project Philosophy**: `../KMP-ChatContract/docs/PHILOSOPHY.md` (especially Section 3 and
+2. **Ecosystem Workflow**: `../KMP-ChatContract/docs/WORKFLOW.md` (EGM applicability gate, unified EGM + Archify `[PLANNED]` → `[AS-IS]` lifecycle, post-implementation scaffolding pruning, Archify CLI, and Git & PR rules (§6)).
+3. **Project Constitution**: `../KMP-ChatContract/docs/CONSTITUTION.md` (especially Section 3 and
    Section 5 Mandatory Agent Planning Protocol).
 4. **Unified Repository Documentation Index**: [`docs/README.md`](docs/README.md) (Single index for
    C4 Level 3 `android-components.archify.json`, Android-internal Archify flows, and EGM design

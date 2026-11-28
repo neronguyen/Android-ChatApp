@@ -374,7 +374,7 @@ text or Konsist AST declarations:
   parameter forwarding for standard Material 3 components when `ChatTheme` + `MaterialTheme` +
   `Konsist` already enforce token consumption.
 * **Reason for Rejection**: Contradicts [
-  `PHILOSOPHY.md`](../../../KMP-ChatContract/docs/PHILOSOPHY.md) Section 3 (*Intentional UI
+  `CONSTITUTION.md`](../../../KMP-ChatContract/docs/CONSTITUTION.md) Section 3 (*Intentional UI
   Engineering Over Cosmetic Feature Creep*); only shared multi-module or stateful widgets
   (`SyncStatusBar`, `OtpInputField`) belong in `:core:ui`.
 

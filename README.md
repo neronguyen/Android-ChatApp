@@ -4,8 +4,8 @@
 
 Native Android client for the end-to-end chat project — built with Jetpack Compose, offline-first Room persistence, lifecycle-supervised OkHttp WebSockets, hardware-backed AndroidKeyStore token encryption, and compile-time contract sharing via `KMP-ChatContract`.
 
-> **Architecture & Philosophy**
-> - Read the [Chat Project Philosophy](../KMP-ChatContract/docs/PHILOSOPHY.md) ([GitHub](https://github.com/neronguyen/KMP-ChatContract/blob/main/docs/PHILOSOPHY.md)) for the architectural principles and AI agent governance rules governing this repository.
+> **Architecture & Constitution**
+> - Read the [Chat Project Constitution](../KMP-ChatContract/docs/CONSTITUTION.md) ([GitHub](https://github.com/neronguyen/KMP-ChatContract/blob/main/docs/CONSTITUTION.md)) and [Ecosystem Workflow](../KMP-ChatContract/docs/WORKFLOW.md) ([GitHub](https://github.com/neronguyen/KMP-ChatContract/blob/main/docs/WORKFLOW.md)) for the architectural principles and AI agent workflow rules governing this repository.
 > - **Medium Series**: [Part 1 — End-to-End Type Safety: Sharing Pure Kotlin Contracts Between Android and Spring Boot](https://medium.com/@neronguyen/end-to-end-type-safety-sharing-pure-kotlin-contracts-between-android-and-spring-boot-part-1-8c45e3ab6720)
 
 ### Related Repositories
