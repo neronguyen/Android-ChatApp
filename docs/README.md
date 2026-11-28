@@ -4,10 +4,7 @@ This is the unified documentation index for `Android-ChatApp`, linking C4 compon
 Archify sequence/lifecycle/dataflow specifications, and Elephant-and-Goldfish Model (EGM) technical
 design documents.
 
-> **Governance & Authoring Rules**: Follow global git rules in `~/.gemini/config/AGENTS.md`, ecosystem lifecycle
-> governance in [`../KMP-ChatContract/docs/GOVERNANCE.md`](../../KMP-ChatContract/docs/GOVERNANCE.md), architectural
-> philosophy in [`../KMP-ChatContract/docs/PHILOSOPHY.md`](../../KMP-ChatContract/docs/PHILOSOPHY.md), and repository
-> boundary invariants in [`../AGENTS.md`](../AGENTS.md).
+> **Start here**: the ecosystem Doc Map in [KMP-ChatContract/docs/README.md §0](../../KMP-ChatContract/docs/README.md) says which file answers which question (Constitution, Workflow, AGENTS.md, module READMEs, designs, Archify). Global git/AI rules: `~/.gemini/config/AGENTS.md`.
 
 ---
 
